@@ -4,13 +4,11 @@
  */
 
 const { getMemoryManager } = require('./memoryManager');
-const { getVectorDatabaseService } = require('./vectorDatabaseService');
 const ContentAnalyzer = require('./contentAnalysis');
 
 class SmartMemoryRetrieval {
   constructor() {
     this.memoryManager = getMemoryManager();
-    this.vectorService = getVectorDatabaseService();
     this.contentAnalyzer = new ContentAnalyzer();
     
     // Retrieval configuration
@@ -55,11 +53,11 @@ class SmartMemoryRetrieval {
 
       console.log(`📚 Found ${candidates.length} candidate memories`);
 
-      // Step 2: Apply semantic filtering if prompt provided
+      // Step 2: Apply basic text filtering if prompt provided
       let semanticCandidates = candidates;
-      if (currentPrompt && this.vectorService.isAvailable) {
-        semanticCandidates = await this.applySemanticFiltering(candidates, currentPrompt);
-        console.log(`🔍 Semantic filtering reduced to ${semanticCandidates.length} memories`);
+      if (currentPrompt) {
+        semanticCandidates = await this.applyBasicFiltering(candidates, currentPrompt);
+        console.log(`🔍 Basic filtering reduced to ${semanticCandidates.length} memories`);
       }
 
       // Step 3: Score and rank memories
@@ -143,36 +141,35 @@ class SmartMemoryRetrieval {
   }
 
   /**
-   * Apply semantic filtering using vector similarity
-   * @param {Array} memories 
-   * @param {string} currentPrompt 
+   * Apply basic text filtering using keyword matching
+   * @param {Array} memories
+   * @param {string} currentPrompt
    * @returns {Promise<Array>}
    */
-  async applySemanticFiltering(memories, currentPrompt) {
+  async applyBasicFiltering(memories, currentPrompt) {
     try {
-      // Get semantic similarity scores
-      const vectorResults = await this.vectorService.searchSimilarMemories(currentPrompt, {
-        maxResults: memories.length,
-        threshold: 0.5
-      });
+      const promptWords = currentPrompt.toLowerCase().split(/\s+/);
 
-      // Create similarity map
-      const similarityMap = new Map();
-      vectorResults.forEach(result => {
-        similarityMap.set(result.id, result.score);
-      });
-
-      // Filter and enhance memories with similarity scores
+      // Filter and enhance memories with basic similarity scores
       return memories
-        .map(memory => ({
-          ...memory,
-          semanticSimilarity: similarityMap.get(memory.id) || 0
-        }))
-        .filter(memory => memory.semanticSimilarity > 0.3)
+        .map(memory => {
+          const memoryText = (memory.content?.original || '').toLowerCase();
+          const memoryWords = memoryText.split(/\s+/);
+
+          // Calculate simple word overlap
+          const overlap = promptWords.filter(word => memoryWords.includes(word)).length;
+          const similarity = overlap / Math.max(promptWords.length, 1);
+
+          return {
+            ...memory,
+            semanticSimilarity: similarity
+          };
+        })
+        .filter(memory => memory.semanticSimilarity > 0.1)
         .sort((a, b) => b.semanticSimilarity - a.semanticSimilarity);
 
     } catch (error) {
-      console.warn('⚠️ Semantic filtering failed, using all candidates:', error.message);
+      console.warn('⚠️ Basic filtering failed, using all candidates:', error.message);
       return memories.map(memory => ({ ...memory, semanticSimilarity: 0.5 }));
     }
   }
@@ -350,7 +347,7 @@ class SmartMemoryRetrieval {
   getRetrievalStats() {
     return {
       config: this.config,
-      vectorServiceAvailable: this.vectorService.isAvailable,
+      vectorServiceAvailable: false, // Vector service removed for simplicity
       lastRetrievalTime: this.lastRetrievalTime || null
     };
   }

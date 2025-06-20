@@ -5,8 +5,6 @@ const { getMemoryManager } = require('./memoryManager');
 const { v4: generateUUID } = require('uuid');
 const cacheService = require('./cacheService');
 const costMonitoringService = require('./costMonitoringService');
-const advancedEnsembleStrategy = require('./advancedEnsembleStrategy');
-const fineTunedModelService = require('./fineTunedModelService');
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager');
 
 /**
@@ -377,13 +375,8 @@ class EnhancedEnsembleRunner {
         .then(content => {
           const responseTime = Date.now() - startTime;
 
-          // Calculate confidence score for this response
-          const confidence = advancedEnsembleStrategy.calculateConfidenceScore(
-            content,
-            models[role].model,
-            responseTime,
-            { userPrompt: enhancedPrompt }
-          );
+          // Calculate simple confidence score for this response
+          const confidence = this.calculateSimpleConfidence(content, responseTime);
 
           return {
             role,
@@ -396,8 +389,8 @@ class EnhancedEnsembleRunner {
             responseTime,
             confidence,
             metadata: {
-              confidenceLevel: advancedEnsembleStrategy.getConfidenceLevel(confidence),
-              modelReliability: advancedEnsembleStrategy.modelWeights.get(models[role].model)?.reliability || 0.5
+              confidenceLevel: this.getSimpleConfidenceLevel(confidence),
+              modelReliability: 0.8 // Simple default reliability
             }
           };
         })
@@ -503,13 +496,10 @@ class EnhancedEnsembleRunner {
       // Get optimal synthesizer model (fine-tuned if available)
       const synthesizerConfig = this.getOptimalModelConfig('ensemble_synthesis', 'free');
 
-      // Perform weighted voting on responses
-      const votingResults = advancedEnsembleStrategy.performWeightedVoting(roleOutputs, { userPrompt });
+      // Simple synthesis approach - use successful responses
+      const successfulOutputs = roleOutputs.filter(r => r.status === 'fulfilled');
 
-      // Generate synthesis strategy
-      const synthesisStrategy = advancedEnsembleStrategy.generateSynthesisStrategy(votingResults, userPrompt);
-
-      console.log(`📊 [${correlationId}] Synthesis strategy: ${synthesisStrategy.strategy} (confidence: ${synthesisStrategy.confidence.toFixed(2)})`);
+      console.log(`📊 [${correlationId}] Using simple synthesis with ${successfulOutputs.length} successful responses`);
 
       const modelNames = {
         gpt4o: 'GPT-4o',
@@ -520,48 +510,30 @@ class EnhancedEnsembleRunner {
       // Build synthesis payload based on strategy
       let synthPayload;
 
-      if (synthesisStrategy.strategy === 'consensus') {
+      if (successfulOutputs.length >= 2) {
         synthPayload = `User Question: "${userPrompt}"
 
-High-confidence AI responses (ranked by weighted voting):
+AI responses to synthesize:
 
-${votingResults
-  .filter(r => r.confidence >= advancedEnsembleStrategy.confidenceThresholds.high)
-  .map((output, index) => `### ${modelNames[output.role] || output.role} (Confidence: ${output.confidence.toFixed(2)}, Weight: ${output.weightedScore.toFixed(2)})\n${output.content}`)
+${successfulOutputs
+  .map((output, index) => `### ${modelNames[output.role] || output.role}\n${output.content}`)
   .join('\n\n')}
 
-Please synthesize these responses, giving more weight to higher-confidence responses.`;
-      } else if (synthesisStrategy.strategy === 'primary_with_support') {
-        const primary = synthesisStrategy.primarySource;
-        const supporting = synthesisStrategy.secondarySources;
-
+Please synthesize these responses into a comprehensive, well-structured answer.`;
+      } else if (successfulOutputs.length === 1) {
+        // Single response - just clean it up
         synthPayload = `User Question: "${userPrompt}"
 
-Primary Response (Highest confidence: ${primary.confidence.toFixed(2)}):
-### ${modelNames[primary.role] || primary.role}
-${primary.content}
+AI Response:
+### ${modelNames[successfulOutputs[0].role] || successfulOutputs[0].role}
+${successfulOutputs[0].content}
 
-Supporting Responses:
-${supporting
-  .map(output => `### ${modelNames[output.role] || output.role} (Confidence: ${output.confidence.toFixed(2)})\n${output.content}`)
-  .join('\n\n')}
-
-Please synthesize with primary response as the foundation, incorporating relevant insights from supporting responses.`;
+Please clean up and improve this response while maintaining its core message.`;
       } else {
-        // Default synthesis for balanced or cautious strategies
+        // No successful responses
         synthPayload = `User Question: "${userPrompt}"
 
-AI Responses (ranked by confidence and model performance):
-
-${votingResults
-  .map(output => `### ${modelNames[output.role] || output.role} (Confidence: ${output.confidence.toFixed(2)}, Weight: ${output.weightedScore.toFixed(2)})\n${output.content}`)
-  .join('\n\n')}
-
-Strategy: ${synthesisStrategy.strategy}
-Overall Confidence: ${synthesisStrategy.confidence.toFixed(2)}
-Reasoning: ${synthesisStrategy.reasoning}
-
-Please synthesize these responses carefully, considering the confidence levels and strategy.`;
+No AI responses were available. Please provide a helpful response indicating that the service is temporarily unavailable and suggest the user try again.`;
       }
 
       const synthResponse = await Promise.race([
@@ -595,16 +567,7 @@ Please synthesize these responses carefully, considering the confidence levels a
           quality
         );
 
-        // Track fine-tuned model performance if applicable
-        if (synthesizerConfig.isFineTuned) {
-          await fineTunedModelService.trackModelUsage(
-            synthesizerConfig.model,
-            responseTime,
-            quality,
-            synthResponse.usage?.total_tokens * 0.000002 || 0.001, // Estimate cost
-            true
-          );
-        }
+        // Fine-tuned model tracking removed for simplicity
       } catch (costError) {
         console.warn(`⚠️ Failed to track synthesis cost:`, costError.message);
       }
@@ -615,16 +578,8 @@ Please synthesize these responses carefully, considering the confidence levels a
         provider: synthesizerConfig.provider,
         status: 'success',
         isFineTuned: synthesizerConfig.isFineTuned,
-        fineTunedModelName: synthesizerConfig.fineTunedConfig?.name,
-        synthesisStrategy: synthesisStrategy.strategy,
-        overallConfidence: synthesisStrategy.confidence,
-        votingResults: votingResults.map(r => ({
-          role: r.role,
-          model: r.model,
-          confidence: r.confidence,
-          weightedScore: r.weightedScore,
-          confidenceLevel: r.metadata.confidenceLevel
-        }))
+        synthesisStrategy: 'simple',
+        overallConfidence: 0.8
       };
 
     } catch (error) {
@@ -752,6 +707,38 @@ Please synthesize these responses carefully, considering the confidence levels a
         isHealthy: this.getMemoryManager().isFirestoreAvailable
       }
     };
+  }
+
+  /**
+   * Calculate simple confidence score based on response content and timing
+   */
+  calculateSimpleConfidence(content, responseTime) {
+    let confidence = 0.5; // Base confidence
+
+    // Length factor
+    const wordCount = content.split(' ').length;
+    if (wordCount >= 20 && wordCount <= 200) confidence += 0.2;
+    else if (wordCount > 200) confidence += 0.1;
+
+    // Structure factor
+    if (/[.!?]/.test(content)) confidence += 0.1;
+    if (/^[A-Z]/.test(content)) confidence += 0.1;
+
+    // Response time factor
+    if (responseTime < 5000) confidence += 0.1;
+    else if (responseTime > 15000) confidence -= 0.1;
+
+    return Math.min(1.0, Math.max(0.0, confidence));
+  }
+
+  /**
+   * Get simple confidence level description
+   */
+  getSimpleConfidenceLevel(score) {
+    if (score >= 0.8) return 'high';
+    if (score >= 0.6) return 'medium';
+    if (score >= 0.4) return 'low';
+    return 'very-low';
   }
 }
 

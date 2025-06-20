@@ -6,43 +6,25 @@
     "start": "node index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:security": "jest tests/security.test.js",
-    "test:advanced": "jest tests/advanced-features.test.js",
-    "test:comprehensive": "node tests/run-comprehensive-tests.js",
     "test:coverage": "jest --coverage",
-    "test:ci": "jest --ci --coverage --watchAll=false",
-    "setup:admin": "node scripts/setup-admin-users.js",
-    "setup:firestore": "node scripts/setup-firestore-indexes.js"
+    "test:ci": "jest --ci --coverage --watchAll=false"
   },
   "dependencies": {
-    "@types/nodemailer": "^6.4.17",
-    "axios": "^1.9.0",
-    "bcryptjs": "^3.0.2",
+    "axios": "^1.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
-    "express-validator": "^7.2.1",
     "firebase-admin": "^11.11.1",
-    "handlebars": "^4.7.8",
-    "helmet": "^8.1.0",
-    "isomorphic-dompurify": "^2.25.0",
-    "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
     "node-cron": "^3.0.3",
-    "nodemailer": "^7.0.3",
     "openai": "^5.1.0",
     "redis": "^4.7.1",
-    "uuid": "^9.0.1",
-    "zod": "^3.25.51"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",
     "supertest": "^6.3.4"
-  },
-  "optionalDependencies": {
-    "@pinecone-database/pinecone": "^2.0.1",
-    "weaviate-ts-client": "^1.5.0"
   },
   "description": "",
   "keywords": [],

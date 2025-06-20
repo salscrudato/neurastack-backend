@@ -257,7 +257,7 @@ describe('Memory Management System', () => {
   describe('Ensemble Integration', () => {
     test('should integrate memory with ensemble endpoint', async () => {
       const response = await request(app)
-        .post('/ensemble-test')
+        .post('/default-ensemble')
         .send({
           prompt: 'What are the best practices for API design in microservices?',
           sessionId: testSessionId

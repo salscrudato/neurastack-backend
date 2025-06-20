@@ -8,7 +8,6 @@ const { v4: generateUUID } = require('uuid');
 const EnhancedMemoryWeights = require('./memoryWeights');
 const ContentAnalyzer = require('./contentAnalysis');
 const { MEMORY_TYPE_CONFIG } = require('../types/memory');
-const vectorDatabaseService = require('./vectorDatabaseService');
 
 class MemoryManager {
   constructor() {
@@ -97,18 +96,7 @@ class MemoryManager {
         }
       }
 
-      // Store in vector database for similarity search
-      try {
-        await vectorDatabaseService.storeMemoryVector(memory.id, content, {
-          userId,
-          memoryType,
-          importance: analysis.baseImportance,
-          timestamp: Date.now(),
-          sessionId
-        });
-      } catch (vectorError) {
-        console.warn('⚠️ Failed to store memory vector:', vectorError.message);
-      }
+      // Vector database storage removed for simplicity
 
       // Always store in local cache as backup
       this.localCache.set(memory.id, memory);
@@ -214,42 +202,13 @@ class MemoryManager {
     try {
       let memories = [];
 
-      // Try semantic search first if we have a current prompt
-      if (currentPrompt && vectorDatabaseService.isAvailable) {
-        try {
-          const semanticResults = await vectorDatabaseService.searchSimilarMemories(currentPrompt, {
-            maxResults: 10,
-            threshold: 0.7,
-            userId: userId
-          });
-
-          if (semanticResults.length > 0) {
-            console.log(`🔍 Found ${semanticResults.length} semantically similar memories`);
-
-            // Get full memory details
-            memories = await this.getMemoriesByIds(semanticResults.map(r => r.id));
-
-            // Sort by vector similarity score
-            memories.sort((a, b) => {
-              const scoreA = semanticResults.find(r => r.id === a.id)?.score || 0;
-              const scoreB = semanticResults.find(r => r.id === b.id)?.score || 0;
-              return scoreB - scoreA;
-            });
-          }
-        } catch (vectorError) {
-          console.warn('⚠️ Vector search failed, falling back to traditional retrieval:', vectorError.message);
-        }
-      }
-
-      // Fallback to traditional memory retrieval
-      if (memories.length === 0) {
-        memories = await this.retrieveMemories({
-          userId,
-          sessionId,
-          maxResults: 10,
-          minImportance: 0.3
-        });
-      }
+      // Use traditional memory retrieval (vector search removed for simplicity)
+      memories = await this.retrieveMemories({
+        userId,
+        sessionId,
+        maxResults: 10,
+        minImportance: 0.3
+      });
 
       let context = '';
       let totalTokens = 0;

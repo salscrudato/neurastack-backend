@@ -1,65 +1,100 @@
 const request = require('supertest');
 const app = require('../index');
 
-// Mock the ensemble service to avoid real API calls in tests
-jest.mock('../services/ensembleRunner', () => ({
+// Mock the enhanced ensemble service for default-ensemble endpoint
+jest.mock('../services/enhancedEnsembleRunner', () => ({
   runEnsemble: jest.fn()
 }));
 
-const ensemble = require('../services/ensembleRunner');
+const enhancedEnsemble = require('../services/enhancedEnsembleRunner');
 
-describe('4-AI Ensemble Tests', () => {
+describe('Default Ensemble Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock successful ensemble response
-    ensemble.runEnsemble.mockResolvedValue({
+    // Mock successful enhanced ensemble response for default-ensemble endpoint
+    enhancedEnsemble.runEnsemble.mockResolvedValue({
       synthesis: {
-        content: 'This is a synthesized response combining all perspectives.',
-        model: 'gpt-4o',
-        provider: 'openai',
-        status: 'success'
+        content: 'Enhanced synthesized response with memory integration and confidence scoring.',
+        confidence: 0.92,
+        qualityScore: 0.88,
+        metadata: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          processingTimeMs: 1250,
+          tokenCount: 45
+        }
       },
       roles: [
         {
           role: 'gpt4o',
-          content: 'GPT-4o response content',
-          model: 'gpt-4o',
-          provider: 'openai',
-          status: 'fulfilled',
-          wordCount: 25
+          content: 'GPT-4o-mini response with memory context integration.',
+          confidence: 0.89,
+          quality: 0.85,
+          metadata: {
+            model: 'gpt-4o-mini',
+            provider: 'openai',
+            processingTimeMs: 850,
+            tokenCount: 38,
+            status: 'fulfilled'
+          }
         },
         {
           role: 'gemini',
-          content: 'Gemini response content',
-          model: 'gemini-2.0-flash',
-          provider: 'gemini',
-          status: 'fulfilled',
-          wordCount: 30
+          content: 'Gemini Flash response leveraging conversation history.',
+          confidence: 0.91,
+          quality: 0.87,
+          metadata: {
+            model: 'gemini-1.5-flash',
+            provider: 'gemini',
+            processingTimeMs: 920,
+            tokenCount: 42,
+            status: 'fulfilled'
+          }
         },
         {
           role: 'claude',
-          content: 'Claude response content',
-          model: 'claude-opus-4-20250514',
-          provider: 'claude',
-          status: 'fulfilled',
-          wordCount: 28
+          content: 'Claude Haiku response with contextual awareness.',
+          confidence: 0.86,
+          quality: 0.83,
+          metadata: {
+            model: 'claude-3-haiku-20240307',
+            provider: 'claude',
+            processingTimeMs: 780,
+            tokenCount: 35,
+            status: 'fulfilled'
+          }
         }
       ],
       metadata: {
-        totalRoles: 3,
-        successfulRoles: 3,
-        failedRoles: 0,
-        synthesisStatus: 'success'
+        totalProcessingTimeMs: 2850,
+        memoryContextUsed: true,
+        memoryTokensUsed: 156,
+        confidenceAnalysis: {
+          averageConfidence: 0.89,
+          confidenceRange: 0.05,
+          highConfidenceResponses: 3
+        },
+        costEstimate: {
+          totalCost: 0.0085,
+          breakdown: {
+            gpt4o: 0.0032,
+            gemini: 0.0018,
+            claude: 0.0015,
+            synthesis: 0.0020
+          }
+        },
+        tier: 'free',
+        responseQuality: 0.85
       }
     });
   });
 
-  test('POST /ensemble-test should return synthesized response', async () => {
+  test('POST /default-ensemble should return synthesized response', async () => {
     const testPrompt = 'Should companies adopt AI for customer service?';
 
     const response = await request(app)
-      .post('/ensemble-test')
+      .post('/default-ensemble')
       .send({ prompt: testPrompt })
       .expect(200);
 
@@ -70,29 +105,29 @@ describe('4-AI Ensemble Tests', () => {
     expect(response.body.data.synthesis).toBeDefined();
     expect(response.body.data.roles).toHaveLength(3);
     expect(response.body.data.metadata.timestamp).toBeDefined();
-    expect(response.body.data.synthesis.content).toBe('This is a synthesized response combining all perspectives.');
+    expect(response.body.data.synthesis.content).toBe('Enhanced synthesized response with memory integration and confidence scoring.');
 
-    expect(ensemble.runEnsemble).toHaveBeenCalledWith(testPrompt, 'anonymous', expect.any(String));
+    expect(enhancedEnsemble.runEnsemble).toHaveBeenCalledWith(testPrompt, 'anonymous', expect.any(String));
   });
 
-  test('POST /ensemble-test should handle x-user-id header', async () => {
+  test('POST /default-ensemble should handle x-user-id header', async () => {
     const testPrompt = 'Test prompt';
     const userId = 'user123';
 
     const response = await request(app)
-      .post('/ensemble-test')
+      .post('/default-ensemble')
       .set('x-user-id', userId)
       .send({ prompt: testPrompt })
       .expect(200);
 
     expect(response.body.status).toBe('success');
     expect(response.body.data.userId).toBe(userId);
-    expect(ensemble.runEnsemble).toHaveBeenCalledWith(testPrompt, userId, expect.any(String));
+    expect(enhancedEnsemble.runEnsemble).toHaveBeenCalledWith(testPrompt, userId, expect.any(String));
   });
 
-  test('POST /ensemble-test should handle default prompt', async () => {
+  test('POST /default-ensemble should handle default prompt', async () => {
     const response = await request(app)
-      .post('/ensemble-test')
+      .post('/default-ensemble')
       .send({})
       .expect(200);
 
@@ -101,26 +136,26 @@ describe('4-AI Ensemble Tests', () => {
     expect(response.body.data.userId).toBe('anonymous');
   });
 
-  test('POST /ensemble-test should handle empty request body', async () => {
+  test('POST /default-ensemble should handle empty request body', async () => {
     const response = await request(app)
-      .post('/ensemble-test')
+      .post('/default-ensemble')
       .expect(200);
 
     expect(response.body.status).toBe('success');
     expect(response.body.data.synthesis).toBeDefined();
   });
 
-  test('POST /ensemble-test should handle ensemble errors', async () => {
-    ensemble.runEnsemble.mockRejectedValue(new Error('Ensemble service failed'));
+  test('POST /default-ensemble should handle ensemble errors', async () => {
+    enhancedEnsemble.runEnsemble.mockRejectedValue(new Error('Ensemble service failed'));
 
     const response = await request(app)
-      .post('/ensemble-test')
+      .post('/default-ensemble')
       .send({ prompt: 'Test prompt' })
       .expect(500);
 
     expect(response.body.status).toBe('error');
-    expect(response.body.message).toBe('Ensemble failed.');
-    expect(response.body.error).toBe('Ensemble service failed');
-    expect(response.body.timestamp).toBeDefined();
+    expect(response.body.message).toBe('Enhanced ensemble processing failed. Our team has been notified.');
+    expect(response.body.error).toBe('Internal server error');
+    expect(response.body.supportInfo).toBeDefined();
   });
 });

@@ -5,7 +5,7 @@
 
 const express = require('express');
 const { getMemoryManager } = require('../services/memoryManager');
-const advancedRateLimitingService = require('../services/advancedRateLimitingService');
+const securityMiddleware = require('../middleware/securityMiddleware');
 
 const router = express.Router();
 
@@ -43,21 +43,19 @@ router.post('/store', validateMemoryRequest, async (req, res) => {
 
     const userTier = req.userTier || 'free';
 
-    // Check advanced rate limiting for memory operations
-    const rateLimitCheck = await advancedRateLimitingService.checkComprehensiveRateLimit(
-      userId, userTier, 'memory'
-    );
-
-    if (!rateLimitCheck.allowed) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded',
-        message: `${rateLimitCheck.reason === 'rate_limit' ? 'Regular rate limit' : 'Burst limit'} exceeded for memory operations`,
-        rateLimitInfo: {
-          regular: rateLimitCheck.regular,
-          burst: rateLimitCheck.burst
-        },
-        retryAfter: Math.ceil((rateLimitCheck.regular.resetTime - Date.now()) / 1000)
-      });
+    // Check rate limits for free tier
+    if (userTier === 'free') {
+      const rateLimitResult = securityMiddleware.checkRateLimit(userId, 'memory');
+      if (!rateLimitResult.allowed) {
+        return res.status(429).json({
+          status: 'error',
+          message: 'Rate limit exceeded',
+          details: rateLimitResult.message,
+          retryAfter: rateLimitResult.retryAfter || 60,
+          timestamp: new Date().toISOString(),
+          correlationId
+        });
+      }
     }
 
     // Validate required fields

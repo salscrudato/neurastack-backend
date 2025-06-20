@@ -29,7 +29,7 @@ async function testHealthEndpoint() {
 async function testEnsembleWithUserID() {
   console.log('🤖 Testing Ensemble with User ID...');
   try {
-    const response = await axios.post(`${BASE_URL}/ensemble-test`, {
+    const response = await axios.post(`${BASE_URL}/default-ensemble`, {
       prompt: 'What are the key considerations for implementing AI in healthcare?'
     }, {
       headers: {
@@ -67,7 +67,7 @@ async function testEnsembleWithUserID() {
 async function testEnsembleWithoutUserID() {
   console.log('🤖 Testing Ensemble without User ID...');
   try {
-    const response = await axios.post(`${BASE_URL}/ensemble-test`, {
+    const response = await axios.post(`${BASE_URL}/default-ensemble`, {
       prompt: 'Quick test of the ensemble system'
     }, {
       headers: {

@@ -1,404 +1,122 @@
 /**
- * Advanced Security Middleware
- * Provides comprehensive security features including rate limiting, input validation, and security headers
+ * Simple Security Middleware
+ * Provides basic security features including rate limiting
  */
 
 const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const { body, query, param, validationResult } = require('express-validator');
-const crypto = require('crypto');
 
 class SecurityMiddleware {
   constructor() {
-    this.rateLimitStore = new Map(); // In-memory store for rate limiting
-    this.suspiciousIPs = new Set(); // Track suspicious IP addresses
-    this.auditLog = []; // Simple audit log (use proper logging in production)
-    
-    // Security configuration
-    this.config = {
-      maxRequestsPerMinute: 60,
-      maxRequestsPerHour: 1000,
-      maxRequestsPerDay: 10000,
-      suspiciousThreshold: 100, // requests per minute to flag as suspicious
-      blockDuration: 15 * 60 * 1000, // 15 minutes
-      maxPayloadSize: '10mb',
-      allowedOrigins: [
+    this.rateLimitStore = new Map();
+  }
+
+  /**
+   * Basic rate limiting
+   */
+  createRateLimit(options = {}) {
+    const defaultOptions = {
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100, // limit each IP to 100 requests per windowMs
+      message: {
+        error: 'Too many requests',
+        message: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil(options.windowMs / 1000) || 900
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+      ...options
+    };
+
+    return rateLimit(defaultOptions);
+  }
+
+  /**
+   * Simple rate limit check for custom logic
+   */
+  checkRateLimit(userId, endpoint, maxRequests = 60, windowMs = 60000) {
+    const key = `${userId}:${endpoint}`;
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    // Get or create rate limit data
+    let rateLimitData = this.rateLimitStore.get(key) || { requests: [], firstRequest: now };
+
+    // Remove old requests outside the window
+    rateLimitData.requests = rateLimitData.requests.filter(timestamp => timestamp > windowStart);
+
+    // Check if limit exceeded
+    if (rateLimitData.requests.length >= maxRequests) {
+      return {
+        allowed: false,
+        message: 'Rate limit exceeded',
+        retryAfter: Math.ceil((rateLimitData.requests[0] + windowMs - now) / 1000)
+      };
+    }
+
+    // Add current request
+    rateLimitData.requests.push(now);
+    this.rateLimitStore.set(key, rateLimitData);
+
+    return {
+      allowed: true,
+      remaining: maxRequests - rateLimitData.requests.length
+    };
+  }
+
+  /**
+   * Basic security headers
+   */
+  securityHeaders() {
+    return (req, res, next) => {
+      // Basic security headers
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-XSS-Protection', '1; mode=block');
+      res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+      
+      next();
+    };
+  }
+
+  /**
+   * CORS configuration
+   */
+  corsOptions() {
+    return {
+      origin: [
+        'http://localhost:3000',
+        'http://localhost:3001',
         'https://neurastack.ai',
         'https://www.neurastack.ai',
-        'https://neurastack-frontend.web.app',
         /^https:\/\/.*\.vercel\.app$/,
         /^https:\/\/.*\.netlify\.app$/,
         /^https:\/\/.*\.firebase\.app$/,
         /^https:\/\/.*\.web\.app$/
+      ],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-User-Id',
+        'X-Correlation-ID',
+        'X-API-Key'
       ]
     };
   }
 
   /**
-   * Basic helmet security headers
-   */
-  securityHeaders() {
-    return helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: [
-            "'self'",
-            "'unsafe-inline'", // Allow inline scripts for monitoring dashboard
-            "https://www.gstatic.com", // Firebase CDN
-            "https://apis.google.com" // Firebase APIs
-          ],
-          imgSrc: ["'self'", "data:", "https:"],
-          connectSrc: [
-            "'self'",
-            "https://api.openai.com",
-            "https://api.anthropic.com",
-            "https://generativelanguage.googleapis.com",
-            "https://identitytoolkit.googleapis.com", // Firebase Auth
-            "https://securetoken.googleapis.com", // Firebase Auth
-            "https://firestore.googleapis.com", // Firestore
-            "https://neurastack-backend.firebaseapp.com" // Firebase project
-          ],
-          fontSrc: ["'self'"],
-          objectSrc: ["'none'"],
-          mediaSrc: ["'self'"],
-          frameSrc: ["'none'"],
-        },
-      },
-      crossOriginEmbedderPolicy: false, // Disable for API compatibility
-      hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true
-      }
-    });
-  }
-
-  /**
-   * Advanced rate limiting with multiple tiers
-   */
-  createRateLimit(options = {}) {
-    const {
-      windowMs = 15 * 60 * 1000, // 15 minutes
-      max = 100, // requests per window
-      message = 'Too many requests from this IP',
-      skipSuccessfulRequests = false,
-      skipFailedRequests = false,
-      keyGenerator = (req) => req.ip,
-      tier = 'default'
-    } = options;
-
-    return rateLimit({
-      windowMs,
-      max,
-      message: {
-        error: 'Rate limit exceeded',
-        message,
-        retryAfter: Math.ceil(windowMs / 1000),
-        tier
-      },
-      standardHeaders: true,
-      legacyHeaders: false,
-      skipSuccessfulRequests,
-      skipFailedRequests,
-      keyGenerator,
-      handler: (req, res) => {
-        this.logSuspiciousActivity(req, 'rate_limit_exceeded');
-        res.status(429).json({
-          error: 'Rate limit exceeded',
-          message,
-          retryAfter: Math.ceil(windowMs / 1000),
-          tier
-        });
-      }
-    });
-  }
-
-  /**
-   * Tier-based rate limiting
-   */
-  tierBasedRateLimit() {
-    return (req, res, next) => {
-      const userTier = req.userTier || req.user?.tier || 'free';
-      const userId = req.userId || req.user?.userId || req.ip;
-
-      const limits = {
-        free: { windowMs: 60 * 1000, max: 10 }, // 10 requests per minute
-        premium: { windowMs: 60 * 1000, max: 100 }, // 100 requests per minute
-        enterprise: { windowMs: 60 * 1000, max: 1000 } // 1000 requests per minute
-      };
-
-      const limit = limits[userTier] || limits.free;
-      
-      const rateLimiter = this.createRateLimit({
-        ...limit,
-        keyGenerator: () => `${userTier}:${userId}`,
-        tier: userTier
-      });
-
-      rateLimiter(req, res, next);
-    };
-  }
-
-  /**
-   * Input validation and sanitization
-   */
-  validateInput(validationRules) {
-    return [
-      ...validationRules,
-      (req, res, next) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-          this.logSuspiciousActivity(req, 'validation_failed', { errors: errors.array() });
-          return res.status(400).json({
-            error: 'Validation failed',
-            message: 'Invalid input data',
-            details: errors.array()
-          });
-        }
-        next();
-      }
-    ];
-  }
-
-  /**
-   * Common validation rules
-   */
-  getValidationRules() {
-    return {
-      prompt: body('prompt')
-        .isString()
-        .isLength({ min: 1, max: 10000 })
-        .trim()
-        .escape()
-        .withMessage('Prompt must be a string between 1 and 10000 characters'),
-      
-      userId: body('userId')
-        .optional()
-        .isString()
-        .isLength({ min: 1, max: 100 })
-        .matches(/^[a-zA-Z0-9_-]+$/)
-        .withMessage('User ID must be alphanumeric with hyphens and underscores only'),
-      
-      sessionId: body('sessionId')
-        .optional()
-        .isString()
-        .isLength({ min: 1, max: 100 })
-        .matches(/^[a-zA-Z0-9_-]+$/)
-        .withMessage('Session ID must be alphanumeric with hyphens and underscores only'),
-      
-      tier: query('tier')
-        .optional()
-        .isIn(['free', 'premium', 'enterprise'])
-        .withMessage('Tier must be one of: free, premium, enterprise'),
-      
-      apiKey: query('api_key')
-        .optional()
-        .isString()
-        .matches(/^nsk_[a-zA-Z0-9_]+$/)
-        .withMessage('Invalid API key format')
-    };
-  }
-
-  /**
-   * Request size limiting
-   */
-  requestSizeLimit() {
-    return (req, res, next) => {
-      const contentLength = parseInt(req.headers['content-length'] || '0');
-      const maxSize = 10 * 1024 * 1024; // 10MB
-
-      if (contentLength > maxSize) {
-        this.logSuspiciousActivity(req, 'payload_too_large', { size: contentLength });
-        return res.status(413).json({
-          error: 'Payload too large',
-          message: `Request size ${contentLength} bytes exceeds maximum of ${maxSize} bytes`
-        });
-      }
-
-      next();
-    };
-  }
-
-  /**
-   * CSRF protection
-   */
-  csrfProtection() {
-    return (req, res, next) => {
-      // Skip CSRF for GET requests and API key authentication
-      if (req.method === 'GET' || req.authMethod === 'api_key') {
-        return next();
-      }
-
-      const token = req.headers['x-csrf-token'] || req.body._csrf;
-      const sessionToken = req.session?.csrfToken;
-
-      if (!token || !sessionToken || token !== sessionToken) {
-        this.logSuspiciousActivity(req, 'csrf_token_mismatch');
-        return res.status(403).json({
-          error: 'CSRF token mismatch',
-          message: 'Invalid or missing CSRF token'
-        });
-      }
-
-      next();
-    };
-  }
-
-  /**
-   * IP-based security checks
-   */
-  ipSecurityCheck() {
-    return (req, res, next) => {
-      const clientIP = req.ip || req.connection.remoteAddress;
-      
-      // Check if IP is in suspicious list
-      if (this.suspiciousIPs.has(clientIP)) {
-        this.logSuspiciousActivity(req, 'suspicious_ip_blocked');
-        return res.status(403).json({
-          error: 'Access denied',
-          message: 'Your IP address has been temporarily blocked due to suspicious activity'
-        });
-      }
-
-      // Add IP tracking
-      req.clientIP = clientIP;
-      next();
-    };
-  }
-
-  /**
-   * Request fingerprinting for anomaly detection
-   */
-  requestFingerprinting() {
-    return (req, res, next) => {
-      const fingerprint = this.generateRequestFingerprint(req);
-      req.fingerprint = fingerprint;
-      
-      // Simple anomaly detection (implement more sophisticated logic as needed)
-      this.detectAnomalies(req, fingerprint);
-      
-      next();
-    };
-  }
-
-  /**
-   * Generate request fingerprint
-   */
-  generateRequestFingerprint(req) {
-    const components = [
-      req.ip,
-      req.headers['user-agent'] || '',
-      req.headers['accept-language'] || '',
-      req.headers['accept-encoding'] || '',
-      req.method,
-      req.url
-    ];
-
-    return crypto
-      .createHash('sha256')
-      .update(components.join('|'))
-      .digest('hex')
-      .substring(0, 16);
-  }
-
-  /**
-   * Simple anomaly detection
-   */
-  detectAnomalies(req, fingerprint) {
-    const now = Date.now();
-    const window = 60 * 1000; // 1 minute window
-    
-    if (!this.requestPatterns) {
-      this.requestPatterns = new Map();
-    }
-
-    const pattern = this.requestPatterns.get(fingerprint) || { count: 0, firstSeen: now, lastSeen: now };
-    pattern.count++;
-    pattern.lastSeen = now;
-
-    // Flag as suspicious if too many requests from same fingerprint
-    if (pattern.count > 50 && (now - pattern.firstSeen) < window) {
-      this.suspiciousIPs.add(req.ip);
-      this.logSuspiciousActivity(req, 'anomaly_detected', { 
-        fingerprint, 
-        count: pattern.count,
-        timeWindow: now - pattern.firstSeen 
-      });
-    }
-
-    this.requestPatterns.set(fingerprint, pattern);
-  }
-
-  /**
-   * Log suspicious activity
-   */
-  logSuspiciousActivity(req, type, details = {}) {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      type,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-      url: req.url,
-      method: req.method,
-      userId: req.userId || 'anonymous',
-      details
-    };
-
-    this.auditLog.push(logEntry);
-    console.warn('🚨 Suspicious activity detected:', logEntry);
-
-    // Keep audit log size manageable
-    if (this.auditLog.length > 1000) {
-      this.auditLog = this.auditLog.slice(-500);
-    }
-  }
-
-  /**
-   * Get security metrics
-   */
-  getSecurityMetrics() {
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
-    
-    const recentLogs = this.auditLog.filter(log => 
-      new Date(log.timestamp).getTime() > (now - oneHour)
-    );
-
-    return {
-      suspiciousIPs: Array.from(this.suspiciousIPs),
-      recentIncidents: recentLogs.length,
-      incidentTypes: recentLogs.reduce((acc, log) => {
-        acc[log.type] = (acc[log.type] || 0) + 1;
-        return acc;
-      }, {}),
-      totalAuditEntries: this.auditLog.length
-    };
-  }
-
-  /**
-   * Clean up old data
+   * Clean up old rate limit data
    */
   cleanup() {
     const now = Date.now();
-    const cleanupAge = 24 * 60 * 60 * 1000; // 24 hours
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
 
-    // Clean up old audit logs
-    this.auditLog = this.auditLog.filter(log => 
-      new Date(log.timestamp).getTime() > (now - cleanupAge)
-    );
-
-    // Clean up old request patterns
-    if (this.requestPatterns) {
-      for (const [fingerprint, pattern] of this.requestPatterns.entries()) {
-        if (now - pattern.lastSeen > cleanupAge) {
-          this.requestPatterns.delete(fingerprint);
-        }
+    for (const [key, data] of this.rateLimitStore.entries()) {
+      if (now - data.firstRequest > maxAge) {
+        this.rateLimitStore.delete(key);
       }
     }
-
-    console.log('🧹 Security middleware cleanup completed');
   }
 }
 

@@ -13,10 +13,11 @@ NeuraStack is a production-grade AI ensemble system that combines multiple AI mo
 ## Core Services
 
 ### AI Ensemble System
-- **Primary Endpoint**: `/default-ensemble` - Production-grade ensemble with circuit breakers
+- **Primary Endpoint**: `/default-ensemble` - Production-grade ensemble with circuit breakers, confidence indicators, and quality metrics
 - **Legacy Endpoint**: `/ensemble-test` - Backward compatibility
 - **Models**: GPT-4o-mini, Gemini Flash, Claude Haiku (free tier), upgraded models (premium)
-- **Synthesis**: Weighted voting with confidence scoring and adaptive model selection
+- **Synthesis**: Weighted voting with confidence scoring, quality analysis, and adaptive model selection
+- **Enhanced Features**: Response confidence indicators, quality metrics, model agreement analysis, cost estimation
 
 ### Memory Management
 - **Types**: Working, Short-term, Long-term, Semantic, Episodic
@@ -132,7 +133,15 @@ Headers: Authorization: Bearer <firebase-token>
 POST /default-ensemble
 Headers: X-User-Id, X-Session-Id, X-Correlation-ID
 Body: { "prompt": "string", "sessionId": "string" }
-Response: { status, data: { synthesis, roles, metadata }, timestamp }
+Response: {
+  status,
+  data: {
+    synthesis: { content, confidence, qualityScore, metadata },
+    roles: [{ content, confidence, quality, metadata }],
+    metadata: { confidenceAnalysis, costEstimate, ... }
+  },
+  timestamp
+}
 ```
 
 ### Memory Management

@@ -67,6 +67,10 @@ class WorkoutService {
 
       // Parse and validate the response with original request context
       const enhancedRequest = workoutSpecification ? { workoutSpecification } : workoutRequest;
+
+      // Debug: Log the AI response for troubleshooting
+      console.log('🔍 AI Response (first 500 chars):', aiResponse.substring(0, 500));
+
       const workoutPlan = this.parseWorkoutResponse(aiResponse, enhancedRequest);
 
       // Add debugging information for frontend developers
@@ -176,51 +180,45 @@ class WorkoutService {
 
   /**
    * Get the appropriate AI model configuration for professional workout generation
+   * Enhanced to use GPT-4o for structured workout generation
    */
   getModelConfig() {
     const tier = ensembleConfig.meta.tier;
     const models = ensembleConfig.models;
 
-    // Use cost-effective models with professional prompting for quality
-    if (tier === 'premium') {
-      // Premium tier: Use Claude Opus for superior exercise science knowledge
-      return {
-        provider: 'claude',
-        model: models.claude.model, // claude-opus-4-20250514
-        tier: tier
-      };
-    } else {
-      // Free tier: Use GPT-4o-mini with professional prompting for cost efficiency
-      return {
-        provider: 'openai',
-        model: models.gpt4o.model, // gpt-4o-mini with professional standards
-        tier: tier
-      };
-    }
+    // Always use GPT-4o for workout generation as requested
+    // GPT-4o provides excellent structured output and exercise knowledge
+    return {
+      provider: 'openai',
+      model: 'gpt-4o', // Use GPT-4o specifically for workout generation
+      tier: tier,
+      optimizedFor: 'structured_workout_generation'
+    };
   }
 
   /**
    * Build professional workout generation prompt with elite personal trainer expertise
+   * Enhanced for structured parameter handling and GPT-4o optimization
    */
   buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification = null) {
-    // Parse structured workout request if it's an object
-    const structuredRequest = this.parseWorkoutRequest(workoutRequest, workoutSpecification);
+    // Parse structured workout request - enhanced for new parameter format
+    const structuredRequest = this.parseStructuredWorkoutRequest(userMetadata, workoutRequest, workoutSpecification);
 
-    // Build comprehensive client assessment
-    const clientAssessment = this.buildClientAssessment(userMetadata, workoutHistory);
+    // Build comprehensive client assessment with enhanced parameter support
+    const clientAssessment = this.buildEnhancedClientAssessment(userMetadata, workoutHistory, structuredRequest);
 
-    // Build professional workout specification
-    const workoutSpec = this.buildWorkoutSpecification(structuredRequest, userMetadata);
+    // Build professional workout specification with structured parameters
+    const workoutSpec = this.buildStructuredWorkoutSpecification(structuredRequest, userMetadata);
 
     // Build professional requirements and safety considerations
-    const professionalRequirements = this.buildProfessionalRequirements(structuredRequest, userMetadata);
+    const professionalRequirements = this.buildEnhancedProfessionalRequirements(structuredRequest, userMetadata);
 
-    return `🏋️‍♂️ PROFESSIONAL WORKOUT PROGRAMMING SESSION
+    return `🏋️‍♂️ ELITE PERSONAL TRAINER WORKOUT PROGRAMMING
 
-📋 CLIENT ASSESSMENT:
+📋 COMPREHENSIVE CLIENT ASSESSMENT:
 ${clientAssessment}
 
-🎯 WORKOUT SPECIFICATION:
+🎯 STRUCTURED WORKOUT SPECIFICATION:
 ${workoutSpec}
 
 ⚡ PROFESSIONAL PROGRAMMING REQUIREMENTS:
@@ -228,95 +226,67 @@ ${professionalRequirements}
 
 🏆 GENERATE PROFESSIONAL WORKOUT PROGRAM:
 
-Create a comprehensive, evidence-based workout program that demonstrates elite personal trainer expertise. Use the following professional JSON format:
+Create a comprehensive, evidence-based workout program that demonstrates elite personal trainer expertise with advanced exercise science knowledge. Use the following professional JSON format:
 
 {
   "type": "${structuredRequest.workoutType || 'functional_training'}",
-  "duration": ${structuredRequest.duration || userMetadata.timeAvailable || userMetadata.minutesPerSession || 45},
-  "difficulty": "${userMetadata.fitnessLevel || 'intermediate'}",
-  "equipment": ${JSON.stringify(userMetadata.equipment || [])},
+  "duration": ${structuredRequest.minutesPerSession || structuredRequest.duration || userMetadata.timeAvailable || userMetadata.minutesPerSession || 45},
+  "difficulty": "${structuredRequest.fitnessLevel || userMetadata.fitnessLevel || 'intermediate'}",
+  "equipment": ${JSON.stringify(structuredRequest.equipment || userMetadata.equipment || [])},
 
-  "warmup": {
-    "duration": "8-10 minutes",
-    "purpose": "Movement preparation, activation, injury prevention",
-    "phases": [
-      {
-        "phase": "General Warm-up",
-        "duration": "3-4 minutes",
-        "exercises": [
-          {
-            "name": "Exercise Name",
-            "duration": "60 seconds",
-            "instructions": "Detailed coaching cues with biomechanical focus",
-            "purpose": "Increase core temperature and blood flow"
-          }
-        ]
-      },
-      {
-        "phase": "Dynamic Preparation",
-        "duration": "4-5 minutes",
-        "exercises": [
-          {
-            "name": "Movement-specific exercise",
-            "sets": 1,
-            "reps": "8-12",
-            "instructions": "Professional form cues and movement quality focus",
-            "purpose": "Prepare specific movement patterns"
-          }
-        ]
-      }
-    ]
-  },
   "mainWorkout": {
-    "structure": "Systematic progression from compound to isolation movements",
+    "structure": "Exercise count and training focus description",
     "exercises": [
       {
         "name": "Exercise Name",
-        "category": "compound/isolation/power/corrective",
-        "primaryMuscles": ["specific muscle groups"],
-        "secondaryMuscles": ["supporting muscles"],
+        "category": "strength",
         "sets": 3,
-        "reps": "8-12",
-        "restInterval": "90-120 seconds",
+        "reps": "8-10",
+        "rest": "90 seconds",
+        "duration": 0,
+        "instructions": "Detailed step-by-step instructions with proper form and technique",
+        "formCues": [
+          "Key form tip 1",
+          "Key form tip 2",
+          "Key form tip 3"
+        ],
+        "modifications": "Use lighter weight or perform easier variation",
+        "targetMuscles": ["primary", "secondary", "stabilizers"],
+        "equipment": ["required_equipment"],
+        "intensity": "moderate",
+        "rpe": 6,
+        "progressionNotes": [
+          "How to progress this exercise",
+          "Advanced variation options"
+        ]
+      }
+    ]
+  },
+  "warmup": [
+    {
+      "name": "Warmup Exercise",
+      "duration": "2 minutes",
+      "instructions": "Detailed warmup instructions"
+    }
+  ],
 
-        "instructions": "Detailed step-by-step coaching with safety emphasis",
-        "formCues": ["Key coaching points for proper technique"],
-        "commonMistakes": ["What to avoid for safety and effectiveness"],
-        "progressions": "How to make exercise more challenging",
-        "regressions": "How to modify for limitations or beginners",
-        "equipmentAlternatives": "Substitutions if equipment unavailable"
-      }
-    ]
-  },
-  "cooldown": {
-    "duration": "8-10 minutes",
-    "purpose": "Recovery initiation, flexibility, stress reduction",
-    "phases": [
-      {
-        "phase": "Active Recovery",
-        "duration": "3-4 minutes",
-        "exercises": [
-          {
-            "name": "Low-intensity movement",
-            "duration": "2-3 minutes",
-            "instructions": "Gradual heart rate reduction protocol"
-          }
-        ]
-      },
-      {
-        "phase": "Static Stretching",
-        "duration": "5-6 minutes",
-        "exercises": [
-          {
-            "name": "Targeted stretch",
-            "duration": "30-60 seconds",
-            "instructions": "Proper stretching technique and breathing",
-            "targetMuscles": ["muscles worked during session"]
-          }
-        ]
-      }
-    ]
-  },
+  "cooldown": [
+    {
+      "name": "Cooldown Exercise",
+      "duration": "90 seconds",
+      "instructions": "Detailed cooldown instructions"
+    }
+  ],
+
+  "professionalNotes": "Focus on progressive overload and proper form. Ensure adequate rest between sessions.",
+
+  "tags": ["${structuredRequest.workoutType || 'functional'}", "${structuredRequest.fitnessLevel || 'intermediate'}", "strength"],
+
+  "coachingTips": [
+    "Track your weights and reps for progressive overload",
+    "Focus on form over weight - perfect technique prevents injury",
+    "Stay hydrated and maintain steady breathing throughout"
+  ]
 
 
 }
@@ -333,6 +303,181 @@ Create a comprehensive, evidence-based workout program that demonstrates elite p
 9. Respond ONLY with valid JSON - no additional text or markdown formatting
 
 Generate a workout that clearly demonstrates professional personal training expertise and advanced exercise science knowledge.`;
+  }
+
+  /**
+   * Build enhanced client assessment with structured parameter support
+   */
+  buildEnhancedClientAssessment(userMetadata, workoutHistory, structuredRequest) {
+    const assessment = [];
+
+    // Enhanced demographic and physical assessment
+    assessment.push(`👤 CLIENT PROFILE:`);
+    assessment.push(`   • Age: ${structuredRequest.age || userMetadata.age || 'Not specified'} years`);
+    assessment.push(`   • Gender: ${structuredRequest.gender || userMetadata.gender || 'Not specified'}`);
+    assessment.push(`   • Weight: ${structuredRequest.weight || userMetadata.weight || 'Not specified'} ${structuredRequest.weight ? 'lbs/kg' : ''}`);
+    assessment.push(`   • Fitness Level: ${structuredRequest.fitnessLevel || userMetadata.fitnessLevel || 'Intermediate'}`);
+
+    // Enhanced fitness goals assessment
+    if (structuredRequest.fitnessGoals && structuredRequest.fitnessGoals.length > 0) {
+      assessment.push(`\n🎯 FITNESS GOALS:`);
+      structuredRequest.fitnessGoals.forEach(goal => {
+        assessment.push(`   • ${goal.replace('_', ' ').toUpperCase()}`);
+      });
+    } else if (userMetadata.goals && userMetadata.goals.length > 0) {
+      assessment.push(`\n🎯 FITNESS GOALS:`);
+      userMetadata.goals.forEach(goal => {
+        assessment.push(`   • ${goal.replace('_', ' ').toUpperCase()}`);
+      });
+    }
+
+    // Enhanced equipment assessment
+    const equipment = structuredRequest.equipment || userMetadata.equipment || [];
+    assessment.push(`\n🏋️ AVAILABLE EQUIPMENT:`);
+    if (equipment.length > 0) {
+      equipment.forEach(item => {
+        assessment.push(`   • ${item.replace('_', ' ').toUpperCase()}`);
+      });
+    } else {
+      assessment.push(`   • BODYWEIGHT ONLY (No equipment available)`);
+    }
+
+    // Enhanced injury and limitation assessment
+    const injuries = structuredRequest.injuries || userMetadata.injuries || [];
+    assessment.push(`\n⚠️ INJURY/LIMITATION CONSIDERATIONS:`);
+    if (injuries.length > 0) {
+      injuries.forEach(injury => {
+        assessment.push(`   • ${injury.replace('_', ' ').toUpperCase()} - Requires exercise modifications`);
+      });
+    } else {
+      assessment.push(`   • No reported injuries or limitations`);
+    }
+
+    // Enhanced training schedule assessment
+    if (structuredRequest.daysPerWeek || userMetadata.daysPerWeek) {
+      const days = structuredRequest.daysPerWeek || userMetadata.daysPerWeek;
+      assessment.push(`\n📅 TRAINING SCHEDULE:`);
+      assessment.push(`   • Frequency: ${days} days per week`);
+      assessment.push(`   • Session Duration: ${structuredRequest.minutesPerSession || userMetadata.minutesPerSession || userMetadata.timeAvailable || 45} minutes`);
+      assessment.push(`   • Weekly Volume: ${days * (structuredRequest.minutesPerSession || userMetadata.minutesPerSession || userMetadata.timeAvailable || 45)} minutes total`);
+    }
+
+    // Enhanced training history context
+    if (workoutHistory && workoutHistory.length > 0) {
+      assessment.push(`\n📊 TRAINING HISTORY ANALYSIS:`);
+      assessment.push(`   • Previous Sessions: ${workoutHistory.length} recorded workouts`);
+
+      // Analyze recent workout patterns
+      const recentWorkouts = workoutHistory.slice(0, 5);
+      const workoutTypes = recentWorkouts.map(w => w.parameters?.workoutType || w.type).filter(Boolean);
+      const uniqueTypes = [...new Set(workoutTypes)];
+
+      if (uniqueTypes.length > 0) {
+        assessment.push(`   • Recent Workout Types: ${uniqueTypes.join(', ')}`);
+      }
+
+      // Analyze completion rates
+      const completedWorkouts = recentWorkouts.filter(w => w.status === 'completed');
+      const completionRate = recentWorkouts.length > 0 ? (completedWorkouts.length / recentWorkouts.length) * 100 : 0;
+      assessment.push(`   • Recent Completion Rate: ${completionRate.toFixed(0)}%`);
+
+      // Analyze feedback patterns
+      const workoutsWithFeedback = recentWorkouts.filter(w => w.feedback && w.feedback.feedback);
+      if (workoutsWithFeedback.length > 0) {
+        const avgRating = workoutsWithFeedback.reduce((sum, w) => sum + (w.feedback.feedback.rating || 0), 0) / workoutsWithFeedback.length;
+        assessment.push(`   • Average Workout Rating: ${avgRating.toFixed(1)}/5`);
+
+        const difficultyFeedback = workoutsWithFeedback.map(w => w.feedback.feedback.difficulty).filter(Boolean);
+        if (difficultyFeedback.length > 0) {
+          const mostCommonDifficulty = difficultyFeedback.reduce((a, b, i, arr) =>
+            arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b
+          );
+          assessment.push(`   • Most Common Difficulty Feedback: ${mostCommonDifficulty.replace('_', ' ')}`);
+        }
+      }
+    } else {
+      assessment.push(`\n📊 TRAINING HISTORY: New client - establishing baseline program`);
+    }
+
+    return assessment.join('\n');
+  }
+
+  /**
+   * Build structured workout specification with enhanced parameters
+   */
+  buildStructuredWorkoutSpecification(structuredRequest, userMetadata) {
+    const spec = [];
+
+    spec.push(`🎯 STRUCTURED WORKOUT PARAMETERS:`);
+    spec.push(`   • Workout Type: ${structuredRequest.workoutType || 'Functional Training'}`);
+    spec.push(`   • Session Duration: ${structuredRequest.minutesPerSession || structuredRequest.duration || userMetadata.timeAvailable || userMetadata.minutesPerSession || 45} minutes`);
+    spec.push(`   • Intensity Target: ${structuredRequest.intensityTarget || this.mapFitnessLevelToIntensity(structuredRequest.fitnessLevel || userMetadata.fitnessLevel)}`);
+    spec.push(`   • Training Focus: ${structuredRequest.focus && structuredRequest.focus.length > 0 ? structuredRequest.focus.join(', ') : 'Balanced development'}`);
+
+    // Enhanced goal-specific programming
+    if (structuredRequest.fitnessGoals && structuredRequest.fitnessGoals.length > 0) {
+      spec.push(`\n🎯 GOAL-SPECIFIC PROGRAMMING:`);
+      structuredRequest.fitnessGoals.forEach(goal => {
+        const goalSpecs = this.getGoalSpecificRequirements(goal);
+        spec.push(`   • ${goal.replace('_', ' ').toUpperCase()}: ${goalSpecs}`);
+      });
+    }
+
+    // Enhanced equipment optimization
+    const equipment = structuredRequest.equipment || userMetadata.equipment || [];
+    spec.push(`\n🏋️ EQUIPMENT OPTIMIZATION:`);
+    if (equipment.length > 0) {
+      spec.push(`   • Available Equipment: ${equipment.join(', ')}`);
+      spec.push(`   • Equipment Strategy: Maximize utilization of available tools`);
+    } else {
+      spec.push(`   • Bodyweight Focus: Creative bodyweight progressions and variations`);
+    }
+
+    // Enhanced safety and modification protocols
+    const injuries = structuredRequest.injuries || userMetadata.injuries || [];
+    if (injuries.length > 0) {
+      spec.push(`\n⚠️ SAFETY & MODIFICATION PROTOCOLS:`);
+      injuries.forEach(injury => {
+        const modifications = this.getInjuryModifications(injury);
+        spec.push(`   • ${injury.replace('_', ' ').toUpperCase()}: ${modifications}`);
+      });
+    }
+
+    return spec.join('\n');
+  }
+
+  /**
+   * Get goal-specific programming requirements
+   */
+  getGoalSpecificRequirements(goal) {
+    const requirements = {
+      'weight_loss': 'High-intensity intervals, compound movements, metabolic conditioning',
+      'muscle_gain': 'Progressive overload, hypertrophy rep ranges (8-12), adequate rest',
+      'strength': 'Heavy compound lifts, low rep ranges (3-6), longer rest periods',
+      'endurance': 'Sustained effort, circuit training, minimal rest periods',
+      'flexibility': 'Dynamic warm-up, static stretching, mobility work',
+      'toning': 'Moderate weights, higher reps (12-15), muscle definition focus',
+      'general_fitness': 'Balanced approach, functional movements, varied training',
+      'athletic_performance': 'Sport-specific movements, power development, agility work'
+    };
+    return requirements[goal] || 'Balanced training approach';
+  }
+
+  /**
+   * Get injury-specific modifications
+   */
+  getInjuryModifications(injury) {
+    const modifications = {
+      'lower_back': 'Avoid spinal flexion, emphasize core stability, neutral spine',
+      'knee': 'Limit deep knee flexion, avoid high-impact, focus on alignment',
+      'shoulder': 'Avoid overhead movements, emphasize scapular stability',
+      'neck': 'Avoid neck flexion/extension, maintain neutral cervical spine',
+      'ankle': 'Modify jumping movements, focus on stability and mobility',
+      'wrist': 'Avoid weight-bearing on hands, use alternative grip positions',
+      'hip': 'Limit hip flexion, focus on hip stability and mobility',
+      'elbow': 'Avoid repetitive gripping, modify pushing/pulling movements'
+    };
+    return modifications[injury] || 'Exercise modifications as needed for comfort and safety';
   }
 
   /**
@@ -424,6 +569,157 @@ Generate a workout that clearly demonstrates professional personal training expe
   }
 
   /**
+   * Build enhanced professional requirements with structured parameter support
+   */
+  buildEnhancedProfessionalRequirements(structuredRequest, userMetadata) {
+    const requirements = [];
+
+    requirements.push(`🧠 ADVANCED EXERCISE SCIENCE APPLICATION:`);
+    requirements.push(`   • Apply FITT-VP Principle (Frequency, Intensity, Time, Type, Volume, Progression)`);
+    requirements.push(`   • Use Progressive Overload with structured parameter consideration`);
+    requirements.push(`   • Implement Specificity Principle for goal achievement`);
+    requirements.push(`   • Apply Recovery and Adaptation principles`);
+
+    // Enhanced goal-specific requirements
+    if (structuredRequest.fitnessGoals && structuredRequest.fitnessGoals.length > 0) {
+      requirements.push(`\n🎯 GOAL-SPECIFIC PROGRAMMING REQUIREMENTS:`);
+      structuredRequest.fitnessGoals.forEach(goal => {
+        const goalRequirements = this.getAdvancedGoalRequirements(goal);
+        requirements.push(`   • ${goal.replace('_', ' ').toUpperCase()}: ${goalRequirements}`);
+      });
+    }
+
+    // Enhanced safety and biomechanics requirements
+    requirements.push(`\n⚠️ SAFETY & BIOMECHANICS REQUIREMENTS:`);
+    requirements.push(`   • Prioritize movement quality over quantity`);
+    requirements.push(`   • Ensure proper warm-up and cool-down protocols`);
+    requirements.push(`   • Apply joint-by-joint mobility/stability approach`);
+    requirements.push(`   • Use appropriate exercise progressions and regressions`);
+
+    // Enhanced age and fitness level considerations
+    const age = structuredRequest.age || userMetadata.age;
+    const fitnessLevel = structuredRequest.fitnessLevel || userMetadata.fitnessLevel;
+
+    if (age) {
+      requirements.push(`\n👤 AGE-SPECIFIC CONSIDERATIONS (${age} years):`);
+      if (age < 18) {
+        requirements.push(`   • Youth training: Focus on movement skills, avoid maximal loads`);
+      } else if (age >= 65) {
+        requirements.push(`   • Senior training: Emphasize balance, functional movements, fall prevention`);
+      } else if (age >= 40) {
+        requirements.push(`   • Master's training: Include mobility work, joint health, recovery focus`);
+      } else {
+        requirements.push(`   • Adult training: Full range of training modalities appropriate`);
+      }
+    }
+
+    if (fitnessLevel) {
+      requirements.push(`\n📊 FITNESS LEVEL ADAPTATIONS (${fitnessLevel.toUpperCase()}):`);
+      const levelRequirements = this.getFitnessLevelRequirements(fitnessLevel);
+      requirements.push(`   • ${levelRequirements}`);
+    }
+
+    // Enhanced equipment-specific requirements
+    const equipment = structuredRequest.equipment || userMetadata.equipment || [];
+    requirements.push(`\n🏋️ EQUIPMENT-SPECIFIC PROGRAMMING:`);
+    if (equipment.length > 0) {
+      requirements.push(`   • Maximize equipment utilization: ${equipment.join(', ')}`);
+      requirements.push(`   • Ensure proper equipment setup and safety protocols`);
+      requirements.push(`   • Use equipment-specific progression strategies`);
+    } else {
+      requirements.push(`   • Bodyweight mastery: Focus on movement quality and progression`);
+      requirements.push(`   • Creative exercise variations without equipment`);
+      requirements.push(`   • Leverage gravity and body positioning for resistance`);
+    }
+
+    // Enhanced injury prevention and modification requirements
+    const injuries = structuredRequest.injuries || userMetadata.injuries || [];
+    if (injuries.length > 0) {
+      requirements.push(`\n🩺 INJURY MANAGEMENT & PREVENTION:`);
+      injuries.forEach(injury => {
+        const preventionStrategy = this.getInjuryPreventionStrategy(injury);
+        requirements.push(`   • ${injury.replace('_', ' ').toUpperCase()}: ${preventionStrategy}`);
+      });
+    }
+
+    // Enhanced time and frequency optimization
+    const duration = structuredRequest.minutesPerSession || userMetadata.minutesPerSession || userMetadata.timeAvailable;
+    const frequency = structuredRequest.daysPerWeek || userMetadata.daysPerWeek;
+
+    if (duration || frequency) {
+      requirements.push(`\n⏱️ TIME & FREQUENCY OPTIMIZATION:`);
+      if (duration) {
+        requirements.push(`   • Session Duration: ${duration} minutes - optimize exercise density`);
+        if (duration <= 20) {
+          requirements.push(`   • Short session strategy: High-intensity, compound movements`);
+        } else if (duration >= 60) {
+          requirements.push(`   • Extended session strategy: Include adequate rest and variety`);
+        }
+      }
+      if (frequency) {
+        requirements.push(`   • Weekly Frequency: ${frequency} days - ensure adequate recovery`);
+        if (frequency >= 5) {
+          requirements.push(`   • High frequency strategy: Vary intensity and muscle groups`);
+        }
+      }
+    }
+
+    requirements.push(`\n🏆 PROFESSIONAL STANDARDS:`);
+    requirements.push(`   • Evidence-based exercise selection and programming`);
+    requirements.push(`   • Clear, detailed exercise instructions with safety cues`);
+    requirements.push(`   • Appropriate progression and regression options`);
+    requirements.push(`   • Professional presentation and terminology`);
+
+    return requirements.join('\n');
+  }
+
+  /**
+   * Get advanced goal-specific requirements
+   */
+  getAdvancedGoalRequirements(goal) {
+    const requirements = {
+      'weight_loss': 'Metabolic conditioning, HIIT protocols, compound movements, caloric expenditure focus',
+      'muscle_gain': 'Hypertrophy protocols, progressive overload, adequate volume, muscle protein synthesis optimization',
+      'strength': 'Maximal strength protocols, neural adaptations, compound lifts, power development',
+      'endurance': 'Aerobic capacity building, lactate threshold training, muscular endurance protocols',
+      'flexibility': 'Static and dynamic stretching, PNF techniques, mobility enhancement',
+      'toning': 'Muscle definition protocols, moderate resistance, higher volume, body composition focus',
+      'general_fitness': 'Balanced training approach, functional movement patterns, overall health enhancement',
+      'athletic_performance': 'Sport-specific training, power development, agility, reaction time enhancement'
+    };
+    return requirements[goal] || 'Comprehensive fitness development approach';
+  }
+
+  /**
+   * Get fitness level specific requirements
+   */
+  getFitnessLevelRequirements(level) {
+    const requirements = {
+      'beginner': 'Movement pattern learning, basic exercises, longer rest periods, gradual progression',
+      'intermediate': 'Increased complexity, moderate intensity, varied training stimuli, structured progression',
+      'advanced': 'High intensity training, complex movements, shorter rest periods, advanced techniques'
+    };
+    return requirements[level] || 'Appropriate progression for fitness level';
+  }
+
+  /**
+   * Get injury prevention strategies
+   */
+  getInjuryPreventionStrategy(injury) {
+    const strategies = {
+      'lower_back': 'Core strengthening, hip mobility, proper lifting mechanics, spinal neutral positioning',
+      'knee': 'Quadriceps/hamstring balance, proper tracking, controlled movements, impact modification',
+      'shoulder': 'Scapular stability, rotator cuff strengthening, proper overhead mechanics',
+      'neck': 'Cervical spine stability, postural awareness, controlled range of motion',
+      'ankle': 'Proprioception training, calf flexibility, controlled landing mechanics',
+      'wrist': 'Grip strength variation, wrist mobility, alternative hand positions',
+      'hip': 'Hip flexor stretching, glute activation, proper movement patterns',
+      'elbow': 'Grip variation, controlled movements, proper arm positioning'
+    };
+    return strategies[injury] || 'Conservative approach with movement modifications';
+  }
+
+  /**
    * Build professional requirements and exercise science principles
    */
   buildProfessionalRequirements(structuredRequest, userMetadata) {
@@ -459,6 +755,118 @@ Generate a workout that clearly demonstrates professional personal training expe
     requirements.push(`   • Provide clear progression pathways for future sessions`);
 
     return requirements.join('\n');
+  }
+
+  /**
+   * Parse structured workout request with enhanced parameter support
+   * Handles the new generate-workout endpoint parameters
+   */
+  parseStructuredWorkoutRequest(userMetadata, workoutRequest, workoutSpecification = null) {
+    // If userMetadata contains structured parameters (from generate-workout endpoint)
+    if (userMetadata && userMetadata.fitnessLevel && userMetadata.goals) {
+      return {
+        fitnessLevel: userMetadata.fitnessLevel,
+        fitnessGoals: userMetadata.goals,
+        equipment: userMetadata.equipment || [],
+        age: userMetadata.age,
+        gender: userMetadata.gender,
+        weight: userMetadata.weight,
+        injuries: userMetadata.injuries || [],
+        daysPerWeek: userMetadata.daysPerWeek,
+        minutesPerSession: userMetadata.minutesPerSession || userMetadata.timeAvailable,
+        workoutType: this.extractWorkoutTypeFromRequest(workoutRequest),
+        isStructuredFormat: true,
+        duration: userMetadata.minutesPerSession || userMetadata.timeAvailable,
+        intensityTarget: this.mapFitnessLevelToIntensity(userMetadata.fitnessLevel),
+        focus: this.deriveFocusFromGoals(userMetadata.goals, workoutRequest)
+      };
+    }
+
+    // Fallback to original parsing for backward compatibility
+    return this.parseWorkoutRequest(workoutRequest, workoutSpecification);
+  }
+
+  /**
+   * Extract workout type from request string
+   */
+  extractWorkoutTypeFromRequest(workoutRequest) {
+    if (typeof workoutRequest === 'string') {
+      const request = workoutRequest.toLowerCase();
+
+      // Common workout type patterns
+      const typePatterns = {
+        'leg': 'leg_day',
+        'push': 'push_day',
+        'pull': 'pull_day',
+        'upper': 'upper_body',
+        'lower': 'lower_body',
+        'full': 'full_body',
+        'core': 'core',
+        'cardio': 'cardio',
+        'hiit': 'hiit',
+        'strength': 'strength',
+        'yoga': 'yoga',
+        'pilates': 'pilates',
+        'crossfit': 'crossfit'
+      };
+
+      for (const [pattern, type] of Object.entries(typePatterns)) {
+        if (request.includes(pattern)) {
+          return type;
+        }
+      }
+    }
+
+    return 'functional_training'; // Default
+  }
+
+  /**
+   * Map fitness level to intensity target
+   */
+  mapFitnessLevelToIntensity(fitnessLevel) {
+    const intensityMap = {
+      'beginner': 'Low-Moderate',
+      'intermediate': 'Moderate-High',
+      'advanced': 'High-Very High'
+    };
+    return intensityMap[fitnessLevel] || 'Moderate';
+  }
+
+  /**
+   * Derive focus areas from fitness goals and workout type
+   */
+  deriveFocusFromGoals(goals, workoutRequest) {
+    const focus = [];
+
+    if (goals && Array.isArray(goals)) {
+      const goalFocusMap = {
+        'weight_loss': ['cardio', 'fat_burning', 'metabolic'],
+        'muscle_gain': ['strength', 'hypertrophy', 'progressive_overload'],
+        'strength': ['strength', 'power', 'compound_movements'],
+        'endurance': ['cardio', 'endurance', 'stamina'],
+        'flexibility': ['flexibility', 'mobility', 'stretching'],
+        'toning': ['strength', 'endurance', 'body_composition'],
+        'general_fitness': ['functional', 'balanced', 'overall_health'],
+        'athletic_performance': ['power', 'agility', 'sport_specific']
+      };
+
+      goals.forEach(goal => {
+        if (goalFocusMap[goal]) {
+          focus.push(...goalFocusMap[goal]);
+        }
+      });
+    }
+
+    // Add workout type specific focus
+    if (typeof workoutRequest === 'string') {
+      const request = workoutRequest.toLowerCase();
+      if (request.includes('strength')) focus.push('strength');
+      if (request.includes('cardio')) focus.push('cardio');
+      if (request.includes('core')) focus.push('core');
+      if (request.includes('functional')) focus.push('functional');
+    }
+
+    return [...new Set(focus)]; // Remove duplicates
   }
 
   /**
@@ -891,17 +1299,24 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
       }
     });
 
-    // Validate warmup structure
-    if (!workoutPlan.warmup.phases || !Array.isArray(workoutPlan.warmup.phases)) {
-      throw new Error('Professional workout plan must include structured warmup phases');
+    // Validate warmup structure (array format)
+    if (!Array.isArray(workoutPlan.warmup)) {
+      throw new Error('Professional workout plan must include warmup exercises array');
     }
 
-    // Validate cooldown structure
-    if (!workoutPlan.cooldown.phases || !Array.isArray(workoutPlan.cooldown.phases)) {
-      throw new Error('Professional workout plan must include structured cooldown phases');
+    // Validate cooldown structure (array format)
+    if (!Array.isArray(workoutPlan.cooldown)) {
+      throw new Error('Professional workout plan must include cooldown exercises array');
     }
 
+    // Validate professional notes and coaching tips
+    if (!workoutPlan.professionalNotes) {
+      throw new Error('Professional workout plan must include professional notes');
+    }
 
+    if (!workoutPlan.coachingTips || !Array.isArray(workoutPlan.coachingTips)) {
+      throw new Error('Professional workout plan must include coaching tips array');
+    }
   }
 
   /**

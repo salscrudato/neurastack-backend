@@ -3,34 +3,38 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
-const serviceAccount = require('./serviceAccountKey.json');
+// Initialize Firebase FIRST before importing any services that use it
+try {
+  const serviceAccount = require('./serviceAccountKey.json');
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: 'neurastack-backend-bucket1.appspot.com',
+  });
+  console.log('✅ Firebase initialized successfully');
+} catch (error) {
+  console.warn('⚠️ Firebase initialization failed:', error.message);
+  console.warn('⚠️ Workout history will use local cache only');
+
+  // Initialize with minimal config for development
+  if (!admin.apps.length) {
+    try {
+      admin.initializeApp({
+        projectId: 'neurastack-dev',
+      });
+    } catch (initError) {
+      console.warn('⚠️ Could not initialize Firebase at all:', initError.message);
+    }
+  }
+}
+
+// Now import routes and services that depend on Firebase
 const healthRoutes = require('./routes/health');
 const memoryRoutes = require('./routes/memory');
-const authRoutes = require('./routes/auth');
-const modelsRoutes = require('./routes/models');
-const securityRoutes = require('./routes/security');
-const dashboardRoutes = require('./routes/dashboard');
-const cacheRoutes = require('./routes/cache');
-const monitorRoutes = require('./routes/monitor');
-const enhancedEnsembleRoutes = require('./routes/enhanced-ensemble');
-const statusRoutes = require('./routes/status');
-const alertsRoutes = require('./routes/alerts');
+const workoutRoutes = require('./routes/workout');
 const MemoryLifecycleManager = require('./services/memoryLifecycle');
 const monitoringService = require('./services/monitoringService');
 const cacheService = require('./services/cacheService');
-const RealTimeAlertEngine = require('./services/realTimeAlertEngine');
-const authenticationService = require('./services/authenticationService');
 const securityMiddleware = require('./middleware/securityMiddleware');
-const advancedRateLimitingService = require('./services/advancedRateLimitingService');
-const auditLoggingService = require('./services/auditLoggingService');
-const inputValidationMiddleware = require('./middleware/inputValidationMiddleware');
-const csrfProtection = require('./middleware/csrfProtection');
-const performanceMonitoringService = require('./services/performanceMonitoringService');
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  storageBucket: 'neurastack-backend-bucket1.appspot.com',
-});
 
 // Initialize memory lifecycle manager
 const memoryLifecycleManager = new MemoryLifecycleManager();
@@ -58,27 +62,16 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id', 'X-Session-Id', 'X-Correlation-ID']
 };
 
-// Security middleware (must be first)
-app.use(securityMiddleware.securityHeaders());
-app.use(securityMiddleware.requestSizeLimit());
-app.use(securityMiddleware.ipSecurityCheck());
-app.use(securityMiddleware.requestFingerprinting());
-app.use(inputValidationMiddleware.validateCSP());
-
-// CSRF protection (provide tokens for all requests)
-app.use(csrfProtection.provideToken());
+// Security middleware (basic rate limiting only)
+app.use(securityMiddleware.createRateLimit({ max: 100, windowMs: 15 * 60 * 1000 }));
 
 // CORS and basic middleware
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Authentication middleware (optional for most endpoints)
-app.use(authenticationService.optionalAuth());
-
 // Add monitoring middleware for request tracking
 app.use(monitoringService.middleware());
-app.use(performanceMonitoringService.middleware());
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -101,15 +94,7 @@ app.use((err, req, res, next) => {
 
 app.use('/', healthRoutes);
 app.use('/memory', memoryRoutes);
-app.use('/auth', authRoutes);
-app.use('/models', modelsRoutes);
-app.use('/security', securityRoutes);
-app.use('/dashboard', dashboardRoutes);
-app.use('/cache', cacheRoutes);
-app.use('/monitor', monitorRoutes);
-app.use('/api', enhancedEnsembleRoutes);
-app.use('/status', statusRoutes);
-app.use('/api/alerts', alertsRoutes);
+app.use('/workout', workoutRoutes);
 
 // Only start server if this file is run directly (not imported for testing)
 if (require.main === module) {
@@ -122,17 +107,7 @@ if (require.main === module) {
     memoryLifecycleManager.start();
     console.log('🧠 Memory management system initialized');
 
-    // Start real-time alert engine
-    try {
-      const realTimeAlertEngine = new RealTimeAlertEngine();
-      await realTimeAlertEngine.start();
-      console.log('🚨 Real-time alert engine initialized');
 
-      // Store reference for graceful shutdown
-      global.realTimeAlertEngine = realTimeAlertEngine;
-    } catch (error) {
-      console.error('❌ Failed to start alert engine:', error.message);
-    }
 
     // Log startup metrics
     monitoringService.log('info', 'Neurastack backend started successfully', {
@@ -141,13 +116,10 @@ if (require.main === module) {
       version: '2.0',
       features: [
         'Enhanced ensemble processing',
-        'Circuit breaker patterns',
+        'Intelligent memory management',
+        'Professional workout generation',
         'Structured logging',
-        'Performance monitoring',
-        'Memory management',
-        'Connection pooling',
-        'Response caching',
-        'Real-time alerting system'
+        'Response caching'
       ]
     });
 
@@ -167,11 +139,6 @@ if (require.main === module) {
 // Graceful shutdown function
 async function gracefulShutdown() {
   try {
-    if (global.realTimeAlertEngine) {
-      console.log('🔄 Stopping real-time alert engine...');
-      global.realTimeAlertEngine.stop();
-    }
-
     console.log('🔄 Stopping memory lifecycle manager...');
     memoryLifecycleManager.stop();
 

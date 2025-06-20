@@ -182,17 +182,11 @@ Tests Anthropic Claude Opus 4 integration with a predefined prompt.
 
 ---
 
-### 7. Enhanced 4-AI Ensemble with Production Features (Primary Endpoint)
+### 7. AI Ensemble with Production Features
 
 **POST** `/default-ensemble`
 
-The main production-grade ensemble endpoint that processes user prompts through multiple AI models with enhanced resilience, monitoring, and memory integration. Features circuit breakers, connection pooling, structured logging, and comprehensive error handling.
-
-### 8. 4-AI Ensemble with Memory Integration (Legacy Endpoint)
-
-**POST** `/ensemble-test`
-
-Legacy ensemble endpoint maintained for backward compatibility. New applications should use `/default-ensemble`.
+The main production-grade ensemble endpoint that processes user prompts through multiple AI models with enhanced resilience, monitoring, memory integration, and confidence indicators. Features circuit breakers, connection pooling, structured logging, comprehensive error handling, quality metrics, and response confidence scoring.
 
 **Headers:**
 - `Content-Type: application/json`
@@ -242,6 +236,13 @@ interface SynthesisResult {
   provider: "openai" | "gemini" | "claude";
   status: "success" | "failed";
   error?: string;
+  confidence: ConfidenceScore;
+  qualityScore: number;
+  metadata: {
+    basedOnResponses: number;
+    averageConfidence: number;
+    consensusLevel: "high" | "medium" | "low" | "insufficient-data";
+  };
 }
 
 interface RoleResult {
@@ -251,6 +252,28 @@ interface RoleResult {
   provider: "openai" | "gemini" | "claude";
   status: "fulfilled" | "rejected";
   wordCount: number;
+  confidence: ConfidenceScore;
+  quality: QualityMetrics;
+  metadata: {
+    processingTime: number;
+    tokenCount: number;
+    complexity: "high" | "medium" | "low";
+  };
+}
+
+interface ConfidenceScore {
+  score: number; // 0-1
+  level: "high" | "medium" | "low" | "very-low";
+  factors: string[];
+}
+
+interface QualityMetrics {
+  wordCount: number;
+  sentenceCount: number;
+  averageWordsPerSentence: number;
+  hasStructure: boolean;
+  hasReasoning: boolean;
+  complexity: "high" | "medium" | "low";
 }
 
 interface EnsembleMetadata {
@@ -264,6 +287,23 @@ interface EnsembleMetadata {
   correlationId: string; // Request tracking ID
   memoryContextUsed: boolean;
   responseQuality: number; // 0-1 quality score
+  confidenceAnalysis: {
+    overallConfidence: number;
+    modelAgreement: number;
+    responseConsistency: number;
+    qualityDistribution: {
+      high: number;
+      medium: number;
+      low: number;
+    };
+  };
+  costEstimate: {
+    promptTokens: number;
+    responseTokens: number;
+    totalTokens: number;
+    estimatedCost: string;
+    modelsUsed: number;
+  };
 }
 ```
 
@@ -832,7 +872,7 @@ interface MemoryHealthResponse {
 
 ## Performance Characteristics
 
-### Enhanced Endpoint (`/default-ensemble`)
+### Ensemble Endpoint (`/default-ensemble`)
 - **Average Response Time**: 8-20 seconds (improved with connection pooling)
 - **Individual AI Timeout**: 15 seconds per role (increased for reliability)
 - **Maximum Processing Time**: ~45 seconds total
@@ -842,13 +882,6 @@ interface MemoryHealthResponse {
 - **Connection Pooling**: Reused connections for better performance
 - **Retry Logic**: Automatic retries with exponential backoff
 - **Request Tracking**: Full correlation ID tracking for debugging
-
-### Legacy Endpoint (`/ensemble-test`)
-- **Average Response Time**: 10-25 seconds
-- **Individual AI Timeout**: 12 seconds per role
-- **Maximum Processing Time**: ~45 seconds total
-- **Concurrent Processing**: All 3 specialist roles run in parallel
-- **Synthesis**: Sequential after all roles complete
 
 ---
 
@@ -873,7 +906,7 @@ async function callEnsemble(prompt: string, userId?: string) {
     headers['X-User-Id'] = userId;
   }
 
-  const response = await fetch('/ensemble-test', {
+  const response = await fetch('/default-ensemble', {
     method: 'POST',
     headers,
     body: JSON.stringify({ prompt })

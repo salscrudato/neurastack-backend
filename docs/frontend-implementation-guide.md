@@ -21,7 +21,7 @@ const headers = {
 ## Core AI Ensemble Endpoint
 
 ### POST /default-ensemble
-The main endpoint that processes user prompts through multiple AI models and returns individual responses plus a synthesized result.
+The main endpoint that processes user prompts through multiple AI models and returns individual responses plus a synthesized result with confidence indicators, quality metrics, and advanced analytics.
 
 **Request:**
 ```javascript
