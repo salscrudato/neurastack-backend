@@ -520,8 +520,8 @@ router.post('/workout', async (req, res) => {
   const correlationId = req.correlationId || `workout-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   try {
-    // Extract request data
-    const { userMetadata, workoutHistory, workoutRequest } = req.body;
+    // Extract request data including enhanced frontend format
+    const { userMetadata, workoutHistory, workoutRequest, workoutSpecification } = req.body;
     const userId = req.headers['x-user-id'] || req.userId || 'anonymous';
     const userTier = req.userTier || 'free';
 
@@ -545,12 +545,14 @@ router.post('/workout', async (req, res) => {
       });
     }
 
-    // Log request start
+    // Log request start with enhanced format detection
     monitoringService.log('info', 'Workout generation request received', {
       userId,
       hasMetadata: !!userMetadata,
       hasHistory: !!(workoutHistory && workoutHistory.length > 0),
-      requestLength: workoutRequest ? workoutRequest.length : 0
+      requestLength: workoutRequest ? workoutRequest.length : 0,
+      hasWorkoutSpecification: !!workoutSpecification,
+      enhancedFormat: !!workoutSpecification
     }, correlationId);
 
     // Validate required fields
@@ -572,12 +574,13 @@ router.post('/workout', async (req, res) => {
       });
     }
 
-    // Generate workout using the workout service
+    // Generate workout using the workout service with enhanced format support
     const result = await workoutService.generateWorkout(
       userMetadata,
       workoutHistory || [],
       workoutRequest,
-      userId
+      userId,
+      workoutSpecification
     );
 
     // Add correlation ID to response

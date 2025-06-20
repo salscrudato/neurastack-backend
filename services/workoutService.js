@@ -23,9 +23,10 @@ class WorkoutService {
    * @param {Array} workoutHistory - Previous workout data
    * @param {string|Object} workoutRequest - Workout request (string for backward compatibility, object for enhanced structure)
    * @param {string} userId - Optional user ID for tracking
+   * @param {Object} workoutSpecification - Optional separate workout specification (enhanced frontend format)
    * @returns {Promise<Object>} Generated workout plan
    */
-  async generateWorkout(userMetadata, workoutHistory, workoutRequest, userId = null) {
+  async generateWorkout(userMetadata, workoutHistory, workoutRequest, userId = null, workoutSpecification = null) {
     const correlationId = `workout-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
@@ -55,8 +56,8 @@ class WorkoutService {
         }, correlationId);
       }
 
-      // Build the workout generation prompt
-      const prompt = this.buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest);
+      // Build the workout generation prompt with enhanced format support
+      const prompt = this.buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification);
 
       // Get the appropriate model based on tier
       const modelConfig = this.getModelConfig();
@@ -65,10 +66,11 @@ class WorkoutService {
       const aiResponse = await this.callAIModel(modelConfig, prompt, correlationId);
 
       // Parse and validate the response with original request context
-      const workoutPlan = this.parseWorkoutResponse(aiResponse, workoutRequest);
+      const enhancedRequest = workoutSpecification ? { workoutSpecification } : workoutRequest;
+      const workoutPlan = this.parseWorkoutResponse(aiResponse, enhancedRequest);
 
       // Add debugging information for frontend developers
-      const debugInfo = this.generateDebugInfo(workoutRequest, workoutPlan, modelConfig);
+      const debugInfo = this.generateDebugInfo(enhancedRequest, workoutPlan, modelConfig);
 
       // Log success with enhanced information
       monitoringService.log('info', 'Workout generation completed', {
@@ -130,13 +132,14 @@ class WorkoutService {
       throw new Error('workoutRequest is required');
     }
 
-    // Handle both string and object formats
+    // Handle both string and object formats with enhanced validation
     if (typeof workoutRequest === 'string') {
       if (workoutRequest.trim().length === 0) {
         throw new Error('workoutRequest cannot be empty');
       }
-      if (workoutRequest.length > 2000) {
-        throw new Error('workoutRequest must be less than 2000 characters');
+      // Allow longer strings for professional prompts (up to 5000 characters)
+      if (workoutRequest.length > 5000) {
+        throw new Error('workoutRequest must be less than 5000 characters');
       }
     } else if (typeof workoutRequest === 'object') {
       // Enhanced format - flexible validation
@@ -199,9 +202,9 @@ class WorkoutService {
   /**
    * Build professional workout generation prompt with elite personal trainer expertise
    */
-  buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest) {
+  buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification = null) {
     // Parse structured workout request if it's an object
-    const structuredRequest = this.parseWorkoutRequest(workoutRequest);
+    const structuredRequest = this.parseWorkoutRequest(workoutRequest, workoutSpecification);
 
     // Build comprehensive client assessment
     const clientAssessment = this.buildClientAssessment(userMetadata, workoutHistory);
@@ -478,7 +481,24 @@ Generate a workout that clearly demonstrates professional personal training expe
   /**
    * Parse workout request - handle both string and enhanced structured object formats
    */
-  parseWorkoutRequest(workoutRequest) {
+  parseWorkoutRequest(workoutRequest, workoutSpecification = null) {
+    // Handle enhanced frontend format where workoutSpecification is passed separately
+    if (workoutSpecification) {
+      return {
+        workoutType: workoutSpecification.workoutType,
+        duration: workoutSpecification.duration,
+        intensity: workoutSpecification.difficulty || workoutSpecification.intensity,
+        focusAreas: workoutSpecification.focusAreas,
+        equipment: workoutSpecification.equipment,
+        intensityTarget: workoutSpecification.intensityTarget,
+        volumeTarget: workoutSpecification.volumeTarget,
+        complexityLevel: workoutSpecification.complexityLevel,
+        progressionStyle: workoutSpecification.progressionStyle,
+        safetyPriority: workoutSpecification.safetyPriority,
+        isEnhancedFormat: true
+      };
+    }
+
     // Handle enhanced structured format (new format)
     if (typeof workoutRequest === 'object' && workoutRequest !== null) {
       // Check if it's the new enhanced format with workoutSpecification

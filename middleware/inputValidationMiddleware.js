@@ -155,14 +155,18 @@ class InputValidationMiddleware {
         .isLength({ min: 1, max: 50 })
         .withMessage('Fitness level must be a non-empty string (max 50 characters)'),
       body('workoutRequest')
-        .custom((value) => {
+        .custom((value, { req }) => {
           // Support both string and object formats
           if (typeof value === 'string') {
             if (value.trim().length === 0) {
               throw new Error('Workout request cannot be empty');
             }
-            if (value.length > 2000) {
-              throw new Error('Workout request must be less than 2000 characters');
+            // Increased limit for professional prompts, but check if structured format is also provided
+            const hasStructuredFormat = req.body.workoutSpecification;
+            const maxLength = hasStructuredFormat ? 5000 : 2000; // Higher limit when structured data is present
+
+            if (value.length > maxLength) {
+              throw new Error(`Workout request must be less than ${maxLength} characters`);
             }
             return true;
           } else if (typeof value === 'object' && value !== null) {
@@ -205,6 +209,37 @@ class InputValidationMiddleware {
           }
           return true;
         }),
+      // Validate workoutSpecification if provided separately (frontend enhancement)
+      body('workoutSpecification')
+        .optional()
+        .isObject()
+        .withMessage('workoutSpecification must be an object')
+        .custom((value) => {
+          if (value) {
+            if (value.workoutType && typeof value.workoutType !== 'string') {
+              throw new Error('workoutSpecification.workoutType must be a string');
+            }
+            if (value.duration && (!Number.isInteger(value.duration) || value.duration < 1 || value.duration > 300)) {
+              throw new Error('workoutSpecification.duration must be an integer between 1 and 300 minutes');
+            }
+            if (value.difficulty && !['beginner', 'intermediate', 'advanced'].includes(value.difficulty)) {
+              throw new Error('workoutSpecification.difficulty must be one of: beginner, intermediate, advanced');
+            }
+            if (value.equipment && !Array.isArray(value.equipment)) {
+              throw new Error('workoutSpecification.equipment must be an array');
+            }
+            if (value.focusAreas && !Array.isArray(value.focusAreas)) {
+              throw new Error('workoutSpecification.focusAreas must be an array');
+            }
+          }
+          return true;
+        }),
+      // Allow additional frontend fields
+      body('additionalNotes').optional().isString().withMessage('additionalNotes must be a string'),
+      body('requestId').optional().isString().withMessage('requestId must be a string'),
+      body('timestamp').optional().isString().withMessage('timestamp must be a string'),
+      body('sessionContext').optional().isString().withMessage('sessionContext must be a string'),
+      body('correlationId').optional().isString().withMessage('correlationId must be a string'),
       this.handleValidationErrors
     ];
   }
