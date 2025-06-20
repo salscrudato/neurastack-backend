@@ -210,7 +210,7 @@ class WorkoutService {
     const clientAssessment = this.buildClientAssessment(userMetadata, workoutHistory);
 
     // Build professional workout specification
-    const workoutSpecification = this.buildWorkoutSpecification(structuredRequest, userMetadata);
+    const workoutSpec = this.buildWorkoutSpecification(structuredRequest, userMetadata);
 
     // Build professional requirements and safety considerations
     const professionalRequirements = this.buildProfessionalRequirements(structuredRequest, userMetadata);
@@ -221,7 +221,7 @@ class WorkoutService {
 ${clientAssessment}
 
 🎯 WORKOUT SPECIFICATION:
-${workoutSpecification}
+${workoutSpec}
 
 ⚡ PROFESSIONAL PROGRAMMING REQUIREMENTS:
 ${professionalRequirements}
