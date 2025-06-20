@@ -101,9 +101,7 @@ POST https://neurastack-backend-638289111765.us-central1.run.app/workout
       ],
       "warmup": [...],
       "cooldown": [...],
-      "notes": "...",
-      "calorieEstimate": "300-400 calories",
-      "tags": ["strength", "upper_body"]
+      "notes": "..."
     },
     "metadata": {
       "model": "gpt-4o-mini",

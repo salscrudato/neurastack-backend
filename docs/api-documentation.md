@@ -546,8 +546,6 @@ interface WorkoutPlan {
   warmup: WarmupExercise[];
   cooldown: CooldownExercise[];
   notes: string;
-  calorieEstimate: string;
-  tags: string[];
 }
 
 interface Exercise {

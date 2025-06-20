@@ -77,7 +77,7 @@ class WorkoutService {
         userId,
         model: modelConfig.model,
         workoutType: workoutPlan.type || 'unknown',
-        typeConsistency: workoutPlan.typeConsistency?.wasAdjusted || false,
+
         requestFormat: debugInfo.requestFormat
       }, correlationId);
 
@@ -235,11 +235,7 @@ Create a comprehensive, evidence-based workout program that demonstrates elite p
   "duration": ${structuredRequest.duration || userMetadata.timeAvailable || userMetadata.minutesPerSession || 45},
   "difficulty": "${userMetadata.fitnessLevel || 'intermediate'}",
   "equipment": ${JSON.stringify(userMetadata.equipment || [])},
-  "professionalNotes": {
-    "trainerCertification": "NASM-CPT, CSCS, ACSM",
-    "programmingPrinciples": ["Progressive Overload", "Specificity", "Recovery", "Individual Adaptation"],
-    "safetyPriority": "Maximum safety with optimal challenge"
-  },
+
   "warmup": {
     "duration": "8-10 minutes",
     "purpose": "Movement preparation, activation, injury prevention",
@@ -282,8 +278,7 @@ Create a comprehensive, evidence-based workout program that demonstrates elite p
         "sets": 3,
         "reps": "8-12",
         "restInterval": "90-120 seconds",
-        "rpe": "7-8 (Rate of Perceived Exertion)",
-        "tempo": "2-1-2-1 (eccentric-pause-concentric-pause)",
+
         "instructions": "Detailed step-by-step coaching with safety emphasis",
         "formCues": ["Key coaching points for proper technique"],
         "commonMistakes": ["What to avoid for safety and effectiveness"],
@@ -322,17 +317,8 @@ Create a comprehensive, evidence-based workout program that demonstrates elite p
       }
     ]
   },
-  "professionalGuidance": {
-    "intensityGuidance": "RPE scale usage and heart rate zones",
-    "progressionPlan": "How to advance the program over time",
-    "safetyConsiderations": "Injury prevention and contraindications",
-    "recoveryRecommendations": "Rest periods and recovery protocols",
-    "nutritionTips": "Pre/post workout nutrition guidance",
-    "hydrationGuidance": "Fluid intake recommendations"
-  },
-  "calorieEstimate": "Professional estimation based on METs and body weight",
-  "tags": ["evidence_based", "professional_programming", "safety_focused"],
-  "nextSessionRecommendations": "Progression for subsequent workouts"
+
+
 }
 
 🎯 CRITICAL PROFESSIONAL STANDARDS:
@@ -341,11 +327,10 @@ Create a comprehensive, evidence-based workout program that demonstrates elite p
 3. Include detailed biomechanical coaching cues for every exercise
 4. Provide comprehensive safety considerations and contraindications
 5. Ensure proper exercise sequencing based on energy systems and fatigue
-6. Include RPE guidance and tempo recommendations for optimal adaptation
-7. Provide both progressions and regressions for individual adaptation
-8. Demonstrate the expertise level of a certified personal trainer with advanced education
-9. MANDATORY: Use exact workout type "${structuredRequest.workoutType || 'functional_training'}" - do not modify
-10. Respond ONLY with valid JSON - no additional text or markdown formatting
+6. Provide both progressions and regressions for individual adaptation
+7. Demonstrate the expertise level of a certified personal trainer with advanced education
+8. MANDATORY: Use exact workout type "${structuredRequest.workoutType || 'functional_training'}" - do not modify
+9. Respond ONLY with valid JSON - no additional text or markdown formatting
 
 Generate a workout that clearly demonstrates professional personal training expertise and advanced exercise science knowledge.`;
   }
@@ -469,8 +454,6 @@ Generate a workout that clearly demonstrates professional personal training expe
     }
 
     requirements.push(`\n📈 PROFESSIONAL COACHING ELEMENTS:`);
-    requirements.push(`   • Include RPE (Rate of Perceived Exertion) guidance for each exercise`);
-    requirements.push(`   • Provide tempo recommendations for optimal muscle tension`);
     requirements.push(`   • Include breathing patterns and core engagement cues`);
     requirements.push(`   • Offer equipment alternatives for accessibility`);
     requirements.push(`   • Provide clear progression pathways for future sessions`);
@@ -860,55 +843,8 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
       if (originalRequest) {
         const structuredRequest = this.parseWorkoutRequest(originalRequest);
         if (structuredRequest.workoutType) {
-          // Store the original AI-generated type for reference
-          workoutPlan.originalType = workoutPlan.type;
-
           // Force the correct workout type if it was specified
           workoutPlan.type = structuredRequest.workoutType;
-
-          // Ensure tags include the correct workout type
-          if (!workoutPlan.tags) {
-            workoutPlan.tags = [];
-          }
-          if (!workoutPlan.tags.includes(structuredRequest.workoutType)) {
-            workoutPlan.tags.unshift(structuredRequest.workoutType);
-          }
-
-          // Add workout type labels to tags for better categorization
-          const workoutTypeLabels = {
-            'pilates': 'pilates workout',
-            'crossfit': 'crossfit training',
-            'yoga': 'yoga practice',
-            'pull': 'pull day',
-            'push': 'push day',
-            'legs': 'leg day',
-            'upper': 'upper body',
-            'lower': 'lower body',
-            'full_body': 'full body workout',
-            'upper_body': 'upper body',
-            'lower_body': 'lower body',
-            'leg_day': 'leg day',
-            'push_day': 'push day',
-            'pull_day': 'pull day',
-            'hiit': 'high intensity interval training',
-            'cardio': 'cardiovascular training',
-            'strength': 'strength training',
-            'flexibility': 'flexibility training',
-            'functional': 'functional training'
-          };
-
-          const typeLabel = workoutTypeLabels[structuredRequest.workoutType];
-          if (typeLabel && !workoutPlan.tags.includes(typeLabel)) {
-            workoutPlan.tags.push(typeLabel);
-          }
-
-          // Add metadata about type consistency for frontend debugging
-          workoutPlan.typeConsistency = {
-            requested: structuredRequest.workoutType,
-            aiGenerated: workoutPlan.originalType,
-            final: workoutPlan.type,
-            wasAdjusted: workoutPlan.originalType !== structuredRequest.workoutType
-          };
         }
       }
 
@@ -965,10 +901,7 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
       throw new Error('Professional workout plan must include structured cooldown phases');
     }
 
-    // Validate professional guidance
-    if (!workoutPlan.professionalGuidance || !workoutPlan.professionalGuidance.safetyConsiderations) {
-      throw new Error('Professional workout plan must include comprehensive safety guidance');
-    }
+
   }
 
   /**
@@ -987,7 +920,7 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
       }
 
       // Check for professional workout components
-      if (parsed.warmup && parsed.cooldown && parsed.professionalGuidance) {
+      if (parsed.warmup && parsed.cooldown) {
         quality += 0.2;
       }
 
@@ -1006,8 +939,7 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
         // Check for professional exercise details
         const hasDetailedInstructions = exercises.some(ex =>
           ex.instructions && ex.instructions.length > 50 &&
-          ex.formCues && Array.isArray(ex.formCues) &&
-          ex.rpe && ex.tempo
+          ex.formCues && Array.isArray(ex.formCues)
         );
 
         if (hasDetailedInstructions) {
@@ -1021,16 +953,12 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
         }
       }
 
-      // Check for professional notes and certifications
-      if (parsed.professionalNotes && parsed.professionalNotes.trainerCertification) {
-        quality += 0.1;
-      }
-
-      // Check for comprehensive guidance
-      if (parsed.professionalGuidance &&
-          parsed.professionalGuidance.intensityGuidance &&
-          parsed.professionalGuidance.safetyConsiderations) {
-        quality += 0.1;
+      // Check for exercise progressions and regressions
+      if (parsed.mainWorkout && parsed.mainWorkout.exercises && Array.isArray(parsed.mainWorkout.exercises)) {
+        const hasProgressions = parsed.mainWorkout.exercises.some(ex => ex.progressions && ex.regressions);
+        if (hasProgressions) {
+          quality += 0.2;
+        }
       }
 
     } catch (parseError) {
@@ -1051,7 +979,7 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
       requestFormat: typeof workoutRequest === 'string' ? 'string' : 'object',
       isEnhancedFormat: structuredRequest.isEnhancedFormat,
       parsedWorkoutType: structuredRequest.workoutType,
-      typeConsistency: workoutPlan.typeConsistency || null,
+
       modelUsed: modelConfig.model,
       modelProvider: modelConfig.provider,
       professionalStandards: {
@@ -1077,7 +1005,6 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
         hasWarmup: !!workoutPlan.warmup,
         hasMainWorkout: !!workoutPlan.mainWorkout,
         hasCooldown: !!workoutPlan.cooldown,
-        hasProfessionalGuidance: !!workoutPlan.professionalGuidance,
         exerciseCount: workoutPlan.mainWorkout?.exercises?.length || 0
       }
     };

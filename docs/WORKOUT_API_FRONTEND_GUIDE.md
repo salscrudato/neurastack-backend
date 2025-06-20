@@ -124,8 +124,6 @@ interface WorkoutResponse {
       warmup: WarmupExercise[];
       cooldown: CooldownExercise[];
       notes: string;
-      calorieEstimate: string;
-      tags: string[];
     };
     metadata: {
       model: string;
