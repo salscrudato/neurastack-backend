@@ -11,7 +11,7 @@ const costMonitoringService = require('./costMonitoringService');
 class WorkoutService {
   constructor() {
     this.config = {
-      timeoutMs: 15000, // 15 second timeout
+      timeoutMs: 45000, // 45 second timeout for complex requests
       maxTokens: 1500,  // Sufficient for detailed workout plans
       temperature: 0.7  // Balanced creativity and consistency
     };
@@ -67,11 +67,16 @@ class WorkoutService {
       // Parse and validate the response with original request context
       const workoutPlan = this.parseWorkoutResponse(aiResponse, workoutRequest);
 
-      // Log success
+      // Add debugging information for frontend developers
+      const debugInfo = this.generateDebugInfo(workoutRequest, workoutPlan, modelConfig);
+
+      // Log success with enhanced information
       monitoringService.log('info', 'Workout generation completed', {
         userId,
         model: modelConfig.model,
-        workoutType: workoutPlan.type || 'unknown'
+        workoutType: workoutPlan.type || 'unknown',
+        typeConsistency: workoutPlan.typeConsistency?.wasAdjusted || false,
+        requestFormat: debugInfo.requestFormat
       }, correlationId);
 
       // Prepare final response
@@ -84,7 +89,8 @@ class WorkoutService {
             provider: modelConfig.provider,
             timestamp: new Date().toISOString(),
             correlationId,
-            userId
+            userId,
+            debug: debugInfo
           }
         }
       };
@@ -133,11 +139,10 @@ class WorkoutService {
         throw new Error('workoutRequest must be less than 2000 characters');
       }
     } else if (typeof workoutRequest === 'object') {
-      // Validate enhanced format
-      if (workoutRequest.workoutSpecification) {
-        if (!workoutRequest.workoutSpecification.workoutType) {
-          throw new Error('workoutSpecification.workoutType is required');
-        }
+      // Enhanced format - flexible validation
+      // Allow any structure, just ensure it's a valid object
+      if (workoutRequest.workoutSpecification && typeof workoutRequest.workoutSpecification !== 'object') {
+        throw new Error('workoutSpecification must be an object if provided');
       }
     } else {
       throw new Error('workoutRequest must be a string or object');
@@ -160,10 +165,9 @@ class WorkoutService {
       throw new Error('userMetadata.age must be a number between 13 and 100');
     }
 
-    // Validate fitness level
-    const validFitnessLevels = ['beginner', 'intermediate', 'advanced'];
-    if (!validFitnessLevels.includes(userMetadata.fitnessLevel.toLowerCase())) {
-      throw new Error('userMetadata.fitnessLevel must be one of: beginner, intermediate, advanced');
+    // Validate fitness level (flexible - just ensure it's a string)
+    if (typeof userMetadata.fitnessLevel !== 'string' || userMetadata.fitnessLevel.trim().length === 0) {
+      throw new Error('userMetadata.fitnessLevel must be a non-empty string');
     }
   }
 
@@ -212,9 +216,9 @@ ${specificRequirements}
 
 Please generate a comprehensive workout plan in the following JSON format:
 {
-  "type": "${structuredRequest.workoutType || 'strength/cardio/mixed/flexibility/pull/push/legs/upper/lower/full_body'}",
+  "type": "${structuredRequest.workoutType || 'general'}",
   "duration": "${structuredRequest.duration || userMetadata.timeAvailable || userMetadata.minutesPerSession || 30} minutes",
-  "difficulty": "${userMetadata.fitnessLevel || 'beginner/intermediate/advanced'}",
+  "difficulty": "${userMetadata.fitnessLevel || 'intermediate'}",
   "equipment": ${JSON.stringify(userMetadata.equipment || [])},
   "exercises": [
     {
@@ -299,30 +303,45 @@ Important Guidelines:
     if (typeof workoutRequest === 'string') {
       const lowerRequest = workoutRequest.toLowerCase();
 
-      // Extract workout type from common patterns (order matters - more specific patterns first)
+      // Extract workout type from common patterns - comprehensive and flexible approach
       const workoutTypePatterns = {
         'pilates': ['pilates'],
         'crossfit': ['crossfit', 'cross fit'],
         'yoga': ['yoga'],
+        'pull_day': ['pull day', 'pull workout', 'pulling exercises', 'pull session'],
+        'push_day': ['push day', 'push workout', 'pushing exercises', 'push session'],
+        'leg_day': ['leg day', 'leg workout', 'legs workout', 'lower body'],
+        'upper_body': ['upper body', 'upper workout', 'upper body workout'],
+        'lower_body': ['lower body', 'lower workout', 'lower body workout'],
+        'full_body': ['full body', 'total body', 'whole body', 'full body workout'],
+        'core': ['core', 'abs', 'abdominal', 'core strengthening', 'core workout'],
+        'functional': ['functional', 'movement patterns', 'functional training'],
+        'hiit': ['hiit', 'high intensity', 'interval training', 'high intensity interval'],
+        'cardio': ['cardio', 'cardiovascular', 'aerobic', 'cardio workout'],
+        'flexibility': ['flexibility', 'stretching', 'mobility', 'flexibility training'],
+        'strength': ['strength', 'weight training', 'resistance', 'strength training'],
+        'mixed': ['mixed', 'combination', 'varied', 'hybrid'],
+        // Legacy support for shorter forms
         'pull': ['pull day', 'pull workout', 'pulling exercises'],
         'push': ['push day', 'push workout', 'pushing exercises'],
         'legs': ['leg day', 'leg workout'],
         'upper': ['upper body', 'upper workout'],
-        'lower': ['lower body', 'lower workout'],
-        'full_body': ['full body', 'total body', 'whole body'],
-        'core': ['core', 'abs', 'abdominal', 'core strengthening'],
-        'functional': ['functional', 'movement patterns'],
-        'hiit': ['hiit', 'high intensity', 'interval training'],
-        'cardio': ['cardio', 'cardiovascular', 'aerobic'],
-        'flexibility': ['flexibility', 'stretching', 'yoga'],
-        'strength': ['strength', 'weight training', 'resistance'],
-        'mixed': ['mixed', 'combination', 'varied']
+        'lower': ['lower body', 'lower workout']
       };
 
+      // Try to match known patterns, but don't restrict to only these
       for (const [type, patterns] of Object.entries(workoutTypePatterns)) {
         if (patterns.some(pattern => lowerRequest.includes(pattern))) {
           structuredRequest.workoutType = type;
           break;
+        }
+      }
+
+      // If no pattern matched, try to extract any workout-related keywords
+      if (!structuredRequest.workoutType) {
+        const workoutKeywords = lowerRequest.match(/\b(workout|training|exercise|session|routine)\s+(\w+)/);
+        if (workoutKeywords && workoutKeywords[2]) {
+          structuredRequest.workoutType = workoutKeywords[2];
         }
       }
 
@@ -371,9 +390,10 @@ Important Guidelines:
         'functional': 'Focus on functional movement patterns that translate to daily activities'
       };
 
-      if (typeDescriptions[structuredRequest.workoutType]) {
-        requirements.push(`Workout Type Focus: ${typeDescriptions[structuredRequest.workoutType]}`);
-      }
+      // Use predefined description if available, otherwise use the workout type directly
+      const description = typeDescriptions[structuredRequest.workoutType] ||
+                         `Focus on ${structuredRequest.workoutType} training and exercises`;
+      requirements.push(`Workout Type Focus: ${description}`);
     }
 
     // Enhanced format specific requirements
@@ -524,10 +544,13 @@ Important Guidelines:
       // Parse JSON
       const workoutPlan = JSON.parse(cleanResponse);
 
-      // Enhanced workout type consistency check
+      // Enhanced workout type consistency check with robust mapping
       if (originalRequest) {
         const structuredRequest = this.parseWorkoutRequest(originalRequest);
         if (structuredRequest.workoutType) {
+          // Store the original AI-generated type for reference
+          workoutPlan.originalType = workoutPlan.type;
+
           // Force the correct workout type if it was specified
           workoutPlan.type = structuredRequest.workoutType;
 
@@ -549,13 +572,31 @@ Important Guidelines:
             'legs': 'leg day',
             'upper': 'upper body',
             'lower': 'lower body',
-            'full_body': 'full body workout'
+            'full_body': 'full body workout',
+            'upper_body': 'upper body',
+            'lower_body': 'lower body',
+            'leg_day': 'leg day',
+            'push_day': 'push day',
+            'pull_day': 'pull day',
+            'hiit': 'high intensity interval training',
+            'cardio': 'cardiovascular training',
+            'strength': 'strength training',
+            'flexibility': 'flexibility training',
+            'functional': 'functional training'
           };
 
           const typeLabel = workoutTypeLabels[structuredRequest.workoutType];
           if (typeLabel && !workoutPlan.tags.includes(typeLabel)) {
             workoutPlan.tags.push(typeLabel);
           }
+
+          // Add metadata about type consistency for frontend debugging
+          workoutPlan.typeConsistency = {
+            requested: structuredRequest.workoutType,
+            aiGenerated: workoutPlan.originalType,
+            final: workoutPlan.type,
+            wasAdjusted: workoutPlan.originalType !== structuredRequest.workoutType
+          };
         }
       }
 
@@ -642,6 +683,32 @@ Important Guidelines:
     }
 
     return Math.max(0, Math.min(1, quality));
+  }
+
+  /**
+   * Generate debug information for frontend developers
+   */
+  generateDebugInfo(workoutRequest, workoutPlan, modelConfig) {
+    const structuredRequest = this.parseWorkoutRequest(workoutRequest);
+
+    return {
+      requestFormat: typeof workoutRequest === 'string' ? 'string' : 'object',
+      isEnhancedFormat: structuredRequest.isEnhancedFormat,
+      parsedWorkoutType: structuredRequest.workoutType,
+      typeConsistency: workoutPlan.typeConsistency || null,
+      modelUsed: modelConfig.model,
+      supportedWorkoutTypes: [
+        'pilates', 'crossfit', 'yoga', 'pull_day', 'push_day', 'leg_day',
+        'upper_body', 'lower_body', 'full_body', 'core', 'functional',
+        'hiit', 'cardio', 'flexibility', 'strength', 'mixed'
+      ],
+      requestProcessingNotes: {
+        workoutTypeDetected: !!structuredRequest.workoutType,
+        durationExtracted: !!structuredRequest.duration,
+        intensityDetected: !!structuredRequest.intensity,
+        enhancedFeaturesUsed: structuredRequest.isEnhancedFormat
+      }
+    };
   }
 
   /**

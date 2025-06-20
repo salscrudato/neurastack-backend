@@ -130,7 +130,7 @@ class InputValidationMiddleware {
   }
 
   /**
-   * Validate workout request
+   * Validate workout request (flexible validation supporting both string and object formats)
    */
   validateWorkoutRequest() {
     return [
@@ -138,7 +138,8 @@ class InputValidationMiddleware {
         .isObject()
         .withMessage('User metadata must be an object')
         .custom((value) => {
-          const requiredFields = ['age', 'fitnessLevel', 'goals'];
+          // Only require age and fitnessLevel - be flexible with other fields
+          const requiredFields = ['age', 'fitnessLevel'];
           for (const field of requiredFields) {
             if (!value[field]) {
               throw new Error(`Missing required field: ${field}`);
@@ -150,15 +151,49 @@ class InputValidationMiddleware {
         .isInt({ min: 13, max: 120 })
         .withMessage('Age must be between 13 and 120'),
       body('userMetadata.fitnessLevel')
-        .isIn(['beginner', 'intermediate', 'advanced'])
-        .withMessage('Fitness level must be beginner, intermediate, or advanced'),
-      body('workoutRequest')
         .isString()
-        .withMessage('Workout request must be a string')
-        .isLength({ min: 10, max: 1000 })
-        .withMessage('Workout request must be between 10 and 1000 characters')
+        .isLength({ min: 1, max: 50 })
+        .withMessage('Fitness level must be a non-empty string (max 50 characters)'),
+      body('workoutRequest')
+        .custom((value) => {
+          // Support both string and object formats
+          if (typeof value === 'string') {
+            if (value.trim().length === 0) {
+              throw new Error('Workout request cannot be empty');
+            }
+            if (value.length > 2000) {
+              throw new Error('Workout request must be less than 2000 characters');
+            }
+            return true;
+          } else if (typeof value === 'object' && value !== null) {
+            // Enhanced structured format validation
+            if (value.workoutSpecification && typeof value.workoutSpecification !== 'object') {
+              throw new Error('workoutSpecification must be an object if provided');
+            }
+            // Validate workoutSpecification fields if present
+            if (value.workoutSpecification) {
+              const spec = value.workoutSpecification;
+              if (spec.workoutType && typeof spec.workoutType !== 'string') {
+                throw new Error('workoutType must be a string');
+              }
+              if (spec.duration && (!Number.isInteger(spec.duration) || spec.duration < 1 || spec.duration > 300)) {
+                throw new Error('duration must be an integer between 1 and 300 minutes');
+              }
+              if (spec.intensity && !['beginner', 'intermediate', 'advanced'].includes(spec.intensity)) {
+                throw new Error('intensity must be one of: beginner, intermediate, advanced');
+              }
+            }
+            return true;
+          } else {
+            throw new Error('Workout request must be a string or object');
+          }
+        })
         .customSanitizer((value) => {
-          return this.sanitizeInput(value);
+          // Only sanitize string values
+          if (typeof value === 'string') {
+            return this.sanitizeInput(value);
+          }
+          return value;
         }),
       body('workoutHistory')
         .optional()
@@ -193,10 +228,10 @@ class InputValidationMiddleware {
         .withMessage('Memory types must be an array')
         .custom((value) => {
           if (value) {
-            const validTypes = ['working', 'short_term', 'long_term', 'semantic', 'episodic'];
-            const invalidTypes = value.filter(type => !validTypes.includes(type));
+            // Flexible validation - just ensure they're strings
+            const invalidTypes = value.filter(type => typeof type !== 'string' || type.trim().length === 0);
             if (invalidTypes.length > 0) {
-              throw new Error(`Invalid memory types: ${invalidTypes.join(', ')}`);
+              throw new Error('All memory types must be non-empty strings');
             }
           }
           return true;

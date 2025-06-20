@@ -22,7 +22,7 @@ class EnhancedVendorClients {
       // OpenAI client with enhanced configuration
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
-        timeout: 30000, // 30 second timeout
+        timeout: 50000, // 50 second timeout for complex requests
         maxRetries: 2
       });
 

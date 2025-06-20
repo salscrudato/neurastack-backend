@@ -181,13 +181,23 @@ describe('Enhanced Workout Service', () => {
   });
 
   describe('Workout Type Validation', () => {
-    test('should validate all supported workout types', () => {
+    test('should accept all supported workout types', () => {
       const supportedTypes = [
         'pull', 'push', 'legs', 'upper', 'lower', 'full_body',
         'cardio', 'strength', 'flexibility', 'hiit', 'mixed', 'core', 'functional'
       ];
 
       supportedTypes.forEach(type => {
+        const request = { workoutSpecification: { workoutType: type } };
+        const parsed = workoutService.parseWorkoutRequest(request);
+        expect(parsed.workoutType).toBe(type);
+      });
+    });
+
+    test('should accept custom workout types', () => {
+      const customTypes = ['dance', 'swimming', 'rock_climbing', 'martial_arts'];
+
+      customTypes.forEach(type => {
         const request = { workoutSpecification: { workoutType: type } };
         const parsed = workoutService.parseWorkoutRequest(request);
         expect(parsed.workoutType).toBe(type);
@@ -205,6 +215,20 @@ describe('Enhanced Workout Service', () => {
       testCases.forEach(input => {
         const parsed = workoutService.parseWorkoutRequest(input);
         expect(parsed.workoutType).toBeTruthy();
+      });
+    });
+
+    test('should accept custom fitness levels', () => {
+      const customLevels = ['expert', 'professional', 'elite', 'novice'];
+
+      customLevels.forEach(level => {
+        const userMetadata = { age: 25, fitnessLevel: level };
+        const workoutRequest = 'Test workout';
+
+        // Should not throw an error
+        expect(() => {
+          workoutService.validateInputs(userMetadata, [], workoutRequest);
+        }).not.toThrow();
       });
     });
   });
