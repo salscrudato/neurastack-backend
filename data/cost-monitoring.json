@@ -1,0 +1,302 @@
+{
+  "daily": {
+    "2025-06-18": 0.21317884999999998,
+    "2025-06-20": 0.07975905
+  },
+  "hourly": {
+    "2025-06-18-15": 0.013479099999999999,
+    "2025-06-18-16": 0.0660332,
+    "2025-06-18-17": 0.13366655,
+    "2025-06-20-23": 0.0098216,
+    "2025-06-20-0": 0.0332675,
+    "2025-06-20-7": 0.03666994999999999
+  },
+  "modelMetrics": {
+    "gemini-gemini-1.5-flash": {
+      "calls": 24,
+      "totalCost": 0.0017697,
+      "totalResponseTime": 42692,
+      "totalQuality": 23.999999999999996,
+      "averageCost": 0.0000737375,
+      "averageResponseTime": 1778.8333333333333,
+      "averageQuality": 0.9999999999999999,
+      "costEfficiency": 13.561620613663331,
+      "lastUpdated": 1750418985941,
+      "samples": [
+        {
+          "timestamp": 1750391437736,
+          "cost": 0.0000054,
+          "responseTime": 426,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750391863518,
+          "cost": 0.000013349999999999998,
+          "responseTime": 428,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750392143918,
+          "cost": 0.00013867499999999997,
+          "responseTime": 3010,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750392144098,
+          "cost": 0.000141975,
+          "responseTime": 3199,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750418461359,
+          "cost": 0.000148725,
+          "responseTime": 3285,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750418461367,
+          "cost": 0.000149025,
+          "responseTime": 3110,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750418985941,
+          "cost": 0.0000054,
+          "responseTime": 480,
+          "quality": 0.9999999999999999
+        }
+      ]
+    },
+    "claude-claude-3-haiku-20240307": {
+      "calls": 24,
+      "totalCost": 0.012845249999999997,
+      "totalResponseTime": 92455,
+      "totalQuality": 23.599999999999994,
+      "averageCost": 0.0005352187499999999,
+      "averageResponseTime": 3852.2916666666665,
+      "averageQuality": 0.9833333333333331,
+      "costEfficiency": 1.837255016445768,
+      "lastUpdated": 1750418987011,
+      "samples": [
+        {
+          "timestamp": 1750391438694,
+          "cost": 0.000126,
+          "responseTime": 1385,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750391864861,
+          "cost": 0.00026575,
+          "responseTime": 1770,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750392145492,
+          "cost": 0.0007685,
+          "responseTime": 4592,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750392145936,
+          "cost": 0.000766,
+          "responseTime": 5028,
+          "quality": 0.9
+        },
+        {
+          "timestamp": 1750418462938,
+          "cost": 0.00079275,
+          "responseTime": 4681,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750418464506,
+          "cost": 0.00078025,
+          "responseTime": 6432,
+          "quality": 0.9
+        },
+        {
+          "timestamp": 1750418987011,
+          "cost": 0.00014725,
+          "responseTime": 1550,
+          "quality": 0.9999999999999999
+        }
+      ]
+    },
+    "openai-gpt-4o-mini": {
+      "calls": 36,
+      "totalCost": 0.01272795,
+      "totalResponseTime": 329525,
+      "totalQuality": 33.400000000000006,
+      "averageCost": 0.00035355416666666664,
+      "averageResponseTime": 9153.472222222223,
+      "averageQuality": 0.9277777777777779,
+      "costEfficiency": 2.6241460722268712,
+      "lastUpdated": 1750418986790,
+      "samples": [
+        {
+          "timestamp": 1750389484749,
+          "cost": 0.0005065499999999999,
+          "responseTime": 11975,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750389632929,
+          "cost": 0.00057675,
+          "responseTime": 14311,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750390727113,
+          "cost": 0.0006805499999999999,
+          "responseTime": 13254,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750391379155,
+          "cost": 0.00061095,
+          "responseTime": 11669,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750391438294,
+          "cost": 0.000018,
+          "responseTime": 986,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750391711041,
+          "cost": 0.0005105999999999999,
+          "responseTime": 11526,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750391864680,
+          "cost": 0.0000351,
+          "responseTime": 1590,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750391891862,
+          "cost": 0.0005526,
+          "responseTime": 10048,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750392121882,
+          "cost": 0.0005800499999999999,
+          "responseTime": 11510,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750392150828,
+          "cost": 0.00031154999999999996,
+          "responseTime": 9929,
+          "quality": 0.9
+        },
+        {
+          "timestamp": 1750392151316,
+          "cost": 0.00033075,
+          "responseTime": 10408,
+          "quality": 0.7999999999999999
+        },
+        {
+          "timestamp": 1750418452555,
+          "cost": 0.00057135,
+          "responseTime": 13212,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750418466965,
+          "cost": 0.00032385,
+          "responseTime": 8891,
+          "quality": 0.9
+        },
+        {
+          "timestamp": 1750418468541,
+          "cost": 0.00029864999999999997,
+          "responseTime": 10284,
+          "quality": 0.7999999999999999
+        },
+        {
+          "timestamp": 1750418784216,
+          "cost": 0.0005488499999999999,
+          "responseTime": 10991,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750418937076,
+          "cost": 0.00060945,
+          "responseTime": 13849,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750418986790,
+          "cost": 0.000014399999999999998,
+          "responseTime": 1328,
+          "quality": 0.9999999999999999
+        }
+      ]
+    },
+    "openai-gpt-4o": {
+      "calls": 23,
+      "totalCost": 0.265595,
+      "totalResponseTime": 149425,
+      "totalQuality": 21.200000000000003,
+      "averageCost": 0.011547608695652176,
+      "averageResponseTime": 6496.739130434783,
+      "averageQuality": 0.9217391304347827,
+      "costEfficiency": 0.07982077975865509,
+      "lastUpdated": 1750418989512,
+      "samples": [
+        {
+          "timestamp": 1750391440963,
+          "cost": 0.002555,
+          "responseTime": 2267,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750391867148,
+          "cost": 0.003365,
+          "responseTime": 2285,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750392155348,
+          "cost": 0.014655000000000001,
+          "responseTime": 4519,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750392156632,
+          "cost": 0.015575,
+          "responseTime": 5315,
+          "quality": 0.9
+        },
+        {
+          "timestamp": 1750418472539,
+          "cost": 0.01524,
+          "responseTime": 5573,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750418474352,
+          "cost": 0.014475,
+          "responseTime": 5810,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750418989512,
+          "cost": 0.0025649999999999996,
+          "responseTime": 2500,
+          "quality": 1
+        }
+      ]
+    }
+  },
+  "totalCosts": {
+    "today": 0.07975905,
+    "thisHour": 0.03666994999999999,
+    "thisMonth": 0
+  },
+  "lastSaved": "2025-06-20T11:30:23.084Z"
+}

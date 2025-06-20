@@ -1,0 +1,375 @@
+/**
+ * Memory Lifecycle Management Service
+ * Handles memory cleanup, archiving, and maintenance tasks
+ */
+
+const cron = require('node-cron');
+const admin = require('firebase-admin');
+const { MEMORY_TYPE_CONFIG } = require('../types/memory');
+
+class MemoryLifecycleManager {
+  constructor() {
+    this.firestore = admin.firestore();
+    this.isRunning = false;
+    this.scheduledTasks = [];
+  }
+
+  /**
+   * Start all scheduled memory management tasks
+   */
+  start() {
+    if (this.isRunning) {
+      console.log('⚠️ Memory lifecycle manager already running');
+      return;
+    }
+
+    console.log('🔄 Starting memory lifecycle management...');
+    this.isRunning = true;
+
+    // Daily cleanup at 2 AM
+    const dailyCleanup = cron.schedule('0 2 * * *', async () => {
+      console.log('🧹 Starting daily memory cleanup...');
+      await this.performDailyCleanup();
+    }, {
+      scheduled: false,
+      timezone: 'UTC'
+    });
+
+    // Hourly weight updates
+    const hourlyWeightUpdate = cron.schedule('0 * * * *', async () => {
+      console.log('⚖️ Updating memory weights...');
+      await this.updateMemoryWeights();
+    }, {
+      scheduled: false,
+      timezone: 'UTC'
+    });
+
+    // Weekly archive old memories
+    const weeklyArchive = cron.schedule('0 3 * * 0', async () => {
+      console.log('📦 Starting weekly memory archival...');
+      await this.archiveOldMemories();
+    }, {
+      scheduled: false,
+      timezone: 'UTC'
+    });
+
+    // Start all tasks
+    dailyCleanup.start();
+    hourlyWeightUpdate.start();
+    weeklyArchive.start();
+
+    this.scheduledTasks = [dailyCleanup, hourlyWeightUpdate, weeklyArchive];
+    console.log('✅ Memory lifecycle management started');
+  }
+
+  /**
+   * Stop all scheduled tasks
+   */
+  stop() {
+    if (!this.isRunning) {
+      console.log('⚠️ Memory lifecycle manager not running');
+      return;
+    }
+
+    console.log('🛑 Stopping memory lifecycle management...');
+    this.scheduledTasks.forEach(task => task.stop());
+    this.scheduledTasks = [];
+    this.isRunning = false;
+    console.log('✅ Memory lifecycle management stopped');
+  }
+
+  /**
+   * Perform daily cleanup tasks
+   */
+  async performDailyCleanup() {
+    try {
+      const startTime = Date.now();
+      let totalProcessed = 0;
+      let totalDeleted = 0;
+
+      // Clean up expired memories
+      const expiredResult = await this.deleteExpiredMemories();
+      totalDeleted += expiredResult.deleted;
+
+      // Clean up low-quality memories
+      const lowQualityResult = await this.deleteLowQualityMemories();
+      totalDeleted += lowQualityResult.deleted;
+
+      // Enforce memory limits per user
+      const limitResult = await this.enforceMemoryLimits();
+      totalDeleted += limitResult.deleted;
+
+      const processingTime = Date.now() - startTime;
+      console.log(`🧹 Daily cleanup completed: ${totalDeleted} memories deleted in ${processingTime}ms`);
+
+      return {
+        success: true,
+        deleted: totalDeleted,
+        processingTime
+      };
+    } catch (error) {
+      console.error('❌ Daily cleanup failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Delete expired memories
+   */
+  async deleteExpiredMemories() {
+    try {
+      const now = new Date();
+      const expiredQuery = this.firestore.collection('memories')
+        .where('retention.expiresAt', '<=', now)
+        .limit(100); // Process in batches
+
+      const snapshot = await expiredQuery.get();
+      const batch = this.firestore.batch();
+      
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      if (snapshot.docs.length > 0) {
+        await batch.commit();
+        console.log(`🗑️ Deleted ${snapshot.docs.length} expired memories`);
+      }
+
+      return { deleted: snapshot.docs.length };
+    } catch (error) {
+      console.error('❌ Failed to delete expired memories:', error);
+      return { deleted: 0 };
+    }
+  }
+
+  /**
+   * Delete low-quality memories that are old
+   */
+  async deleteLowQualityMemories() {
+    try {
+      const cutoffDate = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)); // 7 days ago
+      
+      const lowQualityQuery = this.firestore.collection('memories')
+        .where('weights.composite', '<', 0.2)
+        .where('createdAt', '<', cutoffDate)
+        .limit(50);
+
+      const snapshot = await lowQualityQuery.get();
+      const batch = this.firestore.batch();
+      
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      if (snapshot.docs.length > 0) {
+        await batch.commit();
+        console.log(`🗑️ Deleted ${snapshot.docs.length} low-quality memories`);
+      }
+
+      return { deleted: snapshot.docs.length };
+    } catch (error) {
+      console.error('❌ Failed to delete low-quality memories:', error);
+      return { deleted: 0 };
+    }
+  }
+
+  /**
+   * Enforce memory limits per user and memory type
+   */
+  async enforceMemoryLimits() {
+    try {
+      let totalDeleted = 0;
+
+      // Get all users with memories
+      const usersQuery = this.firestore.collection('memories')
+        .select('userId')
+        .limit(1000);
+      
+      const snapshot = await usersQuery.get();
+      const userIds = [...new Set(snapshot.docs.map(doc => doc.data().userId))];
+
+      for (const userId of userIds) {
+        for (const [memoryType, config] of Object.entries(MEMORY_TYPE_CONFIG)) {
+          const deleted = await this.enforceUserMemoryTypeLimit(userId, memoryType, config.maxCount);
+          totalDeleted += deleted;
+        }
+      }
+
+      if (totalDeleted > 0) {
+        console.log(`🗑️ Deleted ${totalDeleted} memories to enforce limits`);
+      }
+
+      return { deleted: totalDeleted };
+    } catch (error) {
+      console.error('❌ Failed to enforce memory limits:', error);
+      return { deleted: 0 };
+    }
+  }
+
+  /**
+   * Enforce memory limit for a specific user and memory type
+   */
+  async enforceUserMemoryTypeLimit(userId, memoryType, maxCount) {
+    try {
+      const userMemoriesQuery = this.firestore.collection('memories')
+        .where('userId', '==', userId)
+        .where('memoryType', '==', memoryType)
+        .orderBy('weights.composite', 'desc');
+
+      const snapshot = await userMemoriesQuery.get();
+      
+      if (snapshot.docs.length <= maxCount) {
+        return 0; // No cleanup needed
+      }
+
+      // Delete excess memories (keep the highest weighted ones)
+      const toDelete = snapshot.docs.slice(maxCount);
+      const batch = this.firestore.batch();
+      
+      toDelete.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      return toDelete.length;
+    } catch (error) {
+      console.error(`❌ Failed to enforce limit for ${userId}/${memoryType}:`, error);
+      return 0;
+    }
+  }
+
+  /**
+   * Update memory weights with decay
+   */
+  async updateMemoryWeights() {
+    try {
+      const startTime = Date.now();
+      let totalUpdated = 0;
+
+      // Process memories in batches
+      const batchSize = 100;
+      let lastDoc = null;
+
+      while (true) {
+        let query = this.firestore.collection('memories')
+          .where('retention.isArchived', '==', false)
+          .orderBy('updatedAt')
+          .limit(batchSize);
+
+        if (lastDoc) {
+          query = query.startAfter(lastDoc);
+        }
+
+        const snapshot = await query.get();
+        
+        if (snapshot.empty) break;
+
+        const batch = this.firestore.batch();
+        
+        snapshot.docs.forEach(doc => {
+          const memory = doc.data();
+          const updatedWeights = this.applyDecayToWeights(memory);
+          
+          batch.update(doc.ref, {
+            'weights.recency': updatedWeights.recency,
+            'weights.composite': updatedWeights.composite,
+            updatedAt: new Date()
+          });
+        });
+
+        await batch.commit();
+        totalUpdated += snapshot.docs.length;
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+        // Break if we got less than a full batch
+        if (snapshot.docs.length < batchSize) break;
+      }
+
+      const processingTime = Date.now() - startTime;
+      console.log(`⚖️ Updated weights for ${totalUpdated} memories in ${processingTime}ms`);
+
+      return { updated: totalUpdated, processingTime };
+    } catch (error) {
+      console.error('❌ Failed to update memory weights:', error);
+      return { updated: 0 };
+    }
+  }
+
+  /**
+   * Apply decay to memory weights
+   */
+  applyDecayToWeights(memory) {
+    const now = Date.now();
+    const age = now - memory.createdAt.toDate().getTime();
+    const hoursAge = age / (1000 * 60 * 60);
+    
+    // Apply decay to recency weight
+    const decayedRecency = memory.weights.recency * Math.exp(-memory.retention.decayRate * hoursAge);
+    
+    // Recalculate composite score
+    const weights = { ...memory.weights, recency: decayedRecency };
+    const composite = (
+      weights.recency * 0.3 +
+      weights.importance * 0.4 +
+      weights.frequency * 0.15 +
+      weights.emotional * 0.1 +
+      weights.contextual * 0.05
+    );
+
+    return {
+      recency: decayedRecency,
+      composite: Math.max(0, composite)
+    };
+  }
+
+  /**
+   * Archive old memories instead of deleting them
+   */
+  async archiveOldMemories() {
+    try {
+      const cutoffDate = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
+      
+      const oldMemoriesQuery = this.firestore.collection('memories')
+        .where('createdAt', '<', cutoffDate)
+        .where('retention.isArchived', '==', false)
+        .where('weights.composite', '<', 0.5)
+        .limit(100);
+
+      const snapshot = await oldMemoriesQuery.get();
+      const batch = this.firestore.batch();
+      
+      snapshot.docs.forEach(doc => {
+        batch.update(doc.ref, {
+          'retention.isArchived': true,
+          updatedAt: new Date()
+        });
+      });
+
+      if (snapshot.docs.length > 0) {
+        await batch.commit();
+        console.log(`📦 Archived ${snapshot.docs.length} old memories`);
+      }
+
+      return { archived: snapshot.docs.length };
+    } catch (error) {
+      console.error('❌ Failed to archive old memories:', error);
+      return { archived: 0 };
+    }
+  }
+
+  /**
+   * Get lifecycle management status
+   */
+  getStatus() {
+    return {
+      isRunning: this.isRunning,
+      activeTasks: this.scheduledTasks.length,
+      nextRuns: this.scheduledTasks.map(task => ({
+        running: task.running,
+        scheduled: task.scheduled
+      }))
+    };
+  }
+}
+
+module.exports = MemoryLifecycleManager;
