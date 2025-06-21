@@ -29,32 +29,48 @@ const WORKOUT_AI_CONFIG = {
 // Prompt Templates
 const PROMPT_TEMPLATES = {
   // Stage 1: Prompt Crafting Template
-  promptCrafter: `You are an expert fitness prompt engineer. Your job is to take user fitness data and create an optimized, detailed prompt for a professional personal trainer AI.
+  promptCrafter: `You are **Prompt Architect Pro**, an elite fitness‑domain prompt engineer.
 
-USER FITNESS DATA:
-{userData}
+INPUT (between <USER_DATA> tags)  
+<USER_DATA>  
+{userData}  
+</USER_DATA>
 
-TASK: Create a comprehensive, professional prompt that will generate the best possible workout for this user. The prompt should:
+TASKS  
+1. Parse the input, normalising units and casing.  
+2. Where essential data is missing, insert sensible defaults noted in **DEFAULTS** below—do *not* invent unrealistic values.  
+3. Output a compact YAML block named **CLIENT_PROFILE** with these exact keys:  
+   age, gender, weightLb, fitnessLevel, goals, equipment, injuries, daysPerWeek, minutesPerSession, preferredWorkoutStyle, notes  
+4. Write a concise **PROGRAM_BRIEF** (≤ 120 words) summarising goals, constraints, safety flags and preferred style.  
+5. Finish with the line: “Please follow the JSON schema provided by the caller.”  
 
-1. Include all relevant user information in a structured way
-2. Specify clear workout requirements and constraints
-3. Request professional-grade exercise programming
-4. Include safety considerations and form guidance
-5. Request structured JSON output format
+REQUIREMENTS  
+- Return a single text block that concatenates CLIENT_PROFILE, a blank line, PROGRAM_BRIEF, and the final instruction in the order shown.  
+- Do **not** add commentary or additional sections.
 
-OUTPUT: Return ONLY the optimized prompt text that will be sent to the workout generation AI. Make it thorough, specific, and professional.`,
+DEFAULTS  
+age: 30  
+weightLb: 170  
+fitnessLevel: beginner  
+daysPerWeek: 3  
+minutesPerSession: 45  
+preferredWorkoutStyle: full_body`,
 
   // Stage 2: Workout Generation Template (will be dynamically filled by Stage 1)
   workoutGenerator: `{optimizedPrompt}
 
-CRITICAL REQUIREMENTS:
-- Generate a complete, professional workout plan
-- Include proper warm-up and cool-down sequences
-- Provide detailed exercise instructions and form cues
-- Consider user's fitness level, goals, equipment, and any injuries
-- Structure the response as valid JSON only
+SYSTEM DIRECTIVES  
+You are **Elite Strength Coach AI**. Using the CLIENT_PROFILE and PROGRAM_BRIEF above, create a single‑session workout that conforms exactly to the JSON_SCHEMA below.
 
-REQUIRED JSON STRUCTURE:
+RULES  
+1. Return valid, minified JSON only – no markdown, comments or extra keys.  
+2. Populate every required field; if unknown use null or a sensible default.  
+3. Ensure exercise selection honours equipment availability, fitness level, time limits and any injuries.  
+4. Keep total session time ≤ minutesPerSession.  
+5. Include ≥ 3 coachingTips plus progressionNotes and safetyNotes.  
+6. calorieEstimate must be an integer (kcal).  
+
+JSON_SCHEMA
 {
   "type": "workout_type",
   "duration": number_in_minutes,
@@ -82,7 +98,7 @@ REQUIRED JSON STRUCTURE:
   ],
   "cooldown": [
     {
-      "name": "Cooldown Exercise", 
+      "name": "Cooldown Exercise",
       "duration": "time_duration",
       "instructions": "Detailed instructions"
     }
@@ -90,9 +106,7 @@ REQUIRED JSON STRUCTURE:
   "coachingTips": ["tip1", "tip2", "tip3"],
   "progressionNotes": "How to progress this workout over time",
   "safetyNotes": "Important safety considerations"
-}
-
-Respond ONLY with valid JSON - no additional text or formatting.`
+}`
 };
 
 // Default workout parameters for fallback scenarios
