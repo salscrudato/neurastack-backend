@@ -277,6 +277,22 @@ class EnhancedVendorClients {
     return result;
   }
 
+  // Get client by provider name
+  getClient(provider) {
+    switch (provider.toLowerCase()) {
+      case 'openai':
+        return this.openai;
+      case 'xai':
+        return this.xai;
+      case 'gemini':
+        return this.gemini;
+      case 'claude':
+        return this.claude;
+      default:
+        throw new Error(`Unknown provider: ${provider}`);
+    }
+  }
+
   // Health check method
   async healthCheck() {
     const health = {};
@@ -309,6 +325,7 @@ module.exports = {
   enhanced: enhancedClients,
 
   // Utility methods
+  getClient: (provider) => enhancedClients.getClient(provider),
   getMetrics: () => enhancedClients.getMetrics(),
   healthCheck: () => enhancedClients.healthCheck(),
   executeWithCircuitBreaker: (provider, operation) =>

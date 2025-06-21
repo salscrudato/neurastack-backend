@@ -5,11 +5,42 @@ require('dotenv').config();
 
 // Initialize Firebase FIRST before importing any services that use it
 try {
-  const serviceAccount = require('./serviceAccountKey.json');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    storageBucket: 'neurastack-backend-bucket1.appspot.com',
-  });
+  let firebaseConfig;
+
+  // Try to use service account file first (for local development)
+  try {
+    const serviceAccount = require('./serviceAccountKey.json');
+    firebaseConfig = {
+      credential: admin.credential.cert(serviceAccount),
+      projectId: 'neurastack-backend',
+      storageBucket: 'neurastack-backend.firebasestorage.app',
+    };
+    console.log('🔑 Using service account credentials');
+  } catch (serviceAccountError) {
+    // Fallback to environment variables (for production)
+    if (process.env.FIREBASE_PROJECT_ID) {
+      firebaseConfig = {
+        projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
+      };
+
+      // Use service account from environment if available
+      if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+        firebaseConfig.credential = admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        });
+        console.log('🔑 Using environment variable credentials');
+      } else {
+        console.log('🔑 Using default application credentials');
+      }
+    } else {
+      throw new Error('No Firebase configuration found');
+    }
+  }
+
+  admin.initializeApp(firebaseConfig);
   console.log('✅ Firebase initialized successfully');
 } catch (error) {
   console.warn('⚠️ Firebase initialization failed:', error.message);
@@ -19,8 +50,9 @@ try {
   if (!admin.apps.length) {
     try {
       admin.initializeApp({
-        projectId: 'neurastack-dev',
+        projectId: 'neurastack-backend',
       });
+      console.log('⚠️ Firebase initialized with minimal config (local cache only)');
     } catch (initError) {
       console.warn('⚠️ Could not initialize Firebase at all:', initError.message);
     }

@@ -1,8 +1,12 @@
 const clients = require('./vendorClients');
 const ensembleConfig = require('../config/ensemblePrompts');
+const workoutConfig = require('../config/workoutConfig');
+const promptCraftingService = require('./promptCraftingService');
 const monitoringService = require('./monitoringService');
 const cacheService = require('./cacheService');
 const costMonitoringService = require('./costMonitoringService');
+const workoutPersonalizationService = require('./workoutPersonalizationService');
+const fallbackWorkoutService = require('./fallbackWorkoutService');
 
 /**
  * Workout Generation Service
@@ -56,8 +60,36 @@ class WorkoutService {
         }, correlationId);
       }
 
-      // Build the workout generation prompt with enhanced format support
-      const prompt = this.buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification);
+      // Get intelligent personalization (Phase 1 implementation)
+      let personalization = null;
+      if (userId && userId !== 'anonymous') {
+        try {
+          const workoutType = typeof workoutRequest === 'string' ?
+            this.extractWorkoutTypeFromRequest(workoutRequest) :
+            workoutRequest.workoutType || workoutSpecification?.workoutType;
+
+          personalization = await workoutPersonalizationService.personalizeWorkout(
+            userId,
+            userMetadata,
+            workoutType,
+            workoutSpecification
+          );
+
+          monitoringService.log('info', 'Workout personalization applied', {
+            userId,
+            confidence: personalization.metadata.personalizationConfidence,
+            dataQuality: personalization.metadata.dataQuality
+          }, correlationId);
+        } catch (personalizationError) {
+          monitoringService.log('warn', 'Workout personalization failed, using defaults', {
+            userId,
+            error: personalizationError.message
+          }, correlationId);
+        }
+      }
+
+      // Build the workout generation prompt with enhanced personalization
+      const prompt = this.buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification, personalization);
 
       // Get the appropriate model based on tier
       const modelConfig = this.getModelConfig();
@@ -114,14 +146,350 @@ class WorkoutService {
       return finalResponse;
 
     } catch (error) {
-      monitoringService.log('error', 'Workout generation failed', {
+      monitoringService.log('error', 'Primary workout generation failed, attempting fallback', {
         userId,
         error: error.message,
         stack: error.stack
       }, correlationId);
 
+      // Attempt fallback workout generation
+      try {
+        const workoutType = typeof workoutRequest === 'string' ?
+          this.extractWorkoutTypeFromRequest(workoutRequest) :
+          workoutRequest.workoutType || workoutSpecification?.workoutType || 'Full Body Workout';
+
+        const fallbackResult = fallbackWorkoutService.generateFallbackWorkout(
+          userMetadata,
+          workoutType,
+          'primary_service_failed'
+        );
+
+        monitoringService.log('info', 'Fallback workout generation successful', {
+          userId,
+          workoutType,
+          fallbackReason: 'primary_service_failed'
+        }, correlationId);
+
+        return fallbackResult;
+
+      } catch (fallbackError) {
+        monitoringService.log('error', 'Both primary and fallback workout generation failed', {
+          userId,
+          primaryError: error.message,
+          fallbackError: fallbackError.message
+        }, correlationId);
+
+        throw new Error(`Workout generation failed: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Generate a flexible workout using two-stage AI approach
+   * Stage 1: Use low-cost AI to craft optimized prompt
+   * Stage 2: Use high-quality AI to generate workout
+   * @param {Object} userMetadata - User information and preferences (flexible format)
+   * @param {Array} workoutHistory - Previous workout data
+   * @param {string} otherInformation - Free-form additional information
+   * @param {string} correlationId - Request correlation ID
+   * @returns {Promise<Object>} Generated workout plan
+   */
+  async generateFlexibleWorkout(userMetadata, workoutHistory, otherInformation, correlationId) {
+    try {
+      monitoringService.log('info', 'Flexible workout generation started', {
+        userId: userMetadata.userId,
+        hasHistory: workoutHistory && workoutHistory.length > 0,
+        hasOtherInfo: !!otherInformation
+      }, correlationId);
+
+      // Validate basic inputs
+      this.validateFlexibleInputs(userMetadata, workoutHistory, otherInformation);
+
+      // Stage 1: Craft optimized prompt using low-cost AI
+      const optimizedPrompt = await promptCraftingService.craftWorkoutPrompt(
+        userMetadata,
+        workoutHistory,
+        otherInformation,
+        correlationId
+      );
+
+      // Stage 2: Generate workout using high-quality AI with optimized prompt
+      const workoutGeneratorConfig = workoutConfig.getAIConfig('workoutGenerator');
+      const finalPrompt = workoutConfig.PROMPT_TEMPLATES.workoutGenerator
+        .replace('{optimizedPrompt}', optimizedPrompt);
+
+      const aiResponse = await this.callFlexibleAIModel(workoutGeneratorConfig, finalPrompt, correlationId);
+
+      // Parse and validate the response
+      const workoutPlan = this.parseFlexibleWorkoutResponse(aiResponse);
+
+      // Log success
+      monitoringService.log('info', 'Flexible workout generation completed', {
+        userId: userMetadata.userId,
+        workoutType: workoutPlan.type || 'unknown',
+        exerciseCount: workoutPlan.exercises ? workoutPlan.exercises.length : 0
+      }, correlationId);
+
+      // Prepare final response
+      return {
+        status: 'success',
+        data: {
+          workout: workoutPlan,
+          metadata: {
+            model: workoutGeneratorConfig.model,
+            provider: workoutGeneratorConfig.provider,
+            timestamp: new Date().toISOString(),
+            correlationId,
+            userId: userMetadata.userId,
+            approach: 'two_stage_flexible',
+            promptCraftingModel: workoutConfig.getAIConfig('promptCrafter').model
+          }
+        }
+      };
+
+    } catch (error) {
+      monitoringService.log('error', 'Flexible workout generation failed', {
+        userId: userMetadata.userId,
+        error: error.message,
+        stack: error.stack
+      }, correlationId);
+
+      // Attempt fallback using simple approach
+      try {
+        const fallbackResult = this.generateFallbackFlexibleWorkout(userMetadata, otherInformation);
+
+        monitoringService.log('info', 'Flexible workout fallback successful', {
+          userId: userMetadata.userId
+        }, correlationId);
+
+        return fallbackResult;
+
+      } catch (fallbackError) {
+        monitoringService.log('error', 'Both flexible and fallback workout generation failed', {
+          userId: userMetadata.userId,
+          primaryError: error.message,
+          fallbackError: fallbackError.message
+        }, correlationId);
+
+        throw new Error(`Flexible workout generation failed: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Validate inputs for flexible workout generation
+   */
+  validateFlexibleInputs(userMetadata, workoutHistory, otherInformation) {
+    if (!userMetadata || typeof userMetadata !== 'object') {
+      throw new Error('userMetadata is required and must be an object');
+    }
+
+    // Only require age - everything else is flexible
+    if (!userMetadata.age || typeof userMetadata.age !== 'number' || userMetadata.age < 13 || userMetadata.age > 100) {
+      throw new Error('userMetadata.age is required and must be between 13 and 100');
+    }
+
+    if (workoutHistory && !Array.isArray(workoutHistory)) {
+      throw new Error('workoutHistory must be an array if provided');
+    }
+
+    if (otherInformation && typeof otherInformation !== 'string') {
+      throw new Error('otherInformation must be a string if provided');
+    }
+  }
+
+  /**
+   * Call AI model for flexible workout generation
+   */
+  async callFlexibleAIModel(modelConfig, prompt, correlationId) {
+    const startTime = Date.now();
+
+    try {
+      const response = await Promise.race([
+        this.callOpenAIForFlexibleWorkout(modelConfig, prompt),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Flexible workout AI timeout')), modelConfig.timeoutMs)
+        )
+      ]);
+
+      const duration = Date.now() - startTime;
+      monitoringService.log('info', 'Flexible workout AI call successful', {
+        duration,
+        model: modelConfig.model,
+        responseLength: response.length
+      }, correlationId);
+
+      return response;
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      monitoringService.log('error', 'Flexible workout AI call failed', {
+        duration,
+        error: error.message,
+        model: modelConfig.model
+      }, correlationId);
+
       throw error;
     }
+  }
+
+  /**
+   * Call OpenAI for flexible workout generation
+   */
+  async callOpenAIForFlexibleWorkout(modelConfig, prompt) {
+    const openaiClient = clients.getClient('openai');
+
+    const response = await openaiClient.chat.completions.create({
+      model: modelConfig.model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional personal trainer with advanced certifications. Generate comprehensive, safe, and effective workout plans in valid JSON format only.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: modelConfig.temperature,
+      max_tokens: modelConfig.maxTokens
+    });
+
+    return response.choices[0].message.content.trim();
+  }
+
+  /**
+   * Parse flexible workout response
+   */
+  parseFlexibleWorkoutResponse(aiResponse) {
+    try {
+      // Clean the response to ensure it's valid JSON
+      let cleanedResponse = aiResponse.trim();
+
+      // Remove any markdown formatting
+      cleanedResponse = cleanedResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+      // Parse JSON
+      const workoutPlan = JSON.parse(cleanedResponse);
+
+      // Validate required fields
+      if (!workoutPlan.type) workoutPlan.type = 'General Fitness';
+      if (!workoutPlan.duration) workoutPlan.duration = 30;
+      if (!workoutPlan.difficulty) workoutPlan.difficulty = 'intermediate';
+      if (!workoutPlan.exercises) workoutPlan.exercises = [];
+      if (!workoutPlan.warmup) workoutPlan.warmup = [];
+      if (!workoutPlan.cooldown) workoutPlan.cooldown = [];
+      if (!workoutPlan.coachingTips) workoutPlan.coachingTips = [];
+
+      return workoutPlan;
+
+    } catch (error) {
+      monitoringService.log('error', 'Failed to parse flexible workout response', {
+        error: error.message,
+        responseLength: aiResponse.length
+      });
+
+      // Return a basic fallback workout structure
+      return this.getBasicFallbackWorkout();
+    }
+  }
+
+  /**
+   * Generate fallback workout for flexible approach
+   */
+  generateFallbackFlexibleWorkout(userMetadata, otherInformation) {
+    const fallbackWorkout = this.getBasicFallbackWorkout();
+
+    // Customize based on available user data
+    if (userMetadata.timeAvailable) {
+      fallbackWorkout.duration = userMetadata.timeAvailable;
+    }
+
+    if (userMetadata.fitnessLevel) {
+      fallbackWorkout.difficulty = userMetadata.fitnessLevel;
+    }
+
+    if (userMetadata.workoutType) {
+      fallbackWorkout.type = userMetadata.workoutType;
+    }
+
+    return {
+      status: 'success',
+      data: {
+        workout: fallbackWorkout,
+        metadata: {
+          model: 'fallback',
+          provider: 'internal',
+          timestamp: new Date().toISOString(),
+          approach: 'fallback_flexible',
+          isFallback: true
+        }
+      }
+    };
+  }
+
+  /**
+   * Get basic fallback workout structure
+   */
+  getBasicFallbackWorkout() {
+    return {
+      type: 'Full Body Workout',
+      duration: 30,
+      difficulty: 'intermediate',
+      equipment: [],
+      targetMuscles: ['full_body'],
+      calorieEstimate: 200,
+      exercises: [
+        {
+          name: 'Bodyweight Squats',
+          sets: 3,
+          reps: '10-15',
+          rest: '60 seconds',
+          instructions: 'Stand with feet shoulder-width apart, lower into squat position, then return to standing.',
+          modifications: 'Use chair for support if needed',
+          targetMuscles: ['quadriceps', 'glutes']
+        },
+        {
+          name: 'Push-ups',
+          sets: 3,
+          reps: '8-12',
+          rest: '60 seconds',
+          instructions: 'Start in plank position, lower chest to ground, push back up.',
+          modifications: 'Perform on knees or against wall if needed',
+          targetMuscles: ['chest', 'shoulders', 'triceps']
+        },
+        {
+          name: 'Plank',
+          sets: 3,
+          reps: '30-60 seconds',
+          rest: '60 seconds',
+          instructions: 'Hold plank position with straight body line from head to heels.',
+          modifications: 'Perform on knees if needed',
+          targetMuscles: ['core', 'shoulders']
+        }
+      ],
+      warmup: [
+        {
+          name: 'Light Movement',
+          duration: '5 minutes',
+          instructions: 'March in place, arm circles, gentle stretching'
+        }
+      ],
+      cooldown: [
+        {
+          name: 'Static Stretching',
+          duration: '5 minutes',
+          instructions: 'Hold stretches for major muscle groups for 30 seconds each'
+        }
+      ],
+      coachingTips: [
+        'Focus on proper form over speed',
+        'Listen to your body and rest when needed',
+        'Stay hydrated throughout the workout'
+      ],
+      progressionNotes: 'Increase reps or duration as you get stronger',
+      safetyNotes: 'Stop if you feel pain or excessive fatigue'
+    };
   }
 
   /**
@@ -198,11 +566,16 @@ class WorkoutService {
 
   /**
    * Build professional workout generation prompt with elite personal trainer expertise
-   * Enhanced for structured parameter handling and GPT-4o optimization
+   * Enhanced for structured parameter handling, GPT-4o optimization, and intelligent personalization
    */
-  buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification = null) {
+  buildWorkoutPrompt(userMetadata, workoutHistory, workoutRequest, workoutSpecification = null, personalization = null) {
     // Parse structured workout request - enhanced for new parameter format
     const structuredRequest = this.parseStructuredWorkoutRequest(userMetadata, workoutRequest, workoutSpecification);
+
+    // Apply personalization adjustments to structured request
+    if (personalization) {
+      this.applyPersonalizationToRequest(structuredRequest, personalization);
+    }
 
     // Build comprehensive client assessment with enhanced parameter support
     const clientAssessment = this.buildEnhancedClientAssessment(userMetadata, workoutHistory, structuredRequest);
@@ -212,6 +585,10 @@ class WorkoutService {
 
     // Build professional requirements and safety considerations
     const professionalRequirements = this.buildEnhancedProfessionalRequirements(structuredRequest, userMetadata);
+
+    // Add personalization guidance if available
+    const personalizationGuidance = personalization ?
+      this.buildPersonalizationGuidance(personalization) : '';
 
     return `🏋️‍♂️ ELITE PERSONAL TRAINER WORKOUT PROGRAMMING
 
@@ -223,6 +600,11 @@ ${workoutSpec}
 
 ⚡ PROFESSIONAL PROGRAMMING REQUIREMENTS:
 ${professionalRequirements}
+
+${personalizationGuidance ? `🧠 INTELLIGENT PERSONALIZATION GUIDANCE:
+${personalizationGuidance}
+
+` : ''}
 
 🏆 GENERATE PROFESSIONAL WORKOUT PROGRAM:
 
@@ -1423,6 +1805,198 @@ Respond ONLY with valid JSON format - no additional text or formatting.`;
         exerciseCount: workoutPlan.mainWorkout?.exercises?.length || 0
       }
     };
+  }
+
+  /**
+   * Apply personalization adjustments to structured request
+   * @param {Object} structuredRequest - Structured workout request
+   * @param {Object} personalization - Personalization configuration
+   */
+  applyPersonalizationToRequest(structuredRequest, personalization) {
+    // Apply duration personalization
+    if (personalization.personalization.duration?.recommended) {
+      structuredRequest.minutesPerSession = personalization.personalization.duration.recommended;
+      structuredRequest.duration = personalization.personalization.duration.recommended;
+    }
+
+    // Apply intensity personalization
+    if (personalization.personalization.intensity?.recommended) {
+      structuredRequest.intensityTarget = personalization.personalization.intensity.recommended;
+    }
+
+    // Apply volume personalization
+    if (personalization.personalization.volume?.modifier) {
+      structuredRequest.volumeModifier = personalization.personalization.volume.modifier;
+    }
+
+    // Apply exercise selection personalization
+    if (personalization.personalization.exerciseSelection) {
+      const exerciseSelection = personalization.personalization.exerciseSelection;
+
+      if (exerciseSelection.preferredEquipment) {
+        structuredRequest.equipment = exerciseSelection.preferredEquipment;
+      }
+
+      if (exerciseSelection.focusAreas) {
+        structuredRequest.focusAreas = exerciseSelection.focusAreas;
+      }
+
+      if (exerciseSelection.varietyLevel) {
+        structuredRequest.varietyLevel = exerciseSelection.varietyLevel;
+      }
+
+      if (exerciseSelection.complexityLevel) {
+        structuredRequest.complexityLevel = exerciseSelection.complexityLevel;
+      }
+    }
+
+    // Apply structure personalization
+    if (personalization.personalization.structure) {
+      const structure = personalization.personalization.structure;
+
+      if (structure.warmupDuration) {
+        structuredRequest.warmupDuration = structure.warmupDuration;
+      }
+
+      if (structure.cooldownDuration) {
+        structuredRequest.cooldownDuration = structure.cooldownDuration;
+      }
+
+      if (structure.restPeriods) {
+        structuredRequest.restPeriods = structure.restPeriods;
+      }
+    }
+  }
+
+  /**
+   * Build personalization guidance for AI prompt
+   * @param {Object} personalization - Personalization configuration
+   * @returns {string} Personalization guidance text
+   */
+  buildPersonalizationGuidance(personalization) {
+    const guidance = [];
+
+    guidance.push(`🧠 INTELLIGENT PERSONALIZATION INSIGHTS:`);
+    guidance.push(`   • Data Quality: ${personalization.metadata.dataQuality.toUpperCase()}`);
+    guidance.push(`   • Personalization Confidence: ${(personalization.metadata.personalizationConfidence * 100).toFixed(0)}%`);
+
+    // Duration guidance
+    if (personalization.personalization.duration?.reasoning?.length > 0) {
+      guidance.push(`\n⏱️ DURATION PERSONALIZATION:`);
+      personalization.personalization.duration.reasoning.forEach(reason => {
+        guidance.push(`   • ${reason}`);
+      });
+      if (personalization.personalization.duration.adjustment !== 0) {
+        guidance.push(`   • Recommended Duration: ${personalization.personalization.duration.recommended} minutes (${personalization.personalization.duration.adjustment > 0 ? '+' : ''}${personalization.personalization.duration.adjustment} min adjustment)`);
+      }
+    }
+
+    // Intensity guidance
+    if (personalization.personalization.intensity?.reasoning?.length > 0) {
+      guidance.push(`\n💪 INTENSITY PERSONALIZATION:`);
+      personalization.personalization.intensity.reasoning.forEach(reason => {
+        guidance.push(`   • ${reason}`);
+      });
+      guidance.push(`   • Recommended Intensity Level: ${(personalization.personalization.intensity.recommended * 100).toFixed(0)}%`);
+    }
+
+    // Volume guidance
+    if (personalization.personalization.volume?.reasoning?.length > 0) {
+      guidance.push(`\n📊 VOLUME PERSONALIZATION:`);
+      personalization.personalization.volume.reasoning.forEach(reason => {
+        guidance.push(`   • ${reason}`);
+      });
+      const volumeChange = ((personalization.personalization.volume.modifier - 1) * 100).toFixed(0);
+      if (Math.abs(volumeChange) > 5) {
+        guidance.push(`   • Volume Adjustment: ${volumeChange > 0 ? '+' : ''}${volumeChange}%`);
+      }
+    }
+
+    // Progressive overload insights
+    if (personalization.analytics?.progressiveOverload) {
+      const po = personalization.analytics.progressiveOverload;
+      if (po.shouldProgress) {
+        guidance.push(`\n📈 PROGRESSIVE OVERLOAD READY:`);
+        guidance.push(`   • User is ready for progression based on performance history`);
+        guidance.push(`   • Progression Type: ${po.progressionType || 'gradual_increase'}`);
+        if (po.reasoning) {
+          guidance.push(`   • Reasoning: ${po.reasoning}`);
+        }
+      }
+    }
+
+    // Risk assessment guidance
+    if (personalization.analytics?.riskAssessment) {
+      const risks = personalization.analytics.riskAssessment;
+      const highRisks = [];
+
+      if (risks.overtraining?.riskLevel === 'high') highRisks.push('overtraining');
+      if (risks.injury?.riskLevel === 'high') highRisks.push('injury');
+      if (risks.burnout?.riskLevel === 'high') highRisks.push('burnout');
+
+      if (highRisks.length > 0) {
+        guidance.push(`\n⚠️ RISK MITIGATION REQUIRED:`);
+        highRisks.forEach(risk => {
+          guidance.push(`   • HIGH ${risk.toUpperCase()} RISK - Apply conservative approach`);
+        });
+      }
+    }
+
+    // Prompt enhancements
+    if (personalization.promptEnhancements) {
+      const enhancements = personalization.promptEnhancements;
+
+      if (enhancements.intensityGuidance) {
+        guidance.push(`\n🎯 INTENSITY GUIDANCE: ${enhancements.intensityGuidance}`);
+      }
+
+      if (enhancements.exerciseGuidance) {
+        guidance.push(`🏋️ EXERCISE SELECTION: ${enhancements.exerciseGuidance}`);
+      }
+
+      if (enhancements.safetyGuidance) {
+        guidance.push(`🛡️ SAFETY PRIORITY: ${enhancements.safetyGuidance}`);
+      }
+    }
+
+    return guidance.join('\n');
+  }
+
+  /**
+   * Extract workout type from string request
+   * @param {string} request - Workout request string
+   * @returns {string} Extracted workout type
+   */
+  extractWorkoutTypeFromRequest(request) {
+    if (!request || typeof request !== 'string') return 'functional_training';
+
+    const lowerRequest = request.toLowerCase();
+
+    // Common workout type patterns
+    const patterns = {
+      'upper body': 'upper_body',
+      'lower body': 'lower_body',
+      'full body': 'full_body',
+      'push day': 'push_day',
+      'pull day': 'pull_day',
+      'leg day': 'leg_day',
+      'strength': 'strength',
+      'cardio': 'cardio',
+      'hiit': 'hiit',
+      'yoga': 'yoga',
+      'pilates': 'pilates',
+      'crossfit': 'crossfit',
+      'core': 'core',
+      'functional': 'functional'
+    };
+
+    for (const [pattern, type] of Object.entries(patterns)) {
+      if (lowerRequest.includes(pattern)) {
+        return type;
+      }
+    }
+
+    return 'functional_training';
   }
 
   /**
