@@ -68,7 +68,7 @@ async function demonstrateWorkoutAPI() {
       enjoyment: 5
     };
 
-    const feedbackResponse = await axios.post(`${BASE_URL}/workout/workout-feedback`, feedbackRequest, {
+    const feedbackResponse = await axios.post(`${BASE_URL}/workout/complete-workout`, feedbackRequest, {
       headers: {
         'Content-Type': 'application/json',
         'X-User-Id': USER_ID
