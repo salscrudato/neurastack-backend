@@ -248,10 +248,259 @@ router.post('/complete-workout', async (req, res) => {
   }
 });
 
-// Removed unused helper functions - simplified for flexible approach
+/**
+ * Enhanced Workout Completion Endpoint
+ * Captures detailed workout completion data including exercises, sets, reps, weights, and feedback
+ *
+ * POST /workout-completion
+ */
+router.post('/workout-completion', async (req, res) => {
+  const correlationId = req.correlationId || `completion-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-// Note: User workout history and memory is handled automatically in the backend
-// The generate-workout endpoint automatically considers user history for personalization
-// No separate history endpoint is needed for the frontend
+  try {
+    const {
+      workoutId,
+      completed,
+      completionPercentage,
+      actualDuration,
+      startedAt,
+      completedAt,
+      exercises,
+      rating,
+      difficulty,
+      enjoyment,
+      energy,
+      notes,
+      injuries,
+      environment
+    } = req.body;
+
+    const userId = req.headers['x-user-id'] || 'anonymous';
+
+    // Validate required fields
+    if (!workoutId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'workoutId is required',
+        correlationId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (typeof completed !== 'boolean') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'completed must be a boolean value',
+        correlationId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (!exercises || !Array.isArray(exercises)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'exercises array is required',
+        correlationId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Log completion data received
+    monitoringService.log('info', 'Detailed workout completion received', {
+      userId,
+      workoutId,
+      completed,
+      completionPercentage: completionPercentage || 0,
+      exerciseCount: exercises.length,
+      actualDuration: actualDuration || 0
+    }, correlationId);
+
+    // Create comprehensive completion record
+    const completionRecord = {
+      workoutId,
+      userId,
+      completed,
+      completionPercentage: completionPercentage || (completed ? 100 : 0),
+      actualDuration: actualDuration || 0,
+      startedAt: startedAt ? new Date(startedAt) : new Date(),
+      completedAt: completedAt ? new Date(completedAt) : new Date(),
+      exercises: exercises.map(exercise => ({
+        name: exercise.name || '',
+        type: exercise.type || 'strength',
+        muscleGroups: exercise.muscleGroups || '',
+        sets: (exercise.sets || []).map(set => ({
+          setNumber: set.setNumber || 1,
+          reps: set.reps || 0,
+          weight: set.weight || 0,
+          duration: set.duration || 0,
+          distance: set.distance || 0,
+          restTime: set.restTime || '',
+          completed: set.completed !== false, // Default to true
+          notes: set.notes || ''
+        })),
+        totalReps: exercise.totalReps || 0,
+        totalWeight: exercise.totalWeight || 0,
+        totalDuration: exercise.totalDuration || 0,
+        completed: exercise.completed !== false, // Default to true
+        difficulty: exercise.difficulty || 'just_right',
+        notes: exercise.notes || ''
+      })),
+      rating: rating || null,
+      difficulty: difficulty || 'just_right',
+      enjoyment: enjoyment || null,
+      energy: energy || null,
+      notes: notes || '',
+      injuries: injuries || [],
+      environment: environment || {},
+      submittedAt: new Date(),
+      correlationId
+    };
+
+    // Store detailed completion data
+    await workoutHistoryService.storeWorkoutCompletion(completionRecord);
+
+    // Update workout status
+    await workoutHistoryService.updateWorkoutStatus(workoutId, completed ? 'completed' : 'incomplete');
+
+    // Update user stats and analytics
+    await workoutHistoryService.updateUserStats(userId);
+
+    // Log success
+    monitoringService.log('info', 'Detailed workout completion processed successfully', {
+      userId,
+      workoutId,
+      completionProcessed: true,
+      exercisesTracked: exercises.length
+    }, correlationId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Workout completion data saved successfully',
+      data: {
+        workoutId,
+        completed,
+        completionPercentage: completionRecord.completionPercentage,
+        exercisesTracked: exercises.length,
+        processed: true
+      },
+      correlationId,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    // Log error
+    monitoringService.log('error', 'Workout completion processing failed', {
+      userId: req.headers['x-user-id'] || 'anonymous',
+      error: error.message,
+      stack: error.stack
+    }, correlationId);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to process workout completion data',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      correlationId,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * Get Workout History Endpoint
+ * Returns clean, structured workout history for a user
+ *
+ * GET /workout-history
+ */
+router.get('/workout-history', async (req, res) => {
+  const correlationId = req.correlationId || `history-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  try {
+    const userId = req.headers['x-user-id'] || req.query.userId;
+    const limit = parseInt(req.query.limit) || 20;
+    const includeDetails = req.query.includeDetails === 'true';
+    const includeIncomplete = req.query.includeIncomplete === 'true';
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'userId is required (via X-User-Id header or query parameter)',
+        correlationId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Log history request
+    monitoringService.log('info', 'Workout history requested', {
+      userId,
+      limit,
+      includeDetails,
+      includeIncomplete
+    }, correlationId);
+
+    // Get workout history with completion data
+    const workoutHistory = await workoutHistoryService.getEnhancedWorkoutHistory(
+      userId,
+      limit,
+      includeDetails,
+      includeIncomplete
+    );
+
+    // Get user workout statistics
+    const userStats = await workoutHistoryService.getUserWorkoutStats(userId);
+
+    // Format response for frontend consumption
+    const response = {
+      status: 'success',
+      data: {
+        workouts: workoutHistory,
+        stats: {
+          totalWorkouts: userStats.totalWorkouts || 0,
+          completedWorkouts: userStats.completedWorkouts || 0,
+          completionRate: userStats.completionRate || 0,
+          averageRating: userStats.averageRating || 0,
+          averageDuration: userStats.averageDuration || 0,
+          currentStreak: userStats.currentStreak || 0,
+          longestStreak: userStats.longestStreak || 0,
+          lastWorkout: userStats.lastWorkout || null,
+          preferredWorkoutTypes: userStats.preferredWorkoutTypes || {},
+          goalProgress: userStats.goalProgress || {}
+        },
+        metadata: {
+          totalRecords: workoutHistory.length,
+          includeDetails,
+          includeIncomplete,
+          generatedAt: new Date().toISOString()
+        }
+      },
+      correlationId,
+      timestamp: new Date().toISOString()
+    };
+
+    // Log success
+    monitoringService.log('info', 'Workout history retrieved successfully', {
+      userId,
+      recordCount: workoutHistory.length,
+      includeDetails
+    }, correlationId);
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    // Log error
+    monitoringService.log('error', 'Workout history retrieval failed', {
+      userId: req.headers['x-user-id'] || req.query.userId,
+      error: error.message,
+      stack: error.stack
+    }, correlationId);
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve workout history',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      correlationId,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 module.exports = router;

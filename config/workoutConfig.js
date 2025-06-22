@@ -12,8 +12,8 @@ const WORKOUT_AI_CONFIG = {
     provider: 'openai',
     model: 'gpt-4o-mini', // Low-cost model for prompt crafting
     temperature: 0.3,
-    maxTokens: 800,
-    timeoutMs: 15000
+    maxTokens: 1600,
+    timeoutMs: 30000
   },
   
   // Workout generation model (higher quality for final workout)
@@ -29,84 +29,67 @@ const WORKOUT_AI_CONFIG = {
 // Prompt Templates
 const PROMPT_TEMPLATES = {
   // Stage 1: Prompt Crafting Template
-  promptCrafter: `You are **Prompt Architect Pro**, an elite fitness‑domain prompt engineer.
+  promptCrafter: `
+You are a senior prompt‑engineer for fitness coaching.
 
-INPUT (between <USER_DATA> tags)  
+TASK  
+Transform <USER_DATA> into two objects:  
+1. CLIENT_PROFILE  → JSON with exactly:  
+   age, gender, weightLb, fitnessLevel, goals,  
+   equipment, injuries, daysPerWeek, minutesPerSession,  
+   preferredWorkoutStyle, notes  
+2. PROGRAM_BRIEF   → single string ≤120 words summarising goals,  
+   constraints, safety flags, style preferences.
+
+RULES  
+- Normalise units (kg→lb, cm→in).  
+- Fill absent non‑critical fields with sensible defaults (see DEFAULTS).  
+- Return **only**:  
+  { "CLIENT_PROFILE": { … }, "PROGRAM_BRIEF": "…" }
+
+DEFAULTS = { age:30, weightLb:170, fitnessLevel:"beginner",  
+             daysPerWeek:3, minutesPerSession:45,  
+             preferredWorkoutStyle:"full_body" }
+
 <USER_DATA>  
 {userData}  
 </USER_DATA>
-
-TASKS  
-1. Parse the input, normalising units and casing.  
-2. Where essential data is missing, insert sensible defaults noted in **DEFAULTS** below—do *not* invent unrealistic values.  
-3. Output a compact YAML block named **CLIENT_PROFILE** with these exact keys:  
-   age, gender, weightLb, fitnessLevel, goals, equipment, injuries, daysPerWeek, minutesPerSession, preferredWorkoutStyle, notes  
-4. Write a concise **PROGRAM_BRIEF** (≤ 120 words) summarising goals, constraints, safety flags and preferred style.  
-5. Finish with the line: “Please follow the JSON schema provided by the caller.”  
-
-REQUIREMENTS  
-- Return a single text block that concatenates CLIENT_PROFILE, a blank line, PROGRAM_BRIEF, and the final instruction in the order shown.  
-- Do **not** add commentary or additional sections.
-
-DEFAULTS  
-age: 30  
-weightLb: 170  
-fitnessLevel: beginner  
-daysPerWeek: 3  
-minutesPerSession: 45  
-preferredWorkoutStyle: full_body`,
+`.trim(),
 
   // Stage 2: Workout Generation Template (will be dynamically filled by Stage 1)
-  workoutGenerator: `{optimizedPrompt}
+  workoutGenerator: `
+{optimizedPrompt}
 
-SYSTEM DIRECTIVES  
-You are **Elite Strength Coach AI**. Using the CLIENT_PROFILE and PROGRAM_BRIEF above, create a single‑session workout that conforms exactly to the JSON_SCHEMA below.
+SYSTEM  
+You are an elite strength‑coach AI.
 
-RULES  
-1. Return valid, minified JSON only – no markdown, comments or extra keys.  
-2. Populate every required field; if unknown use null or a sensible default.  
-3. Ensure exercise selection honours equipment availability, fitness level, time limits and any injuries.  
-4. Keep total session time ≤ minutesPerSession.  
-5. Include ≥ 3 coachingTips plus progressionNotes and safetyNotes.  
-6. calorieEstimate must be an integer (kcal).  
+RETURN  
+Only a minified JSON object that matches the schema WORKOUT_SCHEMA.
 
-JSON_SCHEMA
-{
+WORKOUT_SCHEMA = {
   "type": "workout_type",
-  "duration": number_in_minutes,
+  "duration": "number(minutes)",
   "difficulty": "beginner|intermediate|advanced",
-  "equipment": ["equipment_list"],
-  "targetMuscles": ["muscle_groups"],
-  "calorieEstimate": number,
-  "exercises": [
-    {
-      "name": "Exercise Name",
-      "sets": number,
-      "reps": "rep_range_or_time",
-      "rest": "rest_time",
-      "instructions": "Detailed form and execution instructions",
-      "modifications": "Easier/harder variations",
-      "targetMuscles": ["primary_muscles"]
-    }
-  ],
-  "warmup": [
-    {
-      "name": "Warmup Exercise",
-      "duration": "time_duration",
-      "instructions": "Detailed instructions"
-    }
-  ],
-  "cooldown": [
-    {
-      "name": "Cooldown Exercise",
-      "duration": "time_duration",
-      "instructions": "Detailed instructions"
-    }
-  ],
-  "coachingTips": ["tip1", "tip2", "tip3"],
-  "progressionNotes": "How to progress this workout over time",
-  "safetyNotes": "Important safety considerations"
-}`
+  "equipment": ["strings"],
+  "mainWorkout": {
+    "structure": "circuit|straight_sets|superset|pyramid",
+    "exercises": [
+      { "name": "...", "category": "strength|cardio|flexibility", "sets":0, "reps":"...", "rest":"...",
+        "instructions":"...", "targetMuscles":["..."] }
+    ]
+  },
+  "warmup":[{ "name":"...", "duration":"...", "instructions":"..." }],
+  "cooldown":[{ "name":"...", "duration":"...", "instructions":"..." }],
+  "coachingTips":["...", "...", "..."]
+}
+
+RULES
+1. Honour CLIENT_PROFILE, PROGRAM_BRIEF, equipment & injuries.
+2. CRITICAL: Total session time MUST equal minutesPerSession. Calculate: warmup + main workout + cooldown = minutesPerSession.
+3. For 90-minute sessions: 10min warmup + 70min main workout + 10min cooldown.
+4. Scale exercise count and sets to fill the time: beginners need 6-8 exercises, intermediates 8-10, advanced 10-12.
+5. Provide ≥3 coachingTips. No extra keys or markdown.
+`.trim()
 };
 
 // Default workout parameters for fallback scenarios
@@ -174,11 +157,26 @@ module.exports = {
     // Other free-form information
     if (otherInformation) userData.push(`Additional Information: ${otherInformation}`);
     
-    // Workout history summary
+    // Enhanced workout history analysis for progressive overload
     if (workoutHistory && workoutHistory.length > 0) {
       userData.push(`Recent Workout History: User has completed ${workoutHistory.length} recent workouts`);
       const recentTypes = workoutHistory.slice(0, 3).map(w => w.type || 'general').join(', ');
       userData.push(`Recent Workout Types: ${recentTypes}`);
+
+      // Progressive overload analysis
+      const completedWorkouts = workoutHistory.filter(w => w.completed);
+      if (completedWorkouts.length > 0) {
+        const avgRating = completedWorkouts.reduce((sum, w) => sum + (w.feedback?.rating || 3), 0) / completedWorkouts.length;
+        userData.push(`Average Workout Rating: ${avgRating.toFixed(1)}/5 (adjust difficulty accordingly)`);
+
+        // Check for repeated exercises to suggest progression
+        const recentExercises = completedWorkouts.slice(0, 2).flatMap(w =>
+          w.workout?.mainWorkout?.exercises?.map(e => e.name) || []
+        );
+        if (recentExercises.length > 0) {
+          userData.push(`Recent Exercises: ${recentExercises.slice(0, 5).join(', ')} (consider progression variants)`);
+        }
+      }
     }
     
     return userData.join('\n');

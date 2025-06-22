@@ -1,42 +1,70 @@
-const express = require('express');
-const cors = require('cors');
-const admin = require('firebase-admin');
-require('dotenv').config();
+/**
+ * NeuraStack Backend Server - Main Entry Point
+ *
+ * This is the main server file that starts up the NeuraStack AI application.
+ * It handles requests from users who want to use AI models or generate workouts.
+ * Think of this as the "front desk" of our AI service - it receives requests
+ * and directs them to the right place to get processed.
+ *
+ * What this server does:
+ * - Provides AI ensemble responses (combines multiple AI models for better answers)
+ * - Generates personalized workout plans
+ * - Manages user memory (remembers past conversations)
+ * - Handles security and rate limiting (prevents abuse)
+ * - Monitors system health and performance
+ */
 
-// Initialize Firebase FIRST before importing any services that use it
+const express = require('express'); // Web server framework - handles HTTP requests
+const cors = require('cors'); // Allows websites from different domains to use our API
+const admin = require('firebase-admin'); // Google's database service for storing user data
+require('dotenv').config(); // Loads environment variables from .env file
+
+// Initialize Firebase database connection FIRST before importing any services that use it
+// Firebase is Google's cloud database where we store user memories and workout history
 try {
   let firebaseConfig;
 
-  // Try to use service account file first (for local development)
+  // Try to use Firebase Admin SDK service account first (recommended for Firestore)
   try {
-    const serviceAccount = require('./serviceAccountKey.json');
+    const serviceAccount = require('./firebase-admin-key.json');
     firebaseConfig = {
       credential: admin.credential.cert(serviceAccount),
-      projectId: 'neurastack-backend',
-      storageBucket: 'neurastack-backend.firebasestorage.app',
+      projectId: 'neurastack-backend', // Our project name in Google Cloud
+      storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
     };
-    console.log('🔑 Using service account credentials');
-  } catch (serviceAccountError) {
-    // Fallback to environment variables (for production)
-    if (process.env.FIREBASE_PROJECT_ID) {
+    console.log('🔑 Using Firebase Admin SDK credentials');
+  } catch (adminKeyError) {
+    // Fallback to original service account file (for local development on your computer)
+    try {
+      const serviceAccount = require('./serviceAccountKey.json');
       firebaseConfig = {
-        projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
+        credential: admin.credential.cert(serviceAccount),
+        projectId: 'neurastack-backend', // Our project name in Google Cloud
+        storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
       };
+      console.log('🔑 Using storage service account credentials');
+    } catch (serviceAccountError) {
+      // Fallback to environment variables (for production deployment on servers)
+      if (process.env.FIREBASE_PROJECT_ID) {
+        firebaseConfig = {
+          projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
+          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
+        };
 
-      // Use service account from environment if available
-      if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-        firebaseConfig.credential = admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        });
-        console.log('🔑 Using environment variable credentials');
+        // Use service account from environment if available
+        if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+          firebaseConfig.credential = admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          });
+          console.log('🔑 Using environment variable credentials');
+        } else {
+          console.log('🔑 Using default application credentials');
+        }
       } else {
-        console.log('🔑 Using default application credentials');
+        throw new Error('No Firebase configuration found');
       }
-    } else {
-      throw new Error('No Firebase configuration found');
     }
   }
 
@@ -59,39 +87,41 @@ try {
   }
 }
 
-// Now import routes and services that depend on Firebase
-const healthRoutes = require('./routes/health');
-const memoryRoutes = require('./routes/memory');
-const workoutRoutes = require('./routes/workout');
-const MemoryLifecycleManager = require('./services/memoryLifecycle');
-const monitoringService = require('./services/monitoringService');
-const cacheService = require('./services/cacheService');
-const securityMiddleware = require('./middleware/securityMiddleware');
+// Now import our custom services and routes (these are the "workers" that do the actual work)
+const healthRoutes = require('./routes/health'); // Handles AI ensemble and health check requests
+const memoryRoutes = require('./routes/memory'); // Manages user conversation memories
+const workoutRoutes = require('./routes/workout'); // Generates personalized workout plans
+const MemoryLifecycleManager = require('./services/memoryLifecycle'); // Automatically cleans up old memories
+const monitoringService = require('./services/monitoringService'); // Tracks system performance and errors
+const cacheService = require('./services/cacheService'); // Stores frequently used data for faster responses
+const securityMiddleware = require('./middleware/securityMiddleware'); // Protects against spam and abuse
 
-// Initialize memory lifecycle manager
+// Initialize memory lifecycle manager (this automatically cleans up old user memories)
 const memoryLifecycleManager = new MemoryLifecycleManager();
 
+// Create the web server application
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080; // Use port from environment or default to 8080
 
-// CORS configuration
+// CORS configuration - this controls which websites can use our API
+// CORS = Cross-Origin Resource Sharing (allows websites from different domains to call our API)
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://localhost:3000',
-    'https://localhost:3001',
-    'https://neurastack.ai',
-    'https://www.neurastack.ai',
-    'https://neurastack-frontend.web.app',
-    /^https:\/\/.*\.vercel\.app$/,
-    /^https:\/\/.*\.netlify\.app$/,
-    /^https:\/\/.*\.firebase\.app$/,
-    /^https:\/\/.*\.web\.app$/
+  origin: [ // List of allowed websites that can use our API
+    'http://localhost:3000', // Local development
+    'http://localhost:3001', // Local development (alternative port)
+    'https://localhost:3000', // Local development with HTTPS
+    'https://localhost:3001', // Local development with HTTPS (alternative port)
+    'https://neurastack.ai', // Production website
+    'https://www.neurastack.ai', // Production website with www
+    'https://neurastack-frontend.web.app', // Firebase hosting
+    /^https:\/\/.*\.vercel\.app$/, // Any Vercel deployment
+    /^https:\/\/.*\.netlify\.app$/, // Any Netlify deployment
+    /^https:\/\/.*\.firebase\.app$/, // Any Firebase deployment
+    /^https:\/\/.*\.web\.app$/ // Any Google web app
   ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id', 'X-Session-Id', 'X-Correlation-ID']
+  credentials: true, // Allow cookies and authentication headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allowed HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id', 'X-Session-Id', 'X-Correlation-ID'] // Allowed headers
 };
 
 // Security middleware (basic rate limiting only)

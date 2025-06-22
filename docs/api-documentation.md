@@ -720,11 +720,191 @@ interface WorkoutHealthResponse {
 
 ---
 
+## Workout History Management Endpoints
+
+The workout history system provides comprehensive tracking of workout completion data, enabling detailed analytics, progress monitoring, and personalized recommendations based on user performance patterns.
+
+### 8. Record Detailed Workout Completion
+
+**POST** `/workout/workout-completion`
+
+Records comprehensive workout completion data including detailed exercise performance, sets, reps, weights, user feedback, and environmental factors. This endpoint is essential for building rich user analytics and enabling AI-driven workout personalization.
+
+**Headers:**
+- `Content-Type: application/json`
+- `X-User-Id: string` (required) - User identifier for data association
+
+**Request Body:**
+```typescript
+interface WorkoutCompletionRequest {
+  workoutId: string;                    // Required: ID from workout generation response
+  completed: boolean;                   // Required: Whether workout was fully completed
+  completionPercentage?: number;        // Optional: 0-100, auto-calculated if not provided
+  actualDuration?: number;              // Optional: Actual workout duration in minutes
+  startedAt?: string;                   // Optional: ISO timestamp when workout began
+  completedAt?: string;                 // Optional: ISO timestamp when workout finished
+  exercises: CompletedExercise[];       // Required: Array of exercise completion data
+  rating?: number;                      // Optional: 1-5 overall workout satisfaction
+  difficulty?: string;                  // Optional: 'too_easy', 'just_right', 'too_hard'
+  enjoyment?: number;                   // Optional: 1-5 enjoyment level
+  energy?: number;                      // Optional: 1-5 energy level after workout
+  notes?: string;                       // Optional: General workout feedback
+  injuries?: string[];                  // Optional: Any injuries that occurred
+  environment?: object;                 // Optional: Workout environment details
+}
+
+interface CompletedExercise {
+  name: string;                         // Required: Exercise name (must match generated workout)
+  type?: string;                        // Optional: 'strength', 'cardio', 'flexibility', 'balance'
+  muscleGroups?: string;                // Optional: Primary muscle groups targeted
+  sets: ExerciseSet[];                  // Required: Array of sets performed
+  totalReps?: number;                   // Optional: Total reps across all sets
+  totalWeight?: number;                 // Optional: Total weight lifted (sum of all sets)
+  totalDuration?: number;               // Optional: Total exercise duration in seconds
+  completed?: boolean;                  // Optional: Whether entire exercise was completed
+  difficulty?: string;                  // Optional: Exercise-specific difficulty rating
+  notes?: string;                       // Optional: Exercise-specific feedback
+}
+
+interface ExerciseSet {
+  setNumber: number;                    // Required: Set number (1, 2, 3, etc.)
+  reps?: number;                        // Optional: Repetitions completed
+  weight?: number;                      // Optional: Weight used (kg or lbs)
+  duration?: number;                    // Optional: Duration in seconds (for time-based exercises)
+  distance?: number;                    // Optional: Distance covered (for cardio)
+  restTime?: string;                    // Optional: Rest time after set (e.g., "60s", "2min")
+  completed?: boolean;                  // Optional: Whether this specific set was completed
+  notes?: string;                       // Optional: Set-specific notes or observations
+}
+```
+
+**Response Schema:**
+```typescript
+interface WorkoutCompletionResponse {
+  status: "success" | "error";
+  message: string;
+  data?: {
+    workoutId: string;
+    completed: boolean;
+    completionPercentage: number;
+    exercisesTracked: number;
+    processed: boolean;
+  };
+  correlationId: string;
+  timestamp: string;
+}
+```
+
+**Frontend Integration Guidelines:**
+- **Required Fields**: Ensure `workoutId`, `completed`, and `exercises` array are always provided
+- **Exercise Matching**: Exercise names should match those from the generated workout for accurate tracking
+- **Progressive Enhancement**: Start with basic completion data and add detailed tracking incrementally
+- **Validation**: Validate numeric ranges (ratings 1-5, percentages 0-100) before submission
+- **Error Handling**: Implement retry logic for network failures as completion data is valuable
+- **User Experience**: Consider allowing partial saves during workout to prevent data loss
+
+### 9. Retrieve Workout History
+
+**GET** `/workout/workout-history`
+
+Retrieves structured workout history with optional detailed exercise data and comprehensive user analytics. This endpoint provides all data needed for history displays, progress tracking, and analytics dashboards.
+
+**Headers:**
+- `X-User-Id: string` (required) - User identifier for data retrieval
+
+**Query Parameters:**
+- `limit?: number` - Number of workouts to retrieve (default: 20, maximum: 100)
+- `includeDetails?: boolean` - Include detailed exercise completion data (default: false)
+- `includeIncomplete?: boolean` - Include incomplete/skipped workouts (default: false)
+- `userId?: string` - Alternative to X-User-Id header for user identification
+
+**Response Schema:**
+```typescript
+interface WorkoutHistoryResponse {
+  status: "success" | "error";
+  data?: {
+    workouts: WorkoutHistoryItem[];
+    stats: UserWorkoutStats;
+    metadata: HistoryMetadata;
+  };
+  correlationId: string;
+  timestamp: string;
+}
+
+interface WorkoutHistoryItem {
+  workoutId: string;
+  date: string;                         // ISO timestamp of workout creation
+  status: "completed" | "incomplete" | "started" | "skipped";
+  type: string;                         // Workout type (e.g., "Upper body strength")
+  duration: number;                     // Planned workout duration in minutes
+  exercises: ExerciseSummary[];         // Summary of exercises in workout
+  rating?: number;                      // User rating (1-5) if provided
+  difficulty?: string;                  // User-reported difficulty level
+  completed: boolean;                   // Whether workout was completed
+  completionDetails?: CompletionDetails; // Detailed data (only if includeDetails=true)
+}
+
+interface ExerciseSummary {
+  name: string;
+  sets: string;                         // e.g., "3" or "3x12"
+  reps: string;                         // e.g., "12-10-8" or "30 seconds"
+  type: string;                         // Exercise category
+}
+
+interface CompletionDetails {
+  actualDuration: number;               // Actual workout duration in minutes
+  completionPercentage: number;         // Percentage of workout completed (0-100)
+  exerciseDetails: CompletedExercise[]; // Full exercise completion data
+  enjoyment?: number;                   // Enjoyment rating (1-5)
+  energy?: number;                      // Energy level after workout (1-5)
+  notes?: string;                       // User notes about the workout
+  injuries?: string[];                  // Any injuries reported
+}
+
+interface UserWorkoutStats {
+  totalWorkouts: number;                // Total workouts generated
+  completedWorkouts: number;            // Total workouts completed
+  completionRate: number;               // Completion rate percentage (0-100)
+  averageRating: number;                // Average user rating across completed workouts
+  averageDuration: number;              // Average actual workout duration
+  currentStreak: number;                // Current consecutive workout days
+  longestStreak: number;                // Longest consecutive workout streak
+  lastWorkout?: string;                 // ISO timestamp of most recent workout
+  preferredWorkoutTypes: Record<string, number>; // Workout type frequency
+  goalProgress: Record<string, number>; // Progress toward fitness goals
+}
+
+interface HistoryMetadata {
+  totalRecords: number;                 // Number of workouts returned
+  includeDetails: boolean;              // Whether detailed data was included
+  includeIncomplete: boolean;           // Whether incomplete workouts were included
+  generatedAt: string;                  // ISO timestamp of response generation
+}
+```
+
+**Frontend Integration Guidelines:**
+- **Pagination Strategy**: Use `limit` parameter for efficient loading; implement infinite scroll or pagination
+- **Detail Loading**: Start with `includeDetails=false` for list views, enable for detail views
+- **Caching Strategy**: Cache basic history data and refresh periodically; cache detailed data per workout
+- **Analytics Display**: Use `stats` object for dashboard widgets and progress indicators
+- **Filter Options**: Leverage `includeIncomplete` parameter for different view modes
+- **Performance**: Request smaller limits (10-20) for mobile devices, larger (50-100) for desktop
+- **Real-time Updates**: Refresh history after workout completion to show latest data
+
+**Data Usage Patterns:**
+- **History List**: `includeDetails=false`, `limit=20` for efficient browsing
+- **Workout Detail**: `includeDetails=true`, `limit=1` with specific workout filtering
+- **Analytics Dashboard**: Focus on `stats` object for key performance indicators
+- **Progress Tracking**: Use `currentStreak`, `completionRate`, and `goalProgress` for motivation features
+- **Trend Analysis**: Request larger datasets (`limit=100`) for trend calculations
+
+---
+
 ## Memory Management Endpoints
 
 The memory system provides persistent context across conversations, enabling the AI ensemble to maintain awareness of previous interactions and provide more contextually relevant responses.
 
-### 8. Store Memory
+### 10. Store Memory
 
 **POST** `/memory/store`
 

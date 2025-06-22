@@ -1,20 +1,39 @@
 /**
- * Memory Manager for AI Ensemble System
- * Handles storage, retrieval, and lifecycle management of memories
+ * Memory Manager - The AI's Memory System
+ *
+ * This service is like the AI's brain that remembers your conversations.
+ * Just like how you remember past conversations with friends, this system
+ * helps the AI remember what you've talked about before so it can give
+ * better, more personalized responses.
+ *
+ * What this does:
+ * - Stores important parts of your conversations in a database
+ * - Remembers your preferences, interests, and past questions
+ * - Retrieves relevant memories when you ask new questions
+ * - Automatically forgets old, unimportant memories to save space
+ * - Organizes memories by importance and type (short-term vs long-term)
+ *
+ * Think of it as giving the AI a memory so it can have more meaningful
+ * conversations with you over time, just like a human would.
  */
 
-const admin = require('firebase-admin');
-const { v4: generateUUID } = require('uuid');
-const EnhancedMemoryWeights = require('./memoryWeights');
-const ContentAnalyzer = require('./contentAnalysis');
-const { MEMORY_TYPE_CONFIG } = require('../types/memory');
+const admin = require('firebase-admin'); // Google's database service for storing memories
+const { v4: generateUUID } = require('uuid'); // Creates unique IDs for each memory
+const { MEMORY_TYPE_CONFIG } = require('../types/memory'); // Configuration for different memory types
 
+/**
+ * Memory Manager Class
+ * This is the main class that handles all memory operations for the AI
+ */
 class MemoryManager {
   constructor() {
+    // Connect to Google's Firestore database where we store memories
     this.firestore = admin.firestore();
+
+    // Local backup storage in case the database is unavailable
     this.localCache = new Map(); // Fallback cache
-    this.weightCalculator = new EnhancedMemoryWeights();
-    this.contentAnalyzer = new ContentAnalyzer();
+
+    // Track whether the main database is working
     this.isFirestoreAvailable = true;
     
     // Test Firestore connectivity
@@ -48,10 +67,10 @@ class MemoryManager {
    */
   async storeMemory(userId, sessionId, content, isUserPrompt, responseQuality = 0.5, modelUsed, ensembleMode = false) {
     try {
-      const analysis = this.contentAnalyzer.analyzeContent(content, isUserPrompt);
+      const analysis = this.analyzeContentSimple(content, isUserPrompt);
       const memoryType = this.determineMemoryType(analysis);
       const userContext = await this.getUserContext(userId);
-      
+
       const memory = {
         id: generateUUID(),
         userId,
@@ -59,7 +78,7 @@ class MemoryManager {
         memoryType,
         content: {
           original: content,
-          compressed: this.contentAnalyzer.compressContent(content),
+          compressed: this.compressContentSimple(content),
           keywords: analysis.keywords,
           concepts: analysis.concepts,
           sentiment: analysis.sentiment,
@@ -70,12 +89,12 @@ class MemoryManager {
           conversationTopic: analysis.topic,
           userIntent: analysis.userIntent,
           responseQuality,
-          tokenCount: this.contentAnalyzer.estimateTokenCount(content),
-          compressedTokenCount: this.contentAnalyzer.estimateTokenCount(this.contentAnalyzer.compressContent(content)),
+          tokenCount: this.estimateTokenCount(content),
+          compressedTokenCount: this.estimateTokenCount(this.compressContentSimple(content)),
           modelUsed: modelUsed || null,
           ensembleMode: ensembleMode || false
         },
-        weights: this.weightCalculator.calculateAdvancedWeights(
+        weights: this.calculateSimpleWeights(
           analysis,
           memoryType,
           { accessCount: 0, recentAccessCount: 0, timeSpanDays: 1 },
@@ -215,7 +234,7 @@ class MemoryManager {
 
       for (const memory of memories) {
         const memoryText = `[${memory.memoryType}] ${memory.content.compressed}`;
-        const tokenCount = this.contentAnalyzer.estimateTokenCount(memoryText);
+        const tokenCount = this.estimateTokenCount(memoryText);
 
         if (totalTokens + tokenCount <= maxTokens) {
           context += `${memoryText}\n`;
@@ -489,7 +508,7 @@ class MemoryManager {
 
   /**
    * Update access tracking for retrieved memories
-   * @param {import('../types/memory').EnhancedMemorySchema[]} memories 
+   * @param {import('../types/memory').EnhancedMemorySchema[]} memories
    */
   async updateAccessTracking(memories) {
     const updatePromises = memories.map(async (memory) => {
@@ -515,6 +534,87 @@ class MemoryManager {
     } catch (error) {
       console.warn('⚠️ Failed to update access tracking:', error.message);
     }
+  }
+
+  /**
+   * Simple content analysis replacement for removed contentAnalysis service
+   * Provides basic analysis functionality for memory management
+   */
+  analyzeContentSimple(content, isUserPrompt) {
+    const words = content.toLowerCase().split(/\s+/);
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+
+    // Extract simple keywords (words longer than 3 characters, not common words)
+    const commonWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'boy', 'did', 'man', 'way', 'she', 'use', 'her', 'many', 'oil', 'sit', 'set', 'run', 'eat', 'far', 'sea', 'eye']);
+    const keywords = words
+      .filter(word => word.length > 3 && !commonWords.has(word))
+      .slice(0, 10); // Top 10 keywords
+
+    // Simple concept extraction (look for technical terms)
+    const concepts = words
+      .filter(word => word.length > 5 && (word.includes('api') || word.includes('data') || word.includes('function') || word.includes('service')))
+      .slice(0, 5);
+
+    // Simple importance calculation
+    const baseImportance = Math.min(0.9, Math.max(0.1,
+      (content.length / 1000) * 0.3 +
+      (keywords.length / 10) * 0.3 +
+      (isUserPrompt ? 0.4 : 0.2)
+    ));
+
+    return {
+      keywords,
+      concepts,
+      sentiment: 'neutral', // Simplified
+      baseImportance,
+      complexity: Math.min(0.9, sentences.length / 10),
+      timestamp: new Date(),
+      topic: keywords[0] || 'general',
+      userIntent: isUserPrompt ? 'question' : 'response',
+      isQuestion: isUserPrompt && content.includes('?')
+    };
+  }
+
+  /**
+   * Simple content compression replacement
+   */
+  compressContentSimple(content) {
+    if (content.length <= 200) return content;
+
+    // Simple compression: take first 150 chars and last 50 chars
+    return content.substring(0, 150) + '...' + content.substring(content.length - 50);
+  }
+
+  /**
+   * Simple token estimation replacement
+   */
+  estimateTokenCount(text) {
+    // Rough estimation: 1 token per 4 characters
+    return Math.ceil(text.length / 4);
+  }
+
+  /**
+   * Simple weight calculation replacement
+   */
+  calculateSimpleWeights(analysis, memoryType, usage, userContext) {
+    const baseWeight = analysis.baseImportance;
+    const typeMultiplier = {
+      'working': 0.8,
+      'short_term': 0.6,
+      'long_term': 1.0,
+      'semantic': 0.9,
+      'episodic': 0.7
+    }[memoryType] || 0.5;
+
+    const composite = baseWeight * typeMultiplier;
+
+    return {
+      importance: baseWeight,
+      recency: 1.0, // New memories have max recency
+      frequency: 0.1, // New memories have low frequency
+      context: 0.5, // Default context relevance
+      composite: Math.min(0.99, composite)
+    };
   }
 }
 

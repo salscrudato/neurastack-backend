@@ -1,26 +1,16 @@
 /**
  * Hierarchical Context Manager
- * Implements advanced context management with hierarchical structures,
- * intelligent compression, and optimized token usage
+ * Implements simplified context management with basic memory retrieval
+ * and token optimization for the NeuraStack AI ensemble system
  */
 
 const { getMemoryManager } = require('./memoryManager');
 const cacheService = require('./cacheService');
-const ContentAnalyzer = require('./contentAnalysis');
-const { getContextCompressionService } = require('./contextCompressionService');
-const { getSmartMemoryRetrieval } = require('./smartMemoryRetrieval');
-const { getDynamicContextSizing } = require('./dynamicContextSizing');
-const { getContextQualityMonitoring } = require('./contextQualityMonitoring');
 
 class HierarchicalContextManager {
   constructor() {
     this.memoryManager = getMemoryManager();
     this.cacheService = cacheService;
-    this.contentAnalyzer = new ContentAnalyzer();
-    this.compressionService = getContextCompressionService();
-    this.smartRetrieval = getSmartMemoryRetrieval();
-    this.dynamicSizing = getDynamicContextSizing();
-    this.qualityMonitoring = getContextQualityMonitoring();
     
     // Context optimization settings
     this.config = {
@@ -71,10 +61,11 @@ class HierarchicalContextManager {
         memoryImportance: options.memoryImportance || 0.5
       };
 
-      const dynamicSizing = this.dynamicSizing.calculateOptimalContextSize(sizingRequest);
-      const optimalTokens = Math.min(dynamicSizing.totalTokens, maxTokens);
+      // Simplified sizing - use 80% of max tokens for optimal performance
+      const optimalTokens = Math.min(Math.floor(maxTokens * 0.8), maxTokens);
+      const dynamicSizing = { efficiency: 0.8, strategy: 'simplified' };
 
-      console.log(`🎯 Dynamic sizing: ${optimalTokens} tokens (${dynamicSizing.strategy}, ${Math.round(dynamicSizing.efficiency * 100)}% efficiency)`);
+      console.log(`🎯 Simplified sizing: ${optimalTokens} tokens (simplified strategy, 80% efficiency)`);
 
       // Check for cached complete context first
       const cacheKey = this.generateContextCacheKey(userId, sessionId, optimalTokens, currentPrompt);
@@ -83,16 +74,8 @@ class HierarchicalContextManager {
       if (cachedContext) {
         const processingTime = Date.now() - startTime;
 
-        // Record quality metrics for cached context
-        this.qualityMonitoring.recordContextGeneration({
-          userId,
-          sessionId,
-          requestId,
-          contextResult: cachedContext,
-          processingTime,
-          cacheHit: true,
-          userTier: options.userTier || 'free'
-        });
+        // Simplified quality monitoring - just log the cache hit
+        console.log(`📊 Context cache hit for user ${userId}, session ${sessionId}`);
 
         console.log(`🎯 Using cached hierarchical context: ${cachedContext.totalTokens} tokens`);
         return {
@@ -135,16 +118,8 @@ class HierarchicalContextManager {
 
       const processingTime = Date.now() - startTime;
 
-      // Record quality metrics for new context
-      this.qualityMonitoring.recordContextGeneration({
-        userId,
-        sessionId,
-        requestId,
-        contextResult: optimizedContext,
-        processingTime,
-        cacheHit: false,
-        userTier: options.userTier || 'free'
-      });
+      // Simplified quality monitoring - just log the context generation
+      console.log(`📊 Generated new context for user ${userId}, session ${sessionId} in ${processingTime}ms`);
 
       console.log(`🏗️ Built hierarchical context: ${optimizedContext.totalTokens}/${optimalTokens} tokens (${Math.round(dynamicSizing.efficiency * 100)}% efficiency)`);
 
@@ -152,12 +127,8 @@ class HierarchicalContextManager {
     } catch (error) {
       const processingTime = Date.now() - startTime;
 
-      // Record error metrics
-      this.qualityMonitoring.recordSystemPerformance({
-        requestId,
-        totalProcessingTime: processingTime,
-        errorRate: 1.0
-      });
+      // Simplified error logging
+      console.error(`❌ Context generation failed for request ${requestId} after ${processingTime}ms`);
 
       console.error('❌ Failed to build hierarchical context:', error);
       return {
@@ -320,32 +291,17 @@ class HierarchicalContextManager {
     try {
       console.log(`🔍 Retrieving relevant memories for user ${userId}`);
 
-      // Use smart memory retrieval for enhanced filtering and ranking
-      const smartMemories = await this.smartRetrieval.retrieveSmartMemories({
+      // Use simplified memory retrieval - direct call to memory manager
+      console.log(`🔍 Using simplified memory retrieval for user ${userId}`);
+      const memories = await this.memoryManager.retrieveMemories({
         userId,
         sessionId,
-        currentPrompt,
         maxResults: 10,
-        memoryTypes: ['semantic', 'episodic', 'long_term', 'short_term'],
         minImportance: 0.3
       });
 
-      if (smartMemories.length > 0) {
-        console.log(`✅ Smart retrieval found ${smartMemories.length} relevant memories`);
-        console.log(`📊 Top memory reasons: ${smartMemories.slice(0, 3).map(m => m.retrievalReason).join(', ')}`);
-        return smartMemories;
-      }
-
-      // Fallback to traditional retrieval if smart retrieval fails
-      console.log('⚠️ Smart retrieval returned no results, using fallback');
-      const fallbackMemories = await this.memoryManager.retrieveMemories({
-        userId,
-        sessionId,
-        maxResults: 8,
-        minImportance: 0.4
-      });
-
-      return fallbackMemories;
+      console.log(`✅ Retrieved ${memories.length} relevant memories`);
+      return memories;
 
     } catch (error) {
       console.warn('⚠️ Failed to get relevant memories:', error.message);

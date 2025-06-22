@@ -31,6 +31,53 @@
  */
 
 /**
+ * @typedef {Object} ExerciseSet
+ * @property {number} setNumber - Set number (1, 2, 3, etc.)
+ * @property {number} reps - Number of repetitions completed
+ * @property {number} weight - Weight used (in kg or lbs)
+ * @property {number} duration - Duration in seconds (for time-based exercises)
+ * @property {number} distance - Distance covered (for cardio exercises)
+ * @property {string} restTime - Rest time after this set (e.g., "60s", "2min")
+ * @property {boolean} completed - Whether this set was completed
+ * @property {string} notes - Optional notes for this set
+ */
+
+/**
+ * @typedef {Object} CompletedExercise
+ * @property {string} name - Exercise name
+ * @property {string} type - Exercise type: 'strength', 'cardio', 'flexibility', 'balance'
+ * @property {string} muscleGroups - Primary muscle groups targeted
+ * @property {ExerciseSet[]} sets - Array of completed sets
+ * @property {number} totalReps - Total reps across all sets
+ * @property {number} totalWeight - Total weight lifted (sum of all sets)
+ * @property {number} totalDuration - Total exercise duration in seconds
+ * @property {boolean} completed - Whether the entire exercise was completed
+ * @property {string} difficulty - Perceived difficulty: 'too_easy', 'just_right', 'too_hard'
+ * @property {string} notes - Exercise-specific notes
+ */
+
+/**
+ * @typedef {Object} WorkoutCompletion
+ * @property {string} workoutId - Associated workout ID
+ * @property {string} userId - User identifier
+ * @property {boolean} completed - Whether workout was fully completed
+ * @property {number} completionPercentage - Percentage of workout completed (0-100)
+ * @property {number} actualDuration - Actual workout duration in minutes
+ * @property {Date} startedAt - When the workout was started
+ * @property {Date} completedAt - When the workout was finished
+ * @property {CompletedExercise[]} exercises - Detailed exercise completion data
+ * @property {number} rating - Overall workout rating (1-5)
+ * @property {string} difficulty - Overall perceived difficulty
+ * @property {number} enjoyment - Enjoyment rating (1-5)
+ * @property {number} energy - Energy level after workout (1-5)
+ * @property {string} notes - General workout notes
+ * @property {string[]} injuries - Any injuries that occurred
+ * @property {Object} environment - Workout environment details
+ * @property {Date} submittedAt - Completion data submission timestamp
+ * @property {string} correlationId - Request correlation ID
+ */
+
+/**
  * @typedef {Object} WorkoutFeedback
  * @property {string} workoutId - Associated workout ID
  * @property {string} userId - User identifier
@@ -76,9 +123,11 @@
  */
 const WORKOUT_COLLECTIONS = {
   WORKOUTS: 'workouts',
+  COMPLETIONS: 'workout_completions',
   FEEDBACK: 'workout_feedback',
   STATS: 'workout_stats',
-  EVOLUTION: 'workout_evolution'
+  EVOLUTION: 'workout_evolution',
+  HISTORY: 'workout_history'
 };
 
 /**

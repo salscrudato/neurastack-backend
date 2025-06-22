@@ -1,5 +1,3 @@
-const progressiveOverloadService = require('./progressiveOverloadService');
-const userAnalyticsService = require('./userAnalyticsService');
 const monitoringService = require('./monitoringService');
 
 /**
@@ -34,17 +32,13 @@ class WorkoutPersonalizationService {
    */
   async personalizeWorkout(userId, userMetadata, workoutType, workoutSpecification) {
     const correlationId = `personalization-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    try {
-      // Get progressive overload analysis
-      const progressiveOverload = await progressiveOverloadService.analyzeProgressiveOverload(
-        userId, 
-        userMetadata, 
-        workoutType
-      );
 
-      // Get comprehensive user analytics
-      const userAnalytics = await userAnalyticsService.processUserAnalytics(userId, userMetadata);
+    try {
+      // Create simplified user analytics from metadata
+      const userAnalytics = this.createSimpleUserAnalytics(userMetadata);
+
+      // Create simplified progressive overload analysis
+      const progressiveOverload = this.createSimpleProgressiveOverload(userMetadata, workoutType);
 
       // Generate personalized configuration
       const personalization = this.generatePersonalizedConfiguration(
@@ -505,8 +499,163 @@ class WorkoutPersonalizationService {
     };
   }
 
-  // Additional helper methods would be implemented here...
-  // (Implementing remaining calculation methods for brevity)
+  /**
+   * Create simplified user analytics from user metadata
+   * Replaces the removed userAnalyticsService functionality
+   */
+  createSimpleUserAnalytics(userMetadata) {
+    const fitnessLevel = userMetadata.fitnessLevel || 'beginner';
+    const age = userMetadata.age || 30;
+    const injuries = userMetadata.injuries || [];
+    const goals = userMetadata.goals || [];
+
+    return {
+      preferences: {
+        duration: { optimal: userMetadata.minutesPerSession || 30 },
+        workoutTypes: { top3: [userMetadata.workoutType || 'strength'] },
+        equipment: { mostUsed: userMetadata.equipment || [] }
+      },
+      performanceMetrics: {
+        duration: { consistency: 0.8 },
+        difficulty: {
+          distribution: {
+            percentages: { too_easy: 20, just_right: 60, too_hard: 20 }
+          }
+        },
+        completion: { totalRate: 0.85 }
+      },
+      riskAssessment: {
+        overtraining: { riskLevel: injuries.length > 2 ? 'medium' : 'low' },
+        injury: { riskLevel: injuries.length > 0 ? 'medium' : 'low' },
+        burnout: { riskLevel: 'low' },
+        plateau: { riskLevel: 'low' }
+      },
+      personalizationInsights: {
+        customization: {
+          workoutStructure: {
+            structure: 'balanced',
+            exerciseOrder: 'compound_first'
+          }
+        }
+      },
+      recommendations: {
+        shortTerm: {
+          recoveryNeeds: injuries.length > 0 ? 'high' : 'medium',
+          focusAreas: goals.slice(0, 2)
+        }
+      },
+      metadata: {
+        dataQuality: userMetadata.age && userMetadata.fitnessLevel ? 'medium' : 'low',
+        totalWorkouts: 0
+      }
+    };
+  }
+
+  /**
+   * Create simplified progressive overload analysis
+   * Replaces the removed progressiveOverloadService functionality
+   */
+  createSimpleProgressiveOverload(userMetadata, workoutType) {
+    const fitnessLevel = userMetadata.fitnessLevel || 'beginner';
+    const daysPerWeek = userMetadata.daysPerWeek || 3;
+
+    // Simple progression logic based on fitness level
+    const shouldProgress = fitnessLevel !== 'beginner';
+    const progressionRate = {
+      'beginner': 0.05,
+      'intermediate': 0.08,
+      'advanced': 0.10
+    }[fitnessLevel] || 0.05;
+
+    return {
+      recommendations: {
+        shouldProgress,
+        durationRecommendation: (userMetadata.minutesPerSession || 30) * (1 + (shouldProgress ? progressionRate : 0)),
+        intensityAdjustment: shouldProgress ? progressionRate : 0,
+        volumeAdjustment: shouldProgress ? progressionRate * 0.5 : 0
+      }
+    };
+  }
+
+  // Additional helper methods for calculations
+  calculateDurationConfidence(userAnalytics) {
+    return userAnalytics.metadata.dataQuality === 'high' ? 0.9 : 0.6;
+  }
+
+  calculateIntensityConfidence(userAnalytics) {
+    return userAnalytics.metadata.dataQuality === 'high' ? 0.8 : 0.5;
+  }
+
+  calculateVolumeConfidence(userAnalytics) {
+    return userAnalytics.metadata.dataQuality === 'high' ? 0.7 : 0.4;
+  }
+
+  generateInjuryModifications(injuries) {
+    return injuries.map(injury => ({
+      injury,
+      modifications: ['Avoid high impact', 'Focus on mobility', 'Use lighter weights']
+    }));
+  }
+
+  calculateVarietyLevel(userAnalytics) {
+    return userAnalytics.metadata.totalWorkouts > 10 ? 'high' : 'medium';
+  }
+
+  calculateComplexityLevel(userAnalytics) {
+    const fitnessLevel = userAnalytics.metadata.fitnessLevel || 'beginner';
+    return fitnessLevel === 'advanced' ? 'high' : fitnessLevel === 'intermediate' ? 'medium' : 'basic';
+  }
+
+  calculateOptimalWarmup(duration, userAnalytics) {
+    return Math.max(5, Math.min(10, duration * 0.15));
+  }
+
+  calculateOptimalCooldown(duration, userAnalytics) {
+    return Math.max(5, Math.min(10, duration * 0.1));
+  }
+
+  personalizeRestPeriods(userAnalytics) {
+    const fitnessLevel = userAnalytics.metadata.fitnessLevel || 'beginner';
+    const restMap = {
+      'beginner': '60-90 seconds',
+      'intermediate': '45-75 seconds',
+      'advanced': '30-60 seconds'
+    };
+    return restMap[fitnessLevel] || '60 seconds';
+  }
+
+  // Guidance generation methods
+  generateIntensityGuidance(intensity) {
+    return `Target intensity: ${Math.round(intensity.recommended * 100)}% of maximum effort. ${intensity.reasoning.join('. ')}.`;
+  }
+
+  generateVolumeGuidance(volume) {
+    return `Volume modifier: ${Math.round(volume.modifier * 100)}%. ${volume.reasoning.join('. ')}.`;
+  }
+
+  generateExerciseGuidance(exerciseSelection) {
+    return `Focus on ${exerciseSelection.focusAreas.join(', ')} with ${exerciseSelection.complexityLevel} complexity level.`;
+  }
+
+  generateStructureGuidance(structure) {
+    return `Warmup: ${structure.warmupDuration} minutes, Cooldown: ${structure.cooldownDuration} minutes, Rest: ${structure.restPeriods}.`;
+  }
+
+  generateProgressionGuidance(progression) {
+    return 'Focus on gradual progression with proper form and consistency.';
+  }
+
+  generateSafetyGuidance(safety) {
+    return 'Prioritize proper form, listen to your body, and stop if you feel pain.';
+  }
+
+  generateMotivationGuidance(motivation) {
+    return 'Stay consistent, celebrate small wins, and focus on how exercise makes you feel.';
+  }
+
+  generateUserContext(userAnalytics) {
+    return `User has ${userAnalytics.metadata.totalWorkouts} previous workouts with ${userAnalytics.metadata.dataQuality} data quality.`;
+  }
 }
 
 module.exports = new WorkoutPersonalizationService();

@@ -3,23 +3,40 @@
 # Neurastack Backend Deployment Verification Script
 # Tests all endpoints to ensure the deployment is working correctly
 
-BASE_URL="https://neurastack-backend-638289111765.us-central1.run.app"
+# Configuration - can be overridden with environment variables
+BASE_URL="${NEURASTACK_BASE_URL:-https://neurastack-backend-638289111765.us-central1.run.app}"
+LOCAL_URL="${NEURASTACK_LOCAL_URL:-http://localhost:8080}"
 TEST_USER_ID="deployment-test-user"
 TEST_SESSION_ID="deployment-test-session"
 
-echo "🚀 Verifying Neurastack Backend Deployment"
-echo "Base URL: $BASE_URL"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Test mode selection
+if [[ "$1" == "local" ]]; then
+    CURRENT_URL="$LOCAL_URL"
+    echo -e "${BLUE}🏠 Testing LOCAL Neurastack Backend${NC}"
+else
+    CURRENT_URL="$BASE_URL"
+    echo -e "${BLUE}🌐 Testing PRODUCTION Neurastack Backend${NC}"
+fi
+
+echo "Base URL: $CURRENT_URL"
 echo "=========================================="
 
 # Test 1: Basic Health Check
-echo "1. Testing basic health endpoint..."
-HEALTH_RESPONSE=$(curl -s -X GET "$BASE_URL/health")
+echo -e "${YELLOW}1. Testing basic health endpoint...${NC}"
+HEALTH_RESPONSE=$(curl -s -X GET "$CURRENT_URL/health")
 echo "Response: $HEALTH_RESPONSE"
 
 if echo "$HEALTH_RESPONSE" | grep -q "healthy"; then
-    echo "✅ Basic health check passed"
+    echo -e "${GREEN}✅ Basic health check passed${NC}"
 else
-    echo "❌ Basic health check failed"
+    echo -e "${RED}❌ Basic health check failed${NC}"
 fi
 echo ""
 

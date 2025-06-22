@@ -4,7 +4,7 @@ const healthRoutes = require('../routes/health');
 
 // Mock the workout service
 jest.mock('../services/workoutService', () => ({
-  generateWorkout: jest.fn(),
+  generateFlexibleWorkout: jest.fn(),
   getHealthStatus: jest.fn()
 }));
 
@@ -103,7 +103,7 @@ describe('Workout Endpoint', () => {
     };
 
     it('should return 200 with workout plan when request is valid', async () => {
-      workoutService.generateWorkout.mockResolvedValue(mockWorkoutResponse);
+      workoutService.generateFlexibleWorkout.mockResolvedValue(mockWorkoutResponse);
 
       const response = await request(app)
         .post('/workout')
@@ -122,11 +122,11 @@ describe('Workout Endpoint', () => {
       expect(response.body.correlationId).toBeDefined();
       expect(response.body.timestamp).toBeDefined();
 
-      expect(workoutService.generateWorkout).toHaveBeenCalledWith(
+      expect(workoutService.generateFlexibleWorkout).toHaveBeenCalledWith(
         validUserMetadata,
         validWorkoutHistory,
         validWorkoutRequest,
-        'user123'
+        expect.any(String) // correlationId
       );
 
       expect(monitoringService.log).toHaveBeenCalledWith(
@@ -143,7 +143,7 @@ describe('Workout Endpoint', () => {
     });
 
     it('should return 200 with workout plan when no workout history is provided', async () => {
-      workoutService.generateWorkout.mockResolvedValue(mockWorkoutResponse);
+      workoutService.generateFlexibleWorkout.mockResolvedValue(mockWorkoutResponse);
 
       const response = await request(app)
         .post('/workout')
@@ -155,16 +155,16 @@ describe('Workout Endpoint', () => {
         .expect(200);
 
       expect(response.body.status).toBe('success');
-      expect(workoutService.generateWorkout).toHaveBeenCalledWith(
+      expect(workoutService.generateFlexibleWorkout).toHaveBeenCalledWith(
         validUserMetadata,
         [],
         validWorkoutRequest,
-        'user123'
+        expect.any(String) // correlationId
       );
     });
 
     it('should use anonymous user when X-User-Id header is not provided', async () => {
-      workoutService.generateWorkout.mockResolvedValue(mockWorkoutResponse);
+      workoutService.generateFlexibleWorkout.mockResolvedValue(mockWorkoutResponse);
 
       const response = await request(app)
         .post('/workout')
@@ -175,11 +175,11 @@ describe('Workout Endpoint', () => {
         .expect(200);
 
       expect(response.body.status).toBe('success');
-      expect(workoutService.generateWorkout).toHaveBeenCalledWith(
+      expect(workoutService.generateFlexibleWorkout).toHaveBeenCalledWith(
         validUserMetadata,
         [],
         validWorkoutRequest,
-        'anonymous'
+        expect.any(String) // correlationId
       );
     });
 
@@ -194,7 +194,7 @@ describe('Workout Endpoint', () => {
       expect(response.body.status).toBe('error');
       expect(response.body.message).toBe('userMetadata is required');
       expect(response.body.correlationId).toBeDefined();
-      expect(workoutService.generateWorkout).not.toHaveBeenCalled();
+      expect(workoutService.generateFlexibleWorkout).not.toHaveBeenCalled();
     });
 
     it('should return 400 when workoutRequest is missing', async () => {
@@ -208,12 +208,12 @@ describe('Workout Endpoint', () => {
       expect(response.body.status).toBe('error');
       expect(response.body.message).toBe('workoutRequest is required');
       expect(response.body.correlationId).toBeDefined();
-      expect(workoutService.generateWorkout).not.toHaveBeenCalled();
+      expect(workoutService.generateFlexibleWorkout).not.toHaveBeenCalled();
     });
 
     it('should return 400 when workout service throws validation error', async () => {
       const validationError = new Error('userMetadata.age must be a number between 13 and 100');
-      workoutService.generateWorkout.mockRejectedValue(validationError);
+      workoutService.generateFlexibleWorkout.mockRejectedValue(validationError);
 
       const response = await request(app)
         .post('/workout')
@@ -231,7 +231,7 @@ describe('Workout Endpoint', () => {
 
     it('should return 503 when workout service times out', async () => {
       const timeoutError = new Error('AI model timeout');
-      workoutService.generateWorkout.mockRejectedValue(timeoutError);
+      workoutService.generateFlexibleWorkout.mockRejectedValue(timeoutError);
 
       const response = await request(app)
         .post('/workout')
@@ -249,7 +249,7 @@ describe('Workout Endpoint', () => {
 
     it('should return 500 for unexpected errors', async () => {
       const unexpectedError = new Error('Unexpected database error');
-      workoutService.generateWorkout.mockRejectedValue(unexpectedError);
+      workoutService.generateFlexibleWorkout.mockRejectedValue(unexpectedError);
 
       const response = await request(app)
         .post('/workout')

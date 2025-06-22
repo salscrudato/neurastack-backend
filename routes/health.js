@@ -523,24 +523,30 @@ router.post('/workout', async (req, res) => {
     const userId = req.headers['x-user-id'] || req.userId || 'anonymous';
     const userTier = req.userTier || 'free';
 
-    // Check advanced rate limiting for workout generation
-    const rateLimitCheck = await advancedRateLimitingService.checkComprehensiveRateLimit(
-      userId, userTier, 'workout'
-    );
-
-    if (!rateLimitCheck.allowed) {
-      return res.status(429).json({
-        status: 'error',
-        error: 'Rate limit exceeded',
-        message: `${rateLimitCheck.reason === 'rate_limit' ? 'Regular rate limit' : 'Burst limit'} exceeded for workout generation`,
-        rateLimitInfo: {
-          regular: rateLimitCheck.regular,
-          burst: rateLimitCheck.burst
-        },
-        retryAfter: Math.ceil((rateLimitCheck.regular.resetTime - Date.now()) / 1000),
-        correlationId,
-        timestamp: new Date().toISOString()
-      });
+    // Check rate limits for workout generation
+    if (userTier === 'free') {
+      try {
+        const rateLimitResult = securityMiddleware.checkRateLimit(userId, 'workout');
+        if (!rateLimitResult.allowed) {
+          return res.status(429).json({
+            status: 'error',
+            message: 'Rate limit exceeded',
+            details: rateLimitResult.message,
+            retryAfter: rateLimitResult.retryAfter || 60,
+            timestamp: new Date().toISOString(),
+            correlationId
+          });
+        }
+      } catch (rateLimitError) {
+        return res.status(429).json({
+          status: 'error',
+          message: 'Rate limit exceeded',
+          details: rateLimitError.message,
+          retryAfter: rateLimitError.retryAfter || 60,
+          timestamp: new Date().toISOString(),
+          correlationId
+        });
+      }
     }
 
     // Log request start with enhanced format detection
@@ -572,13 +578,12 @@ router.post('/workout', async (req, res) => {
       });
     }
 
-    // Generate workout using the workout service with enhanced format support
-    const result = await workoutService.generateWorkout(
+    // Generate workout using the flexible workout service
+    const result = await workoutService.generateFlexibleWorkout(
       userMetadata,
       workoutHistory || [],
       workoutRequest,
-      userId,
-      workoutSpecification
+      correlationId
     );
 
     // Add correlation ID to response

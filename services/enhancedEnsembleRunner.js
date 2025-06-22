@@ -1,40 +1,63 @@
-const ensembleConfig = require('../config/ensemblePrompts');
-const { models, systemPrompts, limits, meta } = ensembleConfig;
-const clients = require('./vendorClients');
-const { getMemoryManager } = require('./memoryManager');
-const { v4: generateUUID } = require('uuid');
-const cacheService = require('./cacheService');
-const costMonitoringService = require('./costMonitoringService');
-const { getHierarchicalContextManager } = require('./hierarchicalContextManager');
-
 /**
- * Enhanced Ensemble Runner with improved concurrency, error handling, and monitoring
+ * Enhanced Ensemble Runner - The Brain of NeuraStack
+ *
+ * This service is like having multiple AI experts work together on your question.
+ * Instead of asking just one AI model, we ask several different ones and then
+ * combine their answers to give you the best possible response.
+ *
+ * Think of it like getting a second opinion from multiple doctors - each AI model
+ * has different strengths, and by combining them, we get better, more reliable answers.
+ *
+ * What this does:
+ * - Sends your question to multiple AI models (GPT, Claude, Gemini, etc.)
+ * - Remembers your past conversations to give better context
+ * - Combines all the AI responses into one comprehensive answer
+ * - Tracks costs and performance to keep the service running efficiently
+ * - Handles errors gracefully when individual AI models fail
+ */
+
+const ensembleConfig = require('../config/ensemblePrompts'); // Configuration for AI models and prompts
+const { models, systemPrompts, limits, meta } = ensembleConfig; // Extract specific config parts
+const clients = require('./vendorClients'); // Connects to different AI providers (OpenAI, Anthropic, etc.)
+const { getMemoryManager } = require('./memoryManager'); // Manages conversation memory
+const { v4: generateUUID } = require('uuid'); // Creates unique IDs for tracking requests
+const cacheService = require('./cacheService'); // Stores responses for faster retrieval
+const costMonitoringService = require('./costMonitoringService'); // Monitors API costs
+const { getHierarchicalContextManager } = require('./hierarchicalContextManager'); // Organizes context for AI
+/**
+ * Enhanced Ensemble Runner Class
+ * This is the main class that coordinates multiple AI models to work together
  */
 class EnhancedEnsembleRunner {
   constructor() {
+    // Initialize the memory manager (handles conversation history)
     this.memoryManager = null;
+
+    // Queue system for managing multiple requests
     this.requestQueue = [];
     this.activeRequests = new Map();
+
+    // Performance tracking - keeps track of how well the system is performing
     this.metrics = {
-      totalRequests: 0,
-      successfulRequests: 0,
-      failedRequests: 0,
-      averageProcessingTime: 0,
-      concurrentRequests: 0,
-      maxConcurrentRequests: 0
+      totalRequests: 0, // How many requests we've processed
+      successfulRequests: 0, // How many worked correctly
+      failedRequests: 0, // How many had errors
+      averageProcessingTime: 0, // How long requests typically take
+      concurrentRequests: 0, // How many are running right now
+      maxConcurrentRequests: 0 // The most we've handled at once
     };
-    
-    // Configuration based on tier
+
+    // Configuration settings - these control how the system behaves
     this.config = {
-      maxConcurrentRequests: meta.tier === 'free' ? 5 : 10,
-      timeoutMs: limits.timeoutMs || 15000,
-      retryAttempts: meta.tier === 'free' ? 1 : 2,
-      retryDelayMs: 1000,
-      memoryContextTokens: Math.floor(limits.maxTokensPerRole * 0.6) || 1500,
-      synthesisMaxTokens: limits.maxSynthesisTokens || 400,
-      maxPromptLength: limits.maxPromptLength || 5000,
-      requestsPerHour: limits.requestsPerHour || 100,
-      requestsPerDay: limits.requestsPerDay || 1000
+      maxConcurrentRequests: meta.tier === 'free' ? 5 : 10, // Free users get fewer simultaneous requests
+      timeoutMs: limits.timeoutMs || 15000, // How long to wait before giving up (15 seconds)
+      retryAttempts: meta.tier === 'free' ? 1 : 2, // How many times to retry failed requests
+      retryDelayMs: 1000, // How long to wait between retries (1 second)
+      memoryContextTokens: Math.floor(limits.maxTokensPerRole * 0.6) || 1500, // How much conversation history to include
+      synthesisMaxTokens: limits.maxSynthesisTokens || 400, // Maximum length for the final combined answer
+      maxPromptLength: limits.maxPromptLength || 5000, // Maximum length for user questions
+      requestsPerHour: limits.requestsPerHour || 100, // Rate limiting - requests per hour
+      requestsPerDay: limits.requestsPerDay || 1000 // Rate limiting - requests per day
     };
 
     // Usage tracking for rate limiting

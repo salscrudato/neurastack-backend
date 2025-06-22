@@ -105,6 +105,48 @@ class WorkoutHistoryService {
   }
 
   /**
+   * Store detailed workout completion data
+   * @param {Object} completionRecord - Detailed completion record
+   * @returns {Promise<void>}
+   */
+  async storeWorkoutCompletion(completionRecord) {
+    try {
+      const completionId = `${completionRecord.workoutId}_completion`;
+
+      if (this.isFirestoreAvailable) {
+        try {
+          await this.firestore
+            .collection(WORKOUT_COLLECTIONS.COMPLETIONS)
+            .doc(completionId)
+            .set(completionRecord);
+
+          monitoringService.log('info', 'Workout completion stored successfully', {
+            workoutId: completionRecord.workoutId,
+            userId: completionRecord.userId,
+            completed: completionRecord.completed,
+            exerciseCount: completionRecord.exercises.length
+          });
+        } catch (error) {
+          console.warn('⚠️ Failed to store completion in Firestore, using local cache:', error.message);
+          this.isFirestoreAvailable = false;
+          this.localCache.set(`completion_${completionId}`, completionRecord);
+        }
+      } else {
+        this.localCache.set(`completion_${completionId}`, completionRecord);
+      }
+
+      // Update user stats after completion
+      await this.updateUserStats(completionRecord.userId);
+    } catch (error) {
+      monitoringService.log('error', 'Failed to store workout completion', {
+        error: error.message,
+        workoutId: completionRecord.workoutId
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Store workout feedback
    * @param {Object} feedbackRecord - Feedback record
    * @returns {Promise<void>}
@@ -112,14 +154,14 @@ class WorkoutHistoryService {
   async storeFeedback(feedbackRecord) {
     try {
       const feedbackId = `${feedbackRecord.workoutId}_feedback`;
-      
+
       if (this.isFirestoreAvailable) {
         try {
           await this.firestore
             .collection(WORKOUT_COLLECTIONS.FEEDBACK)
             .doc(feedbackId)
             .set(feedbackRecord);
-          
+
           monitoringService.log('info', 'Workout feedback stored successfully', {
             workoutId: feedbackRecord.workoutId,
             userId: feedbackRecord.userId,
@@ -447,6 +489,115 @@ class WorkoutHistoryService {
       longestStreak: 0,
       lastUpdated: new Date()
     };
+  }
+
+  /**
+   * Get enhanced workout history with completion data
+   * @param {string} userId - User ID
+   * @param {number} limit - Number of workouts to retrieve
+   * @param {boolean} includeDetails - Include detailed exercise data
+   * @param {boolean} includeIncomplete - Include incomplete workouts
+   * @returns {Promise<Array>} - Array of enhanced workout records
+   */
+  async getEnhancedWorkoutHistory(userId, limit = 20, includeDetails = false, includeIncomplete = false) {
+    try {
+      // Get basic workout history
+      const workouts = await this.getUserWorkoutHistory(userId, limit, includeIncomplete);
+
+      // Enhance workouts with completion data if requested
+      if (includeDetails) {
+        for (let workout of workouts) {
+          const completionData = await this.getWorkoutCompletion(workout.workoutId);
+          if (completionData) {
+            workout.completion = completionData;
+          }
+        }
+      }
+
+      // Format workouts for frontend consumption
+      return workouts.map(workout => this.formatWorkoutForHistory(workout, includeDetails));
+
+    } catch (error) {
+      monitoringService.log('error', 'Failed to retrieve enhanced workout history', {
+        error: error.message,
+        userId
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Get workout completion data
+   * @param {string} workoutId - Workout ID
+   * @returns {Promise<Object|null>} - Completion data
+   */
+  async getWorkoutCompletion(workoutId) {
+    try {
+      const completionId = `${workoutId}_completion`;
+
+      if (this.isFirestoreAvailable) {
+        try {
+          const doc = await this.firestore
+            .collection(WORKOUT_COLLECTIONS.COMPLETIONS)
+            .doc(completionId)
+            .get();
+
+          return doc.exists ? doc.data() : null;
+        } catch (error) {
+          console.warn('⚠️ Failed to retrieve completion from Firestore, checking local cache:', error.message);
+          this.isFirestoreAvailable = false;
+          return this.localCache.get(`completion_${completionId}`) || null;
+        }
+      } else {
+        return this.localCache.get(`completion_${completionId}`) || null;
+      }
+    } catch (error) {
+      monitoringService.log('warn', 'Failed to retrieve workout completion', {
+        error: error.message,
+        workoutId
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Format workout data for history display
+   * @param {Object} workout - Raw workout data
+   * @param {boolean} includeDetails - Include detailed exercise data
+   * @returns {Object} - Formatted workout data
+   */
+  formatWorkoutForHistory(workout, includeDetails = false) {
+    const formatted = {
+      workoutId: workout.workoutId,
+      date: workout.createdAt,
+      status: workout.status,
+      type: workout.parameters?.workoutType || 'Unknown',
+      duration: workout.workout?.duration || 0,
+      exercises: workout.workout?.exercises?.map(ex => ({
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        type: ex.type
+      })) || [],
+      rating: workout.feedback?.feedback?.rating || null,
+      difficulty: workout.feedback?.feedback?.difficulty || null,
+      completed: workout.status === 'completed'
+    };
+
+    // Add detailed completion data if available and requested
+    if (includeDetails && workout.completion) {
+      formatted.completionDetails = {
+        actualDuration: workout.completion.actualDuration,
+        completionPercentage: workout.completion.completionPercentage,
+        exerciseDetails: workout.completion.exercises,
+        enjoyment: workout.completion.enjoyment,
+        energy: workout.completion.energy,
+        notes: workout.completion.notes,
+        injuries: workout.completion.injuries
+      };
+    }
+
+    return formatted;
   }
 }
 
