@@ -104,40 +104,334 @@ X-Correlation-ID: string (optional)
 }
 ```
 
-### 2. Complete Workout
-**Endpoint:** `POST /api/workout/complete`
+### 2. Complete Workout (Optimized)
+**Endpoint:** `POST /api/workout/workout-completion`
 
-**Request Body:**
+**Headers:**
+```
+Content-Type: application/json
+X-User-Id: string (required)
+X-Correlation-ID: string (optional)
+```
+
+**Request Body Structure:**
 ```json
 {
   "workoutId": "string",           // Required: from generate response
   "completed": boolean,            // Required: true/false
-  "completionPercentage": number,  // Optional: 0-100
-  "actualDuration": number,        // Optional: minutes
-  "rating": number,                // Optional: 1-5
-  "difficulty": string,            // Optional: "too_easy", "just_right", "too_hard"
-  "enjoyment": number,             // Optional: 1-5
-  "energy": string,                // Optional: "low", "medium", "high"
-  "notes": string,                 // Optional: free-form feedback
-  "exercises": [                   // Optional: per-exercise feedback
+  "completionPercentage": number,  // Optional: 0-100 (auto-calculated if not provided)
+  "actualDuration": number,        // Optional: actual workout duration in minutes
+  "startedAt": "ISO string",       // Optional: when workout was started
+  "completedAt": "ISO string",     // Optional: when workout was finished
+  "exercises": [                   // Required: detailed exercise completion data
     {
-      "name": "string",
-      "completed": boolean,
-      "actualSets": number,
-      "actualReps": string,
-      "notes": string
+      "name": "Dumbbell Shoulder Press",
+      "type": "strength",           // Optional: exercise type
+      "muscleGroups": "shoulders",  // Optional: target muscle groups
+      "completed": true,            // Required: whether exercise was completed
+      "difficulty": "just_right",   // Optional: "too_easy", "just_right", "too_hard"
+      "notes": "Felt great!",       // Optional: exercise-specific notes
+      "sets": [                     // Required: detailed set tracking
+        {
+          "reps": 12,               // Required: actual reps completed
+          "weight": 25,             // Required: weight used (0 for bodyweight)
+          "duration": 0,            // Optional: duration for time-based exercises
+          "distance": 0,            // Optional: distance for cardio exercises
+          "restTime": "60s",        // Optional: rest time after set
+          "completed": true,        // Required: whether set was completed
+          "notes": "",              // Optional: set-specific notes
+          "targetReps": 12,         // Optional: target reps for comparison
+          "targetWeight": 25        // Optional: target weight for comparison
+        }
+      ],
+      "targetSets": 3,              // Optional: planned number of sets
+      "targetReps": 12              // Optional: planned reps per set
     }
-  ]
+  ],
+  "feedback": {                     // Optional: overall workout feedback
+    "rating": 4,                    // Optional: 1-5 overall rating
+    "difficulty": "just_right",     // Optional: overall difficulty perception
+    "enjoyment": 4,                 // Optional: 1-5 enjoyment rating
+    "energy": 3,                    // Optional: 1-5 energy level after workout
+    "notes": "Great workout!",      // Optional: general feedback notes
+    "injuries": [],                 // Optional: any injuries that occurred
+    "environment": {                // Optional: workout environment details
+      "location": "home",
+      "temperature": "comfortable"
+    },
+    "wouldRecommend": true          // Optional: would recommend this workout
+  }
+}
+```
+
+**Response Structure:**
+```json
+{
+  "status": "success",
+  "message": "Workout completion processed successfully",
+  "data": {
+    "workoutId": "workout-123",
+    "completed": true,
+    "completionPercentage": 95,
+    "exercisesTracked": 6,
+    "completedExercises": 5,
+    "skippedExercises": 1,
+    "totalWeight": 1250,            // Total weight lifted across all exercises
+    "totalReps": 84,                // Total reps completed
+    "actualDuration": 45,           // Actual workout duration
+    "processed": true,
+    "nextRecommendations": {        // AI-generated recommendations for next workout
+      "restDays": 1,
+      "focusAreas": ["Similar workout style recommended"],
+      "adjustments": ["Ready for increased intensity"],
+      "progressionSuggestions": ["Increase weight by 5-10%"]
+    }
+  },
+  "correlationId": "completion-abc123",
+  "timestamp": "2025-06-22T14:29:52.091Z"
 }
 ```
 
 ### 3. Get Workout History
-**Endpoint:** `GET /api/workout/history`
+**Endpoint:** `GET /api/workout/workout-history`
+
+**Headers:**
+```
+X-User-Id: string (required)
+```
 
 **Query Parameters:**
-- `limit`: number (default: 20)
-- `includeDetails`: boolean (default: false)
-- `includeIncomplete`: boolean (default: false)
+- `limit`: number (default: 20) - Number of workouts to retrieve
+- `includeDetails`: boolean (default: false) - Include detailed exercise completion data
+- `includeIncomplete`: boolean (default: false) - Include incomplete/skipped workouts
+
+**Response Structure:**
+```json
+{
+  "status": "success",
+  "data": {
+    "workouts": [
+      {
+        "workoutId": "workout-123",
+        "date": "2025-06-22T14:29:52.091Z",
+        "status": "completed",
+        "type": "upper_body",
+        "duration": 45,
+        "exercises": [
+          {
+            "name": "Dumbbell Shoulder Press",
+            "sets": 3,
+            "reps": "12",
+            "type": "strength"
+          }
+        ],
+        "rating": 4,
+        "difficulty": "just_right",
+        "completed": true,
+        "completion": {              // Only included if includeDetails=true
+          "completionPercentage": 95,
+          "exercisesTracked": 6,
+          "totalWeight": 1250,
+          "totalReps": 84,
+          "analytics": {
+            "averageSetCompletion": 0.92
+          }
+        }
+      }
+    ],
+    "stats": {
+      "totalWorkouts": 15,
+      "completedWorkouts": 12,
+      "completionRate": 80,
+      "averageRating": 4.2,
+      "averageDuration": 42,
+      "currentStreak": 3,
+      "longestStreak": 7,
+      "lastWorkout": "2025-06-22T14:29:52.091Z",
+      "preferredWorkoutTypes": {
+        "upper_body": 5,
+        "full_body": 4,
+        "cardio": 3
+      },
+      "goalProgress": {
+        "strength": 75,
+        "endurance": 60
+      }
+    },
+    "metadata": {
+      "totalRecords": 15,
+      "includeDetails": false,
+      "includeIncomplete": false,
+      "generatedAt": "2025-06-22T14:29:52.091Z"
+    }
+  },
+  "correlationId": "history-abc123",
+  "timestamp": "2025-06-22T14:29:52.091Z"
+}
+```
+
+## Enhanced Workout Completion Integration
+
+### 1. Frontend Data Collection Flow
+Based on your UI screens, here's the optimal integration approach:
+
+**During Workout Execution:**
+```javascript
+// Track exercise completion in real-time
+const workoutSession = {
+  workoutId: generatedWorkout.workoutId,
+  startedAt: new Date().toISOString(),
+  exercises: generatedWorkout.exercises.map(exercise => ({
+    name: exercise.name,
+    type: exercise.category || 'strength',
+    muscleGroups: exercise.targetMuscles?.join(', ') || '',
+    completed: false,
+    sets: exercise.sets ? Array(exercise.sets).fill(null).map((_, index) => ({
+      reps: 0,
+      weight: 0,
+      completed: false,
+      targetReps: parseInt(exercise.reps) || 12,
+      targetWeight: 0 // User will input during workout
+    })) : []
+  }))
+};
+
+// Update as user completes each set
+function completeSet(exerciseIndex, setIndex, reps, weight) {
+  workoutSession.exercises[exerciseIndex].sets[setIndex] = {
+    ...workoutSession.exercises[exerciseIndex].sets[setIndex],
+    reps: parseInt(reps),
+    weight: parseFloat(weight),
+    completed: true
+  };
+
+  // Check if exercise is complete
+  const exercise = workoutSession.exercises[exerciseIndex];
+  const completedSets = exercise.sets.filter(set => set.completed).length;
+  exercise.completed = completedSets >= exercise.sets.length * 0.7; // 70% completion threshold
+}
+```
+
+**Workout Completion Screen Integration:**
+```javascript
+// Calculate completion metrics for UI display
+function calculateWorkoutMetrics(workoutSession) {
+  const totalExercises = workoutSession.exercises.length;
+  const completedExercises = workoutSession.exercises.filter(ex => ex.completed).length;
+  const completionPercentage = Math.round((completedExercises / totalExercises) * 100);
+
+  return {
+    totalExercises,
+    completedExercises,
+    completionPercentage,
+    duration: Math.round((new Date() - new Date(workoutSession.startedAt)) / 60000) // minutes
+  };
+}
+
+// Prepare completion data for API
+function prepareCompletionData(workoutSession, userFeedback) {
+  const metrics = calculateWorkoutMetrics(workoutSession);
+
+  return {
+    workoutId: workoutSession.workoutId,
+    completed: metrics.completionPercentage >= 50, // Consider 50%+ as completed
+    completionPercentage: metrics.completionPercentage,
+    actualDuration: metrics.duration,
+    startedAt: workoutSession.startedAt,
+    completedAt: new Date().toISOString(),
+    exercises: workoutSession.exercises,
+    feedback: {
+      rating: userFeedback.rating,           // From 5-star rating
+      difficulty: userFeedback.difficulty,   // From "Easy/Perfect/Hard" buttons
+      enjoyment: userFeedback.enjoyment,     // Optional additional rating
+      energy: userFeedback.energy,           // Optional energy level
+      notes: userFeedback.notes,             // From feedback text area
+      wouldRecommend: userFeedback.rating >= 4
+    }
+  };
+}
+```
+
+### 2. UI Integration Examples
+
+**Progress Tracking (During Workout):**
+```javascript
+// Update progress bar and exercise counter
+function updateWorkoutProgress(workoutSession) {
+  const metrics = calculateWorkoutMetrics(workoutSession);
+
+  // Update progress bar
+  document.getElementById('progress-bar').style.width = `${metrics.completionPercentage}%`;
+
+  // Update exercise counter
+  document.getElementById('exercise-counter').textContent =
+    `${metrics.completedExercises} of ${metrics.totalExercises} exercises • ${metrics.completionPercentage}% complete`;
+
+  // Update duration display
+  document.getElementById('duration').textContent = `${metrics.duration} minutes`;
+}
+```
+
+**Completion Screen Data Binding:**
+```javascript
+// Populate completion screen with workout data
+function showCompletionScreen(workoutSession) {
+  const metrics = calculateWorkoutMetrics(workoutSession);
+
+  // Main completion stats
+  document.getElementById('completion-percentage').textContent = `${metrics.completionPercentage}%`;
+  document.getElementById('exercise-count').textContent =
+    `${metrics.completedExercises} of ${metrics.totalExercises} exercises`;
+  document.getElementById('duration').textContent = `${metrics.duration} minutes`;
+
+  // Pre-select completion status
+  const completionStatus = metrics.completionPercentage >= 50 ? 'completed' : 'partial';
+  document.querySelector(`[data-completion="${completionStatus}"]`).classList.add('selected');
+}
+```
+
+### 3. API Integration
+
+**Submit Completion Data:**
+```javascript
+async function submitWorkoutCompletion(workoutSession, userFeedback) {
+  const completionData = prepareCompletionData(workoutSession, userFeedback);
+
+  try {
+    const response = await fetch('/api/workout/workout-completion', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId,
+        'X-Correlation-ID': generateCorrelationId()
+      },
+      body: JSON.stringify(completionData)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    // Handle success - show next workout recommendations
+    if (result.data.nextRecommendations) {
+      showNextWorkoutRecommendations(result.data.nextRecommendations);
+    }
+
+    // Update local storage or state
+    updateUserStats(result.data);
+
+    return result;
+
+  } catch (error) {
+    console.error('Failed to submit workout completion:', error);
+    // Store locally for retry later
+    storeCompletionForRetry(completionData);
+    throw error;
+  }
+}
+```
 
 ## Frontend Integration Best Practices
 

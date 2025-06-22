@@ -3,6 +3,8 @@
 # Firebase credentials
 firebase-admin-key.json
 *-firebase-adminsdk-*.json
+config/firebase-service-account.json
+serviceAccountKey.json
 
 # Node modules
 node_modules/

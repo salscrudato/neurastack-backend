@@ -245,6 +245,54 @@ class WorkoutHistoryService {
   }
 
   /**
+   * Get a specific workout by ID and user
+   * @param {string} workoutId - Workout ID
+   * @param {string} userId - User ID (for security)
+   * @returns {Promise<Object|null>} - Workout record or null if not found
+   */
+  async getWorkoutById(workoutId, userId) {
+    try {
+      if (this.isFirestoreAvailable) {
+        try {
+          const doc = await this.firestore
+            .collection(WORKOUT_COLLECTIONS.WORKOUTS)
+            .doc(workoutId)
+            .get();
+
+          if (doc.exists) {
+            const workout = doc.data();
+            // Verify the workout belongs to the user
+            if (workout.userId === userId) {
+              return { id: doc.id, ...workout };
+            }
+          }
+          return null;
+        } catch (error) {
+          console.warn('⚠️ Failed to retrieve workout from Firestore, checking local cache:', error.message);
+          this.isFirestoreAvailable = false;
+
+          // Check local cache
+          const cacheKey = `workout_${workoutId}`;
+          const workout = this.localCache.get(cacheKey);
+          return (workout && workout.userId === userId) ? workout : null;
+        }
+      } else {
+        // Check local cache
+        const cacheKey = `workout_${workoutId}`;
+        const workout = this.localCache.get(cacheKey);
+        return (workout && workout.userId === userId) ? workout : null;
+      }
+    } catch (error) {
+      monitoringService.log('error', 'Failed to retrieve workout by ID', {
+        error: error.message,
+        workoutId,
+        userId
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get user's workout history
    * @param {string} userId - User ID
    * @param {number} limit - Number of workouts to retrieve

@@ -24,46 +24,57 @@ require('dotenv').config(); // Loads environment variables from .env file
 try {
   let firebaseConfig;
 
-  // Try to use Firebase Admin SDK service account first (recommended for Firestore)
+  // Try to use standardized Firebase service account first (recommended)
   try {
-    const serviceAccount = require('./firebase-admin-key.json');
+    const serviceAccount = require('./config/firebase-service-account.json');
     firebaseConfig = {
       credential: admin.credential.cert(serviceAccount),
       projectId: 'neurastack-backend', // Our project name in Google Cloud
       storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
     };
-    console.log('🔑 Using Firebase Admin SDK credentials');
-  } catch (adminKeyError) {
-    // Fallback to original service account file (for local development on your computer)
+    console.log('🔑 Using standardized Firebase service account credentials');
+  } catch (standardError) {
+    // Fallback to legacy Firebase Admin SDK key
     try {
-      const serviceAccount = require('./serviceAccountKey.json');
+      const serviceAccount = require('./firebase-admin-key.json');
       firebaseConfig = {
         credential: admin.credential.cert(serviceAccount),
         projectId: 'neurastack-backend', // Our project name in Google Cloud
         storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
       };
-      console.log('🔑 Using storage service account credentials');
-    } catch (serviceAccountError) {
-      // Fallback to environment variables (for production deployment on servers)
-      if (process.env.FIREBASE_PROJECT_ID) {
+      console.log('🔑 Using legacy Firebase Admin SDK credentials');
+    } catch (adminKeyError) {
+      // Fallback to original service account file (for local development on your computer)
+      try {
+        const serviceAccount = require('./serviceAccountKey.json');
         firebaseConfig = {
-          projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
-          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
+          credential: admin.credential.cert(serviceAccount),
+          projectId: 'neurastack-backend', // Our project name in Google Cloud
+          storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
         };
+        console.log('🔑 Using storage service account credentials');
+      } catch (serviceAccountError) {
+        // Fallback to environment variables (for production deployment on servers)
+        if (process.env.FIREBASE_PROJECT_ID) {
+          firebaseConfig = {
+            projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
+          };
 
-        // Use service account from environment if available
-        if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-          firebaseConfig.credential = admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-          });
-          console.log('🔑 Using environment variable credentials');
+          // Use service account from environment if available
+          if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+            firebaseConfig.credential = admin.credential.cert({
+              projectId: process.env.FIREBASE_PROJECT_ID,
+              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+              privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            });
+            console.log('🔑 Using environment variable credentials');
+          } else {
+            console.log('🔑 Using default application credentials');
+          }
         } else {
-          console.log('🔑 Using default application credentials');
+          throw new Error('No Firebase configuration found');
         }
-      } else {
-        throw new Error('No Firebase configuration found');
       }
     }
   }

@@ -6,24 +6,33 @@ process.env.NODE_ENV = 'test';
 
 // Initialize Firebase Admin for testing
 const admin = require('firebase-admin');
+const path = require('path');
 
 if (!admin.apps.length) {
-  // Use a mock service account for testing
-  const mockServiceAccount = {
-    type: "service_account",
-    project_id: "test-project",
-    private_key_id: "test-key-id",
-    private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKB\nxhXBaaxLQO/Q6PKjYIYlvA4E0yyHuKjEHxpOi2lOPVX9AjgmXvqg5aNdqeM2VgL\n7YudBih7XpSUjjjXWmnLGlHHGXHc5VYM6Ch8Iv6Rt6uEXEGz6QGBaebgBFcnyqQn\nBoFiaNbcqLEVBY/Hq1dmaJVqw5s4YgEQDRwQuwqyonHaM83HWrAVhfNDbBMxUBtQ\nKVD43TxCVidwDroEd21VBcAqhpGw6rKin2qSw8/dLl6qiXFjyH7FqHgiVelFHgpI\nkfLawoqQZ+0=\n-----END PRIVATE KEY-----\n",
-    client_email: "test@test-project.iam.gserviceaccount.com",
-    client_id: "123456789",
-    auth_uri: "https://accounts.google.com/o/oauth2/auth",
-    token_uri: "https://oauth2.googleapis.com/token"
-  };
+  try {
+    // Use real Firebase service account for testing
+    const serviceAccountPath = path.join(__dirname, '..', 'config', 'firebase-service-account.json');
+    const serviceAccount = require(serviceAccountPath);
 
-  admin.initializeApp({
-    credential: admin.credential.cert(mockServiceAccount),
-    projectId: 'test-project'
-  });
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: serviceAccount.project_id
+    });
+
+    console.log('✅ Firebase Admin initialized for testing with real service account');
+  } catch (error) {
+    console.warn('⚠️ Failed to initialize Firebase Admin with service account:', error.message);
+    console.log('Falling back to environment variables...');
+
+    // Fallback to environment variables if service account file not found
+    if (process.env.FIREBASE_PROJECT_ID) {
+      admin.initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID
+      });
+    } else {
+      console.error('❌ No Firebase configuration found. Tests may fail.');
+    }
+  }
 }
 
 // Mock console.error to avoid cluttering test output

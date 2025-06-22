@@ -249,8 +249,9 @@ router.post('/complete-workout', async (req, res) => {
 });
 
 /**
- * Enhanced Workout Completion Endpoint
- * Captures detailed workout completion data including exercises, sets, reps, weights, and feedback
+ * Optimized Workout Completion Endpoint
+ * Handles comprehensive workout completion data with exercise tracking, feedback, and analytics
+ * Designed for frontend data collection flow with robust validation and error handling
  *
  * POST /workout-completion
  */
@@ -266,129 +267,205 @@ router.post('/workout-completion', async (req, res) => {
       startedAt,
       completedAt,
       exercises,
-      rating,
-      difficulty,
-      enjoyment,
-      energy,
-      notes,
-      injuries,
-      environment
+      feedback
     } = req.body;
 
     const userId = req.headers['x-user-id'] || 'anonymous';
 
-    // Validate required fields
-    if (!workoutId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'workoutId is required',
-        correlationId,
-        timestamp: new Date().toISOString()
-      });
+    // Enhanced validation with detailed error messages
+    const validationErrors = [];
+
+    if (!workoutId || typeof workoutId !== 'string') {
+      validationErrors.push('workoutId is required and must be a string');
     }
 
     if (typeof completed !== 'boolean') {
+      validationErrors.push('completed must be a boolean value');
+    }
+
+    if (!exercises || !Array.isArray(exercises) || exercises.length === 0) {
+      validationErrors.push('exercises array is required and cannot be empty');
+    }
+
+    if (validationErrors.length > 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'completed must be a boolean value',
+        message: 'Validation failed',
+        errors: validationErrors,
         correlationId,
         timestamp: new Date().toISOString()
       });
     }
 
-    if (!exercises || !Array.isArray(exercises)) {
-      return res.status(400).json({
+    // Verify workout exists and belongs to user
+    const existingWorkout = await workoutHistoryService.getWorkoutById(workoutId, userId);
+    if (!existingWorkout) {
+      return res.status(404).json({
         status: 'error',
-        message: 'exercises array is required',
+        message: 'Workout not found or access denied',
         correlationId,
         timestamp: new Date().toISOString()
       });
     }
 
-    // Log completion data received
-    monitoringService.log('info', 'Detailed workout completion received', {
-      userId,
-      workoutId,
-      completed,
-      completionPercentage: completionPercentage || 0,
-      exerciseCount: exercises.length,
-      actualDuration: actualDuration || 0
-    }, correlationId);
+    // Calculate completion metrics
+    const totalExercises = exercises.length;
+    const completedExercises = exercises.filter(ex => ex.completed !== false).length;
+    const calculatedCompletionPercentage = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
+
+    // Process exercise data with enhanced tracking
+    const processedExercises = exercises.map((exercise, index) => {
+      const sets = (exercise.sets || []).map((set, setIndex) => ({
+        setNumber: setIndex + 1,
+        reps: parseInt(set.reps) || 0,
+        weight: parseFloat(set.weight) || 0,
+        duration: parseInt(set.duration) || 0,
+        distance: parseFloat(set.distance) || 0,
+        restTime: set.restTime || '',
+        completed: set.completed !== false,
+        notes: set.notes || '',
+        targetReps: set.targetReps || null,
+        targetWeight: set.targetWeight || null
+      }));
+
+      // Calculate exercise totals
+      const totalReps = sets.reduce((sum, set) => sum + set.reps, 0);
+      const totalWeight = sets.reduce((sum, set) => sum + (set.weight * set.reps), 0);
+      const totalDuration = sets.reduce((sum, set) => sum + set.duration, 0);
+      const completedSets = sets.filter(set => set.completed).length;
+
+      return {
+        exerciseIndex: index + 1,
+        name: exercise.name || '',
+        type: exercise.type || 'strength',
+        muscleGroups: exercise.muscleGroups || '',
+        sets,
+        totalSets: sets.length,
+        completedSets,
+        totalReps,
+        totalWeight,
+        totalDuration,
+        completed: exercise.completed !== false,
+        skipped: exercise.completed === false,
+        difficulty: exercise.difficulty || null,
+        notes: exercise.notes || '',
+        targetSets: exercise.targetSets || null,
+        targetReps: exercise.targetReps || null
+      };
+    });
 
     // Create comprehensive completion record
     const completionRecord = {
       workoutId,
       userId,
       completed,
-      completionPercentage: completionPercentage || (completed ? 100 : 0),
-      actualDuration: actualDuration || 0,
+      completionPercentage: completionPercentage || calculatedCompletionPercentage,
+      actualDuration: parseInt(actualDuration) || 0,
       startedAt: startedAt ? new Date(startedAt) : new Date(),
       completedAt: completedAt ? new Date(completedAt) : new Date(),
-      exercises: exercises.map(exercise => ({
-        name: exercise.name || '',
-        type: exercise.type || 'strength',
-        muscleGroups: exercise.muscleGroups || '',
-        sets: (exercise.sets || []).map(set => ({
-          setNumber: set.setNumber || 1,
-          reps: set.reps || 0,
-          weight: set.weight || 0,
-          duration: set.duration || 0,
-          distance: set.distance || 0,
-          restTime: set.restTime || '',
-          completed: set.completed !== false, // Default to true
-          notes: set.notes || ''
-        })),
-        totalReps: exercise.totalReps || 0,
-        totalWeight: exercise.totalWeight || 0,
-        totalDuration: exercise.totalDuration || 0,
-        completed: exercise.completed !== false, // Default to true
-        difficulty: exercise.difficulty || 'just_right',
-        notes: exercise.notes || ''
-      })),
-      rating: rating || null,
-      difficulty: difficulty || 'just_right',
-      enjoyment: enjoyment || null,
-      energy: energy || null,
-      notes: notes || '',
-      injuries: injuries || [],
-      environment: environment || {},
+      exercises: processedExercises,
+
+      // Enhanced feedback processing
+      feedback: {
+        rating: feedback?.rating ? parseInt(feedback.rating) : null,
+        difficulty: feedback?.difficulty || null,
+        enjoyment: feedback?.enjoyment ? parseInt(feedback.enjoyment) : null,
+        energy: feedback?.energy ? parseInt(feedback.energy) : null,
+        notes: feedback?.notes || '',
+        injuries: Array.isArray(feedback?.injuries) ? feedback.injuries : [],
+        environment: feedback?.environment || {},
+        wouldRecommend: feedback?.wouldRecommend || null
+      },
+
+      // Analytics data
+      analytics: {
+        totalExercises,
+        completedExercises,
+        skippedExercises: totalExercises - completedExercises,
+        totalSets: processedExercises.reduce((sum, ex) => sum + ex.totalSets, 0),
+        completedSets: processedExercises.reduce((sum, ex) => sum + ex.completedSets, 0),
+        totalWeight: processedExercises.reduce((sum, ex) => sum + ex.totalWeight, 0),
+        totalReps: processedExercises.reduce((sum, ex) => sum + ex.totalReps, 0),
+        averageSetCompletion: processedExercises.length > 0 ?
+          processedExercises.reduce((sum, ex) => sum + (ex.completedSets / Math.max(ex.totalSets, 1)), 0) / processedExercises.length : 0
+      },
+
       submittedAt: new Date(),
       correlationId
     };
 
-    // Store detailed completion data
-    await workoutHistoryService.storeWorkoutCompletion(completionRecord);
-
-    // Update workout status
-    await workoutHistoryService.updateWorkoutStatus(workoutId, completed ? 'completed' : 'incomplete');
-
-    // Update user stats and analytics
-    await workoutHistoryService.updateUserStats(userId);
-
-    // Log success
-    monitoringService.log('info', 'Detailed workout completion processed successfully', {
+    // Log detailed completion data
+    monitoringService.log('info', 'Optimized workout completion received', {
       userId,
       workoutId,
-      completionProcessed: true,
-      exercisesTracked: exercises.length
+      completed,
+      completionPercentage: completionRecord.completionPercentage,
+      exerciseCount: totalExercises,
+      completedExercises,
+      actualDuration: completionRecord.actualDuration,
+      hasRating: !!completionRecord.feedback.rating,
+      hasFeedback: !!completionRecord.feedback.notes
     }, correlationId);
 
+    // Store completion data with enhanced error handling
+    try {
+      await workoutHistoryService.storeWorkoutCompletion(completionRecord);
+      await workoutHistoryService.updateWorkoutStatus(workoutId, completed ? 'completed' : 'incomplete');
+
+      // Update user stats asynchronously for better performance
+      setImmediate(async () => {
+        try {
+          await workoutHistoryService.updateUserStats(userId);
+        } catch (statsError) {
+          monitoringService.log('warn', 'Failed to update user stats after workout completion', {
+            userId,
+            workoutId,
+            error: statsError.message
+          }, correlationId);
+        }
+      });
+
+    } catch (storageError) {
+      monitoringService.log('error', 'Failed to store workout completion', {
+        userId,
+        workoutId,
+        error: storageError.message,
+        stack: storageError.stack
+      }, correlationId);
+
+      return res.status(500).json({
+        status: 'error',
+        message: 'Failed to save workout completion data',
+        correlationId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Generate next workout recommendations
+    const nextRecommendations = await generateNextWorkoutRecommendations(userId, completionRecord);
+
+    // Success response with enhanced data
     res.status(200).json({
       status: 'success',
-      message: 'Workout completion data saved successfully',
+      message: 'Workout completion processed successfully',
       data: {
         workoutId,
         completed,
         completionPercentage: completionRecord.completionPercentage,
-        exercisesTracked: exercises.length,
-        processed: true
+        exercisesTracked: totalExercises,
+        completedExercises,
+        skippedExercises: totalExercises - completedExercises,
+        totalWeight: completionRecord.analytics.totalWeight,
+        totalReps: completionRecord.analytics.totalReps,
+        actualDuration: completionRecord.actualDuration,
+        processed: true,
+        nextRecommendations
       },
       correlationId,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    // Log error
     monitoringService.log('error', 'Workout completion processing failed', {
       userId: req.headers['x-user-id'] || 'anonymous',
       error: error.message,
@@ -397,13 +474,66 @@ router.post('/workout-completion', async (req, res) => {
 
     res.status(500).json({
       status: 'error',
-      message: 'Failed to process workout completion data',
+      message: 'Internal server error during workout completion processing',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       correlationId,
       timestamp: new Date().toISOString()
     });
   }
 });
+
+/**
+ * Generate next workout recommendations based on completion data
+ * @param {string} userId - User ID
+ * @param {Object} completionRecord - Workout completion data
+ * @returns {Promise<Object>} Recommendations for next workout
+ */
+async function generateNextWorkoutRecommendations(userId, completionRecord) {
+  try {
+    const recommendations = {
+      restDays: 1,
+      focusAreas: [],
+      adjustments: [],
+      progressionSuggestions: []
+    };
+
+    // Analyze completion rate
+    if (completionRecord.completionPercentage < 50) {
+      recommendations.adjustments.push('Consider reducing workout intensity');
+      recommendations.restDays = 2;
+    } else if (completionRecord.completionPercentage === 100 && completionRecord.feedback.difficulty === 'easy') {
+      recommendations.adjustments.push('Ready for increased intensity');
+      recommendations.progressionSuggestions.push('Increase weight by 5-10%');
+    }
+
+    // Analyze feedback
+    if (completionRecord.feedback.rating && completionRecord.feedback.rating >= 4) {
+      recommendations.focusAreas.push('Similar workout style recommended');
+    }
+
+    if (completionRecord.feedback.energy && completionRecord.feedback.energy <= 2) {
+      recommendations.restDays = Math.max(recommendations.restDays, 2);
+      recommendations.adjustments.push('Consider active recovery session');
+    }
+
+    // Analyze exercise performance
+    const struggledExercises = completionRecord.exercises.filter(ex =>
+      ex.completedSets < ex.totalSets * 0.7
+    );
+
+    if (struggledExercises.length > 0) {
+      recommendations.focusAreas.push(`Focus on: ${struggledExercises.map(ex => ex.name).join(', ')}`);
+    }
+
+    return recommendations;
+  } catch (error) {
+    monitoringService.log('warn', 'Failed to generate workout recommendations', {
+      userId,
+      error: error.message
+    });
+    return { restDays: 1, focusAreas: [], adjustments: [], progressionSuggestions: [] };
+  }
+}
 
 /**
  * Get Workout History Endpoint
