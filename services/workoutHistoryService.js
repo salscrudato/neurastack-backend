@@ -305,21 +305,30 @@ class WorkoutHistoryService {
 
       if (this.isFirestoreAvailable) {
         try {
+          // Use simple query without orderBy to avoid index requirement
           let query = this.firestore
             .collection(WORKOUT_COLLECTIONS.WORKOUTS)
             .where('userId', '==', userId)
-            .orderBy('createdAt', 'desc')
-            .limit(limit);
-
-          if (!includeIncomplete) {
-            query = query.where('status', 'in', ['completed', 'started']);
-          }
+            .limit(limit * 2); // Get more records to sort client-side
 
           const snapshot = await query.get();
-          workouts = snapshot.docs.map(doc => ({
+          let allWorkouts = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           }));
+
+          // Filter client-side if needed
+          if (!includeIncomplete) {
+            allWorkouts = allWorkouts.filter(workout =>
+              ['completed', 'started', 'generated'].includes(workout.status)
+            );
+          }
+
+          // Sort client-side by createdAt descending
+          allWorkouts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+          // Apply limit after filtering and sorting
+          workouts = allWorkouts.slice(0, limit);
         } catch (error) {
           console.warn('⚠️ Failed to retrieve workouts from Firestore, using local cache:', error.message);
           this.isFirestoreAvailable = false;
@@ -355,7 +364,7 @@ class WorkoutHistoryService {
     const workouts = [];
     for (let [key, value] of this.localCache.entries()) {
       if (key.startsWith('workout_') && value.userId === userId) {
-        if (includeIncomplete || ['completed', 'started'].includes(value.status)) {
+        if (includeIncomplete || ['completed', 'started', 'generated'].includes(value.status)) {
           workouts.push(value);
         }
       }
