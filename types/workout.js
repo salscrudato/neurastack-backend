@@ -214,26 +214,7 @@ const INJURY_TYPES = {
   RECENT_SURGERY: 'recent_surgery'
 };
 
-/**
- * Workout type categories
- */
-const WORKOUT_TYPES = {
-  STRENGTH: 'strength',
-  CARDIO: 'cardio',
-  HIIT: 'hiit',
-  YOGA: 'yoga',
-  PILATES: 'pilates',
-  CROSSFIT: 'crossfit',
-  FUNCTIONAL: 'functional',
-  FLEXIBILITY: 'flexibility',
-  UPPER_BODY: 'upper_body',
-  LOWER_BODY: 'lower_body',
-  FULL_BODY: 'full_body',
-  CORE: 'core',
-  PUSH_DAY: 'push_day',
-  PULL_DAY: 'pull_day',
-  LEG_DAY: 'leg_day'
-};
+
 
 module.exports = {
   WORKOUT_COLLECTIONS,
@@ -241,6 +222,5 @@ module.exports = {
   VALIDATION_SCHEMAS,
   FITNESS_GOALS,
   EQUIPMENT_TYPES,
-  INJURY_TYPES,
-  WORKOUT_TYPES
+  INJURY_TYPES
 };

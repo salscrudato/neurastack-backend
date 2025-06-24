@@ -110,12 +110,12 @@ class FirebaseDiagnostics {
     try {
       // Initialize Firebase Admin if not already initialized
       if (!admin.apps.length) {
-        const serviceAccount = require(this.serviceAccountPath || path.join(process.cwd(), 'firebase-admin-key.json'));
+        const serviceAccount = require(path.join(process.cwd(), 'config', 'firebase-service-account.json'));
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
           projectId: serviceAccount.project_id
         });
-        log('green', '   ✅ Firebase Admin initialized');
+        log('green', '   ✅ Firebase Admin initialized with latest service account');
       }
 
       this.results.credentialsCheck = true;

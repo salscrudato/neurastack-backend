@@ -14,91 +14,119 @@
  * - Monitors system health and performance
  */
 
+// ============================================================================
+// ENVIRONMENT CONFIGURATION - Load environment variables first
+// ============================================================================
+require('dotenv').config(); // Loads environment variables from .env file
+
+// ============================================================================
+// DEPENDENCIES - External libraries and modules we need
+// ============================================================================
 const express = require('express'); // Web server framework - handles HTTP requests
 const cors = require('cors'); // Allows websites from different domains to use our API
 const admin = require('firebase-admin'); // Google's database service for storing user data
-require('dotenv').config(); // Loads environment variables from .env file
 
+// ============================================================================
+// VISUAL LOGGING SYSTEM - Enhanced human-readable console output
+// ============================================================================
+const logger = require('./utils/visualLogger');
+
+// ============================================================================
+// FIREBASE INITIALIZATION - Database connection setup
+// ============================================================================
 // Initialize Firebase database connection FIRST before importing any services that use it
 // Firebase is Google's cloud database where we store user memories and workout history
-try {
-  let firebaseConfig;
 
-  // Try to use standardized Firebase service account first (recommended)
+/**
+ * Initialize Firebase with simplified configuration using latest service account
+ * Uses only the current neurastack-backend database - no legacy fallbacks
+ */
+function initializeFirebase() {
   try {
+    // Skip initialization if Firebase is already initialized (for testing)
+    if (admin.apps.length > 0) {
+      logger.inline('info', 'Firebase already initialized - skipping', 'firebase');
+      return;
+    }
+
+    // Validate required environment variables (skip in test environment)
+    if (process.env.NODE_ENV !== 'test' && !process.env.FIREBASE_PROJECT_ID) {
+      throw new Error('FIREBASE_PROJECT_ID environment variable is required');
+    }
+
+    let firebaseConfig;
+
+    // Use the latest service account (your current neurastack-backend database)
     const serviceAccount = require('./config/firebase-service-account.json');
-    firebaseConfig = {
-      credential: admin.credential.cert(serviceAccount),
-      projectId: 'neurastack-backend', // Our project name in Google Cloud
-      storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
-    };
-    console.log('🔑 Using standardized Firebase service account credentials');
-  } catch (standardError) {
-    // Fallback to legacy Firebase Admin SDK key
-    try {
-      const serviceAccount = require('./firebase-admin-key.json');
-      firebaseConfig = {
-        credential: admin.credential.cert(serviceAccount),
-        projectId: 'neurastack-backend', // Our project name in Google Cloud
-        storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
-      };
-      console.log('🔑 Using legacy Firebase Admin SDK credentials');
-    } catch (adminKeyError) {
-      // Fallback to original service account file (for local development on your computer)
-      try {
-        const serviceAccount = require('./serviceAccountKey.json');
-        firebaseConfig = {
-          credential: admin.credential.cert(serviceAccount),
-          projectId: 'neurastack-backend', // Our project name in Google Cloud
-          storageBucket: 'neurastack-backend.firebasestorage.app', // Where we store files
-        };
-        console.log('🔑 Using storage service account credentials');
-      } catch (serviceAccountError) {
-        // Fallback to environment variables (for production deployment on servers)
-        if (process.env.FIREBASE_PROJECT_ID) {
-          firebaseConfig = {
-            projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app',
-          };
 
-          // Use service account from environment if available
-          if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
-            firebaseConfig.credential = admin.credential.cert({
-              projectId: process.env.FIREBASE_PROJECT_ID,
-              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-              privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-            });
-            console.log('🔑 Using environment variable credentials');
-          } else {
-            console.log('🔑 Using default application credentials');
-          }
-        } else {
-          throw new Error('No Firebase configuration found');
-        }
-      }
+    // Validate service account structure
+    if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) {
+      throw new Error('Invalid service account configuration - missing required fields');
     }
-  }
 
-  admin.initializeApp(firebaseConfig);
-  console.log('✅ Firebase initialized successfully');
-} catch (error) {
-  console.warn('⚠️ Firebase initialization failed:', error.message);
-  console.warn('⚠️ Workout history will use local cache only');
+    firebaseConfig = createFirebaseConfig(serviceAccount, 'latest service account');
 
-  // Initialize with minimal config for development
-  if (!admin.apps.length) {
-    try {
-      admin.initializeApp({
-        projectId: 'neurastack-backend',
-      });
-      console.log('⚠️ Firebase initialized with minimal config (local cache only)');
-    } catch (initError) {
-      console.warn('⚠️ Could not initialize Firebase at all:', initError.message);
+    admin.initializeApp(firebaseConfig);
+
+    logger.success(
+      'Firebase initialized successfully with neurastack-backend database',
+      {
+        'Project ID': serviceAccount.project_id,
+        'Client Email': serviceAccount.client_email,
+        'Database': 'neurastack-backend (latest)'
+      },
+      'firebase'
+    );
+
+  } catch (error) {
+    // In test environment, don't exit the process
+    if (process.env.NODE_ENV === 'test') {
+      logger.warning(
+        'Firebase initialization failed in test environment - continuing',
+        { 'Error': error.message },
+        'firebase'
+      );
+      return;
     }
+
+    logger.error(
+      'Firebase initialization failed - Application cannot start',
+      {
+        'Error': error.message,
+        'Solution': 'Check config/firebase-service-account.json exists and is valid, and FIREBASE_PROJECT_ID is set'
+      },
+      'firebase'
+    );
+    process.exit(1); // Exit the application since Firebase is required
   }
 }
 
-// Now import our custom services and routes (these are the "workers" that do the actual work)
+/**
+ * Helper function to create Firebase configuration object
+ * @param {Object} serviceAccount - Service account credentials
+ * @param {string} credentialType - Description of credential type for logging
+ * @returns {Object} Firebase configuration object
+ */
+function createFirebaseConfig(serviceAccount, credentialType) {
+  logger.inline('info', `Using ${credentialType} for neurastack-backend database`, 'firebase');
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || 'neurastack-backend';
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+
+  return {
+    credential: admin.credential.cert(serviceAccount),
+    projectId,
+    storageBucket,
+  };
+}
+
+// Initialize Firebase now
+initializeFirebase();
+
+// ============================================================================
+// SERVICE IMPORTS - Our custom business logic modules
+// ============================================================================
+// Import our custom services and routes (these are the "workers" that do the actual work)
 const healthRoutes = require('./routes/health'); // Handles AI ensemble and health check requests
 const memoryRoutes = require('./routes/memory'); // Manages user conversation memories
 const workoutRoutes = require('./routes/workout'); // Generates personalized workout plans
@@ -107,23 +135,37 @@ const monitoringService = require('./services/monitoringService'); // Tracks sys
 const cacheService = require('./services/cacheService'); // Stores frequently used data for faster responses
 const securityMiddleware = require('./middleware/securityMiddleware'); // Protects against spam and abuse
 
+// ============================================================================
+// APPLICATION SETUP - Express server configuration
+// ============================================================================
 // Initialize memory lifecycle manager (this automatically cleans up old user memories)
 const memoryLifecycleManager = new MemoryLifecycleManager();
 
 // Create the web server application
 const app = express();
-const PORT = process.env.PORT || 8080; // Use port from environment or default to 8080
 
-// CORS configuration - this controls which websites can use our API
+// Environment-based configuration
+const PORT = parseInt(process.env.PORT, 10) || 8080; // Use port from environment or default to 8080
+
+// ============================================================================
+// CORS CONFIGURATION - Cross-Origin Resource Sharing settings
+// ============================================================================
+// CORS controls which websites can use our API
 // CORS = Cross-Origin Resource Sharing (allows websites from different domains to call our API)
 const corsOptions = {
-  origin: [ // List of allowed websites that can use our API
-    'http://localhost:3000', // Local development
-    'http://localhost:3001', // Local development (alternative port)
-    'https://localhost:3000', // Local development with HTTPS
-    'https://localhost:3001', // Local development with HTTPS (alternative port)
-    'https://neurastack.ai', // Production website
-    'https://www.neurastack.ai', // Production website with www
+  // List of allowed websites that can use our API
+  origin: [
+    // Local development environments
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://localhost:3000',
+    'https://localhost:3001',
+
+    // Production domains
+    'https://neurastack.ai',
+    'https://www.neurastack.ai',
+
+    // Hosting platforms (using regex patterns for dynamic subdomains)
     'https://neurastack-frontend.web.app', // Firebase hosting
     /^https:\/\/.*\.vercel\.app$/, // Any Vercel deployment
     /^https:\/\/.*\.netlify\.app$/, // Any Netlify deployment
@@ -132,24 +174,54 @@ const corsOptions = {
   ],
   credentials: true, // Allow cookies and authentication headers
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allowed HTTP methods
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-User-Id', 'X-Session-Id', 'X-Correlation-ID'] // Allowed headers
+  allowedHeaders: [ // Headers that frontend can send to our API
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-User-Id',
+    'X-Session-Id',
+    'X-Correlation-ID'
+  ]
 };
 
-// Security middleware (basic rate limiting only)
-app.use(securityMiddleware.createRateLimit({ max: 100, windowMs: 15 * 60 * 1000 }));
+// ============================================================================
+// MIDDLEWARE SETUP - Request processing pipeline
+// ============================================================================
+// Security headers middleware (should be first)
+app.use(securityMiddleware.securityHeaders());
 
-// CORS and basic middleware
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Security middleware (basic rate limiting to prevent abuse)
+// Environment-based rate limiting configuration
+const rateLimitConfig = {
+  max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || (15 * 60 * 1000), // 15 minutes default
+  message: {
+    error: 'Too many requests',
+    message: 'Rate limit exceeded. Please try again later.',
+    retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || (15 * 60 * 1000)) / 1000)
+  }
+};
+app.use(securityMiddleware.createRateLimit(rateLimitConfig));
 
-// Add monitoring middleware for request tracking
+// CORS and basic request parsing middleware
+app.use(cors(corsOptions)); // Enable cross-origin requests
+
+// Request body parsing with environment-based limits
+const bodyLimit = process.env.REQUEST_BODY_LIMIT || '10mb';
+app.use(express.json({ limit: bodyLimit })); // Parse JSON requests
+app.use(express.urlencoded({ extended: true, limit: bodyLimit })); // Parse form data
+
+// Request monitoring and tracking middleware
 app.use(monitoringService.middleware());
 
-// Error handling middleware
-app.use((err, req, res, next) => {
+// ============================================================================
+// ERROR HANDLING - Global error catcher
+// ============================================================================
+// Error handling middleware (catches any unhandled errors)
+app.use((err, req, res, _next) => { // _next prefix indicates intentionally unused parameter
   const correlationId = req.correlationId || 'unknown';
 
+  // Log the error for debugging
   monitoringService.log('error', 'Unhandled error', {
     error: err.message,
     stack: err.stack,
@@ -157,6 +229,7 @@ app.use((err, req, res, next) => {
     method: req.method
   }, correlationId);
 
+  // Send error response to client
   res.status(500).json({
     status: 'error',
     message: 'Internal server error',
@@ -165,65 +238,225 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.use('/', healthRoutes);
-app.use('/memory', memoryRoutes);
-app.use('/workout', workoutRoutes);
+// ============================================================================
+// ROUTE REGISTRATION - API endpoint definitions
+// ============================================================================
+app.use('/', healthRoutes); // Health checks and AI ensemble endpoints
+app.use('/memory', memoryRoutes); // User memory management endpoints
+app.use('/workout', workoutRoutes); // Workout generation and tracking endpoints
 
+// ============================================================================
+// SERVER STARTUP - Main application entry point
+// ============================================================================
 // Only start server if this file is run directly (not imported for testing)
 if (require.main === module) {
-  app.listen(PORT, async () => {
-    console.log(`🚀 Neurastack backend v2.0 running at http://localhost:${PORT}`);
-    console.log(`📊 Enhanced monitoring and logging enabled`);
-    console.log(`🔄 Circuit breakers and resilience patterns active`);
+  // Validate required environment variables before starting
+  const requiredEnvVars = ['OPENAI_API_KEY', 'GEMINI_API_KEY', 'CLAUDE_API_KEY'];
+  const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
-    // Start memory lifecycle management
-    memoryLifecycleManager.start();
-    console.log('🧠 Memory management system initialized');
+  if (missingEnvVars.length > 0) {
+    logger.error(
+      'Missing required environment variables',
+      {
+        'Missing Variables': missingEnvVars.join(', '),
+        'Solution': 'Check your .env file and ensure all required API keys are set'
+      },
+      'startup'
+    );
+    process.exit(1);
+  }
 
+  const server = app.listen(PORT, async () => {
+    // Display startup header
+    logger.header('NEURASTACK BACKEND V2.0', 'Production-Grade AI Ensemble System', 'rocket');
 
+    // Server startup success
+    logger.success(
+      `Server running at http://localhost:${PORT}`,
+      {
+        'Environment': process.env.NODE_ENV || 'development',
+        'Port': PORT,
+        'Version': '2.0',
+        'Status': 'READY FOR REQUESTS',
+        'Process ID': process.pid
+      },
+      'startup'
+    );
 
-    // Log startup metrics
-    monitoringService.log('info', 'Neurastack backend started successfully', {
-      port: PORT,
-      environment: process.env.NODE_ENV || 'development',
-      version: '2.0',
-      features: [
-        'Enhanced ensemble processing',
-        'Intelligent memory management',
-        'Professional workout generation',
-        'Structured logging',
-        'Response caching'
-      ]
-    });
+    // Initialize background services
+    try {
+      memoryLifecycleManager.start();
+      logger.success(
+        'Memory management system initialized',
+        {
+          'Lifecycle Manager': 'Active',
+          'Auto-cleanup': 'Enabled',
+          'Memory Types': 'Working, Short-term, Long-term, Semantic, Episodic'
+        },
+        'memory'
+      );
+    } catch (error) {
+      logger.error(
+        'Failed to initialize memory management system',
+        { 'Error': error.message },
+        'memory'
+      );
+    }
 
-    // Graceful shutdown handling
-    process.on('SIGTERM', async () => {
-      console.log('🔄 Received SIGTERM, shutting down gracefully...');
-      await gracefulShutdown();
-    });
+    // Log system capabilities
+    logger.info(
+      'System capabilities initialized',
+      {
+        'AI Ensemble': 'Multi-vendor processing (OpenAI, Gemini, Claude)',
+        'Memory System': 'Intelligent context management',
+        'Workout API': 'Professional-grade fitness generation',
+        'Monitoring': 'Enhanced logging and metrics',
+        'Caching': 'Response optimization',
+        'Security': 'Rate limiting and validation'
+      },
+      'system'
+    );
 
-    process.on('SIGINT', async () => {
-      console.log('🔄 Received SIGINT, shutting down gracefully...');
-      await gracefulShutdown();
+    // Setup graceful shutdown handlers for clean server termination
+    setupGracefulShutdown(server);
+
+    // Final system status
+    logger.systemStatus('healthy', {
+      'Firebase': 'Connected',
+      'Services': 'All systems operational',
+      'Ready': 'Accepting requests'
     });
   });
 }
 
-// Graceful shutdown function
-async function gracefulShutdown() {
+/**
+ * Setup graceful shutdown handlers for clean server termination
+ * This ensures that when the server is stopped, all connections and services
+ * are properly closed before the process exits
+ * @param {Object} server - Express server instance
+ */
+function setupGracefulShutdown(server) {
+  // Handle SIGTERM (termination signal from process manager)
+  process.on('SIGTERM', async () => {
+    logger.warning(
+      'Received SIGTERM - Initiating graceful shutdown',
+      { 'Signal': 'SIGTERM', 'Source': 'Process Manager' },
+      'shutdown'
+    );
+    await gracefulShutdown(server);
+  });
+
+  // Handle SIGINT (interrupt signal, usually Ctrl+C)
+  process.on('SIGINT', async () => {
+    logger.warning(
+      'Received SIGINT - Initiating graceful shutdown',
+      { 'Signal': 'SIGINT', 'Source': 'User Interrupt (Ctrl+C)' },
+      'shutdown'
+    );
+    await gracefulShutdown(server);
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    logger.error(
+      'Uncaught Exception - Initiating emergency shutdown',
+      { 'Error': error.message, 'Stack': error.stack },
+      'shutdown'
+    );
+    gracefulShutdown(server, true);
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error(
+      'Unhandled Promise Rejection - Initiating emergency shutdown',
+      { 'Reason': reason, 'Promise': promise },
+      'shutdown'
+    );
+    gracefulShutdown(server, true);
+  });
+}
+
+/**
+ * Graceful shutdown function - cleanly stops all services and saves data
+ * This function is called when the server receives a shutdown signal
+ * It ensures that:
+ * - All background services are stopped properly
+ * - Any cached data is saved to disk
+ * - Database connections are closed
+ * - The process exits cleanly
+ * @param {Object} server - Express server instance
+ * @param {boolean} emergency - Whether this is an emergency shutdown
+ */
+async function gracefulShutdown(server, emergency = false) {
+  const shutdownTimeout = parseInt(process.env.SHUTDOWN_TIMEOUT, 10) || 30000; // 30 seconds default
+
   try {
-    console.log('🔄 Stopping memory lifecycle manager...');
+    logger.info(
+      `Initiating ${emergency ? 'emergency' : 'graceful'} shutdown sequence`,
+      { 'Timeout': `${shutdownTimeout}ms` },
+      'shutdown'
+    );
+
+    // Set a timeout for the shutdown process
+    const shutdownTimer = setTimeout(() => {
+      logger.error(
+        'Shutdown timeout exceeded - forcing exit',
+        { 'Timeout': `${shutdownTimeout}ms` },
+        'shutdown'
+      );
+      process.exit(1);
+    }, shutdownTimeout);
+
+    // Stop accepting new connections
+    if (server) {
+      logger.inline('info', 'Stopping server from accepting new connections...', 'shutdown');
+      server.close(() => {
+        logger.inline('success', 'Server stopped accepting new connections', 'shutdown');
+      });
+    }
+
+    // Stop memory lifecycle manager
+    logger.inline('info', 'Stopping memory lifecycle manager...', 'memory');
     memoryLifecycleManager.stop();
+    logger.inline('success', 'Memory lifecycle manager stopped', 'memory');
 
-    console.log('🔄 Closing cache connections...');
+    // Close cache connections
+    logger.inline('info', 'Closing cache connections...', 'cache');
     await cacheService.shutdown();
+    logger.inline('success', 'Cache connections closed', 'cache');
 
-    console.log('✅ Graceful shutdown completed');
-    process.exit(0);
+    // Clear the shutdown timeout
+    clearTimeout(shutdownTimer);
+
+    // Final shutdown success
+    logger.success(
+      `${emergency ? 'Emergency' : 'Graceful'} shutdown completed successfully`,
+      {
+        'Memory Manager': 'Stopped',
+        'Cache Service': 'Closed',
+        'Server': 'Closed',
+        'Exit Code': '0 (Success)'
+      },
+      'shutdown'
+    );
+
+    process.exit(0); // Exit successfully
   } catch (error) {
-    console.error('❌ Error during shutdown:', error.message);
-    process.exit(1);
+    logger.error(
+      'Error occurred during shutdown sequence',
+      {
+        'Error': error.message,
+        'Emergency': emergency,
+        'Exit Code': '1 (Error)'
+      },
+      'shutdown'
+    );
+    process.exit(1); // Exit with error code
   }
 }
 
+// ============================================================================
+// MODULE EXPORTS - Make the Express app available for testing
+// ============================================================================
 module.exports = app;

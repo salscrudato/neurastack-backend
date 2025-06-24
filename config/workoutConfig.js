@@ -3,68 +3,32 @@
  * Centralized configuration for workout generation including prompts, templates, and AI settings
  */
 
-const ensembleConfig = require('./ensemblePrompts');
-
 // AI Model Configuration for Workout Generation
 const WORKOUT_AI_CONFIG = {
-  // Prompt crafting model (low-cost for initial prompt generation)
-  promptCrafter: {
-    provider: 'openai',
-    model: 'gpt-4o-mini', // Low-cost model for prompt crafting
-    temperature: 0.3,
-    maxTokens: 1600,
-    timeoutMs: 30000
-  },
-  
-  // Workout generation model (higher quality for final workout)
+  // Single optimized workout generation model
   workoutGenerator: {
     provider: 'openai',
-    model: 'gpt-4o', // Higher quality model for workout generation
-    temperature: 0.2,
-    maxTokens: 2500,
-    timeoutMs: 45000
+    model: 'gpt-4o', // High-quality model for direct workout generation
+    temperature: 0.25,
+    maxTokens: 1500,
+    timeoutMs: 60000
   }
 };
 
-// Prompt Templates
+// Single Comprehensive Workout Generation Prompt Template
 const PROMPT_TEMPLATES = {
-  // Stage 1: Prompt Crafting Template
-  promptCrafter: `
-You are a senior prompt‑engineer for fitness coaching.
-
-TASK  
-Transform <USER_DATA> into two objects:  
-1. CLIENT_PROFILE  → JSON with exactly:  
-   age, gender, weightLb, fitnessLevel, goals,  
-   equipment, injuries, daysPerWeek, minutesPerSession,  
-   preferredWorkoutStyle, notes  
-2. PROGRAM_BRIEF   → single string ≤120 words summarising goals,  
-   constraints, safety flags, style preferences.
-
-RULES  
-- Normalise units (kg→lb, cm→in).  
-- Fill absent non‑critical fields with sensible defaults (see DEFAULTS).  
-- Return **only**:  
-  { "CLIENT_PROFILE": { … }, "PROGRAM_BRIEF": "…" }
-
-DEFAULTS = { age:30, weightLb:170, fitnessLevel:"beginner",  
-             daysPerWeek:3, minutesPerSession:45,  
-             preferredWorkoutStyle:"full_body" }
-
-<USER_DATA>  
-{userData}  
-</USER_DATA>
-`.trim(),
-
-  // Stage 2: Workout Generation Template (will be dynamically filled by Stage 1)
   workoutGenerator: `
-{optimizedPrompt}
+You are an elite strength coach and certified personal trainer (NASM-CPT, CSCS, ACSM) with advanced expertise in exercise science, biomechanics, and program design.
 
-SYSTEM  
-You are an elite strength‑coach AI.
+TASK: Create a personalized workout plan based on the user data provided below.
 
-RETURN  
-Only a minified JSON object that matches the schema WORKOUT_SCHEMA.
+USER DATA:
+{userData}
+
+SYSTEM REQUIREMENTS:
+1. Return ONLY a valid JSON object matching the WORKOUT_SCHEMA below
+2. No markdown, explanations, or additional text
+3. Ensure JSON is properly formatted and minified
 
 WORKOUT_SCHEMA = {
   "type": "workout_type",
@@ -83,12 +47,27 @@ WORKOUT_SCHEMA = {
   "coachingTips":["...", "...", "..."]
 }
 
-RULES
-1. Honour CLIENT_PROFILE, PROGRAM_BRIEF, equipment & injuries.
-2. CRITICAL: Total session time MUST equal minutesPerSession. Calculate: warmup + main workout + cooldown = minutesPerSession.
-3. For 90-minute sessions: 10min warmup + 70min main workout + 10min cooldown.
-4. Scale exercise count and sets to fill the time: beginners need 6-8 exercises, intermediates 8-10, advanced 10-12.
-5. Provide ≥3 coachingTips. No extra keys or markdown.
+CRITICAL RULES:
+1. SAFETY FIRST: Always consider injuries, limitations, and fitness level
+2. TIME PRECISION: Total session time MUST equal the requested duration exactly
+   - Calculate: warmup + main workout + cooldown = total duration
+   - Example for 45min: 8min warmup + 32min main workout + 5min cooldown = 45min
+3. PROGRESSIVE SCALING: Adjust exercise count and complexity based on fitness level:
+   - Beginner: 6-8 exercises, simpler movements, longer rest periods
+   - Intermediate: 8-10 exercises, moderate complexity, standard rest
+   - Advanced: 10-12 exercises, complex movements, shorter rest periods
+4. EQUIPMENT COMPLIANCE: Only use equipment explicitly mentioned by the user
+5. GOAL ALIGNMENT: Structure workout to directly support stated fitness goals
+6. INJURY ACCOMMODATION: Modify or avoid exercises that conflict with stated injuries
+7. PROFESSIONAL STANDARDS: Include detailed form cues, proper exercise sequencing, and evidence-based programming
+8. COACHING EXCELLENCE: Provide at least 3 actionable coaching tips for workout success
+
+WORKOUT HISTORY INTEGRATION:
+- If workout history is provided, consider previous exercises for progression and variety
+- Implement progressive overload principles when appropriate
+- Avoid excessive repetition of recent exercises unless specifically requested
+
+RESPONSE FORMAT: Return only the JSON object with no additional formatting or text.
 `.trim()
 };
 

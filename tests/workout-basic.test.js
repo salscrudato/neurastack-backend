@@ -203,20 +203,7 @@ describe('Workout API Basic Tests', () => {
       expect(response.body.message).toContain('injuries must be an array');
     });
 
-    it('should validate workout type', async () => {
-      const invalidRequest = {
-        ...validWorkoutRequest,
-        workoutType: ''
-      };
 
-      const response = await request(app)
-        .post('/workout/generate-workout')
-        .send(invalidRequest)
-        .expect(400);
-
-      expect(response.body.status).toBe('error');
-      expect(response.body.message).toContain('workoutType is required and must be a non-empty string');
-    });
   });
 
   describe('POST /workout/workout-feedback', () => {

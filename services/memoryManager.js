@@ -20,6 +20,7 @@
 const admin = require('firebase-admin'); // Google's database service for storing memories
 const { v4: generateUUID } = require('uuid'); // Creates unique IDs for each memory
 const { MEMORY_TYPE_CONFIG } = require('../types/memory'); // Configuration for different memory types
+const logger = require('../utils/visualLogger'); // Enhanced visual logging system
 
 /**
  * Memory Manager Class
@@ -47,10 +48,26 @@ class MemoryManager {
     try {
       await this.firestore.collection('_test').limit(1).get();
       this.isFirestoreAvailable = true;
-      console.log('✅ Firestore connection established');
+      logger.success(
+        'Memory system Firestore connection established',
+        {
+          'Database': 'neurastack-backend',
+          'Collection': 'memories',
+          'Status': 'Connected and ready'
+        },
+        'memory'
+      );
     } catch (error) {
       this.isFirestoreAvailable = false;
-      console.warn('⚠️ Firestore unavailable, using local cache:', error.message);
+      logger.warning(
+        'Firestore unavailable - Memory system using local cache only',
+        {
+          'Error': error.message,
+          'Fallback': 'Local cache active',
+          'Impact': 'Memories will not persist between restarts'
+        },
+        'memory'
+      );
     }
   }
 

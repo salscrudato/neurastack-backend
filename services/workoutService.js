@@ -17,7 +17,6 @@
 
 const clients = require('./vendorClients'); // Connects to AI providers (OpenAI, etc.)
 const workoutConfig = require('../config/workoutConfig'); // Workout-specific settings
-const promptCraftingService = require('./promptCraftingService'); // Creates smart prompts for AI
 const monitoringService = require('./monitoringService'); // Tracks system performance
 /**
  * Workout Service Class
@@ -28,7 +27,7 @@ class WorkoutService {
     // Configuration settings for AI workout generation
     this.config = {
       timeoutMs: 60000,
-      maxTokens: 1500,   // leaner budget → lower cost
+      maxTokens: 1500,   // optimized token limit for workout generation
       temperature: 0.25  // more deterministic JSON
     };
   }
@@ -36,9 +35,7 @@ class WorkoutService {
 
 
   /**
-   * Generate a flexible workout using two-stage AI approach
-   * Stage 1: Use low-cost AI to craft optimized prompt
-   * Stage 2: Use high-quality AI to generate workout
+   * Generate a workout using single optimized AI prompt
    * @param {Object} userMetadata - User information and preferences (flexible format)
    * @param {Array} workoutHistory - Previous workout data
    * @param {string} otherInformation - Free-form additional information
@@ -47,7 +44,7 @@ class WorkoutService {
    */
   async generateFlexibleWorkout(userMetadata, workoutHistory, otherInformation, correlationId) {
     try {
-      monitoringService.log('info', 'Flexible workout generation started', {
+      monitoringService.log('info', 'Single-prompt workout generation started', {
         userId: userMetadata.userId,
         hasHistory: workoutHistory && workoutHistory.length > 0,
         hasOtherInfo: !!otherInformation
@@ -56,29 +53,24 @@ class WorkoutService {
       // Validate basic inputs
       this.validateFlexibleInputs(userMetadata, workoutHistory, otherInformation);
 
-      // Stage 1: Craft optimized prompt using low-cost AI
-      const optimizedPrompt = await promptCraftingService.craftWorkoutPrompt(
-        userMetadata,
-        workoutHistory,
-        otherInformation,
-        correlationId
-      );
+      // Build user data string from all inputs
+      const userData = workoutConfig.buildUserDataString(userMetadata, workoutHistory, otherInformation);
 
-      // Stage 2: Generate workout using high-quality AI with optimized prompt
+      // Create the single comprehensive prompt
       const workoutGeneratorConfig = workoutConfig.getAIConfig('workoutGenerator');
       const finalPrompt = workoutConfig.PROMPT_TEMPLATES.workoutGenerator
-        .replace('{optimizedPrompt}', optimizedPrompt);
+        .replace('{userData}', userData);
 
-      const aiResponse = await this.callFlexibleAIModel(workoutGeneratorConfig, finalPrompt, correlationId);
+      const aiResponse = await this.callWorkoutAIModel(workoutGeneratorConfig, finalPrompt, correlationId);
 
       // Parse and validate the response
-      const workoutPlan = this.parseFlexibleWorkoutResponse(aiResponse);
+      const workoutPlan = this.parseWorkoutResponse(aiResponse);
 
       // Log success
-      monitoringService.log('info', 'Flexible workout generation completed', {
+      monitoringService.log('info', 'Single-prompt workout generation completed', {
         userId: userMetadata.userId,
         workoutType: workoutPlan.type || 'unknown',
-        exerciseCount: workoutPlan.exercises ? workoutPlan.exercises.length : 0
+        exerciseCount: workoutPlan.mainWorkout?.exercises?.length || 0
       }, correlationId);
 
       // Enhanced metadata for better frontend integration
@@ -88,8 +80,7 @@ class WorkoutService {
         timestamp: new Date().toISOString(),
         correlationId,
         userId: userMetadata.userId,
-        approach: 'two_stage_flexible',
-        promptCraftingModel: workoutConfig.getAIConfig('promptCrafter').model,
+        approach: 'single_prompt_optimized',
         debug: {
           requestFormat: 'flexible',
           isEnhancedFormat: true,
@@ -102,7 +93,7 @@ class WorkoutService {
             safetyPriority: 'Maximum safety with optimal challenge',
             qualityScore: this.calculateWorkoutQuality(JSON.stringify(workoutPlan))
           },
-          supportedWorkoutTypes: this.getSupportedWorkoutTypes(),
+
           requestProcessingNotes: {
             workoutTypeDetected: !!workoutPlan.type,
             durationExtracted: !!workoutPlan.duration,
@@ -130,7 +121,7 @@ class WorkoutService {
       };
 
     } catch (error) {
-      monitoringService.log('error', 'Flexible workout generation failed', {
+      monitoringService.log('error', 'Single-prompt workout generation failed', {
         userId: userMetadata.userId,
         error: error.message,
         stack: error.stack
@@ -138,28 +129,28 @@ class WorkoutService {
 
       // Attempt fallback using simple approach
       try {
-        const fallbackResult = this.generateFallbackFlexibleWorkout(userMetadata, otherInformation);
+        const fallbackResult = this.generateFallbackWorkout(userMetadata, otherInformation);
 
-        monitoringService.log('info', 'Flexible workout fallback successful', {
+        monitoringService.log('info', 'Workout fallback successful', {
           userId: userMetadata.userId
         }, correlationId);
 
         return fallbackResult;
 
       } catch (fallbackError) {
-        monitoringService.log('error', 'Both flexible and fallback workout generation failed', {
+        monitoringService.log('error', 'Both workout and fallback generation failed', {
           userId: userMetadata.userId,
           primaryError: error.message,
           fallbackError: fallbackError.message
         }, correlationId);
 
-        throw new Error(`Flexible workout generation failed: ${error.message}`);
+        throw new Error(`Workout generation failed: ${error.message}`);
       }
     }
   }
 
   /**
-   * Validate inputs for flexible workout generation
+   * Validate inputs for workout generation
    */
   validateFlexibleInputs(userMetadata, workoutHistory, otherInformation) {
     if (!userMetadata || typeof userMetadata !== 'object') {
@@ -181,21 +172,21 @@ class WorkoutService {
   }
 
   /**
-   * Call AI model for flexible workout generation
+   * Call AI model for workout generation
    */
-  async callFlexibleAIModel(modelConfig, prompt, correlationId) {
+  async callWorkoutAIModel(modelConfig, prompt, correlationId) {
     const startTime = Date.now();
 
     try {
       const response = await Promise.race([
-        this.callOpenAIForFlexibleWorkout(modelConfig, prompt),
+        this.callOpenAIForWorkout(modelConfig, prompt),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Flexible workout AI timeout')), modelConfig.timeoutMs)
+          setTimeout(() => reject(new Error('Workout AI timeout')), modelConfig.timeoutMs)
         )
       ]);
 
       const duration = Date.now() - startTime;
-      monitoringService.log('info', 'Flexible workout AI call successful', {
+      monitoringService.log('info', 'Workout AI call successful', {
         duration,
         model: modelConfig.model,
         responseLength: response.length
@@ -205,7 +196,7 @@ class WorkoutService {
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      monitoringService.log('error', 'Flexible workout AI call failed', {
+      monitoringService.log('error', 'Workout AI call failed', {
         duration,
         error: error.message,
         model: modelConfig.model
@@ -216,9 +207,9 @@ class WorkoutService {
   }
 
   /**
-   * Call OpenAI for flexible workout generation
+   * Call OpenAI for workout generation
    */
-  async callOpenAIForFlexibleWorkout(modelConfig, prompt) {
+  async callOpenAIForWorkout(modelConfig, prompt) {
     const openaiClient = clients.getClient('openai');
 
     const response = await openaiClient.chat.completions.create({
@@ -226,7 +217,7 @@ class WorkoutService {
       messages: [
         {
           role: 'system',
-          content: 'You are a professional personal trainer with advanced certifications. Generate comprehensive, safe, and effective workout plans in valid JSON format only.'
+          content: 'You are an elite strength coach and certified personal trainer with advanced certifications. Generate comprehensive, safe, and effective workout plans in valid JSON format only.'
         },
         {
           role: 'user',
@@ -234,16 +225,17 @@ class WorkoutService {
         }
       ],
       temperature: modelConfig.temperature,
-      max_tokens: modelConfig.maxTokens
+      max_tokens: modelConfig.maxTokens,
+      response_format: { type: "json_object" }
     });
 
     return response.choices[0].message.content.trim();
   }
 
   /**
-   * Parse flexible workout response
+   * Parse workout response
    */
-  parseFlexibleWorkoutResponse(aiResponse) {
+  parseWorkoutResponse(aiResponse) {
     try {
       // Clean the response to ensure it's valid JSON
       let cleanedResponse = aiResponse.trim();
@@ -294,7 +286,7 @@ class WorkoutService {
       return workoutPlan;
 
     } catch (error) {
-      monitoringService.log('error', 'Failed to parse flexible workout response', {
+      monitoringService.log('error', 'Failed to parse workout response', {
         error: error.message,
         responseLength: aiResponse.length
       });
@@ -349,21 +341,12 @@ class WorkoutService {
     }
   }
 
-  /**
-   * Get supported workout types for debugging
-   */
-  getSupportedWorkoutTypes() {
-    return [
-      'pilates', 'crossfit', 'yoga', 'pull_day', 'push_day', 'leg_day',
-      'upper_body', 'lower_body', 'full_body', 'core', 'functional',
-      'hiit', 'cardio', 'flexibility', 'strength', 'mixed'
-    ];
-  }
+
 
   /**
-   * Generate fallback workout for flexible approach
+   * Generate fallback workout
    */
-  generateFallbackFlexibleWorkout(userMetadata) {
+  generateFallbackWorkout(userMetadata) {
     const fallbackWorkout = this.getBasicFallbackWorkout();
 
     // Customize based on available user data
@@ -387,7 +370,7 @@ class WorkoutService {
           model: 'fallback',
           provider: 'internal',
           timestamp: new Date().toISOString(),
-          approach: 'fallback_flexible',
+          approach: 'fallback_single_prompt',
           isFallback: true
         }
       }
@@ -404,36 +387,38 @@ class WorkoutService {
       difficulty: 'intermediate',
       equipment: [],
       targetMuscles: ['full_body'],
-      calorieEstimate: 200,
-      exercises: [
-        {
-          name: 'Bodyweight Squats',
-          sets: 3,
-          reps: '10-15',
-          rest: '60 seconds',
-          instructions: 'Stand with feet shoulder-width apart, lower into squat position, then return to standing.',
-          modifications: 'Use chair for support if needed',
-          targetMuscles: ['quadriceps', 'glutes']
-        },
-        {
-          name: 'Push-ups',
-          sets: 3,
-          reps: '8-12',
-          rest: '60 seconds',
-          instructions: 'Start in plank position, lower chest to ground, push back up.',
-          modifications: 'Perform on knees or against wall if needed',
-          targetMuscles: ['chest', 'shoulders', 'triceps']
-        },
-        {
-          name: 'Plank',
-          sets: 3,
-          reps: '30-60 seconds',
-          rest: '60 seconds',
-          instructions: 'Hold plank position with straight body line from head to heels.',
-          modifications: 'Perform on knees if needed',
-          targetMuscles: ['core', 'shoulders']
-        }
-      ],
+      mainWorkout: {
+        structure: 'straight_sets',
+        exercises: [
+          {
+            name: 'Bodyweight Squats',
+            category: 'strength',
+            sets: 3,
+            reps: '10-15',
+            rest: '60 seconds',
+            instructions: 'Stand with feet shoulder-width apart, lower into squat position, then return to standing.',
+            targetMuscles: ['quadriceps', 'glutes']
+          },
+          {
+            name: 'Push-ups',
+            category: 'strength',
+            sets: 3,
+            reps: '8-12',
+            rest: '60 seconds',
+            instructions: 'Start in plank position, lower chest to ground, push back up.',
+            targetMuscles: ['chest', 'shoulders', 'triceps']
+          },
+          {
+            name: 'Plank',
+            category: 'strength',
+            sets: 3,
+            reps: '30-60 seconds',
+            rest: '60 seconds',
+            instructions: 'Hold plank position with straight body line from head to heels.',
+            targetMuscles: ['core', 'shoulders']
+          }
+        ]
+      },
       warmup: [
         {
           name: 'Light Movement',
@@ -452,9 +437,7 @@ class WorkoutService {
         'Focus on proper form over speed',
         'Listen to your body and rest when needed',
         'Stay hydrated throughout the workout'
-      ],
-      progressionNotes: 'Increase reps or duration as you get stronger',
-      safetyNotes: 'Stop if you feel pain or excessive fatigue'
+      ]
     };
   }
 

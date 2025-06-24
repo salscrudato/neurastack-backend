@@ -49,10 +49,9 @@ const currentModels = MODEL_CONFIGS[TIER];
 module.exports = {
   meta: {
     language: "en",
-    approach: `Cost-optimized ${TIER} tier multi-model approach`,
+    approach: `${TIER} tier multi-model AI ensemble approach`,
     tier: TIER,
-    sharedWordLimit: currentTierConfig.sharedWordLimit,
-    estimatedCostPerRequest: TIER === 'free' ? '$0.008-0.015' : '$0.08-0.25'
+    sharedWordLimit: currentTierConfig.sharedWordLimit
   },
 
   // Backward compatibility
@@ -173,34 +172,5 @@ SYNTHESIS INSTRUCTIONS:
     tier: tier
   }),
 
-  // Cost estimation helper
-  estimateCost: (promptTokens, responseTokens, tier = TIER) => {
-    const costs = {
-      free: {
-        'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-        'gpt-4o': { input: 0.005, output: 0.015 }, // Added for free tier synthesizer
-        'gemini-1.5-flash': { input: 0.000075, output: 0.0003 },
-        'claude-3-haiku-20240307': { input: 0.00025, output: 0.00125 }
-      },
-      premium: {
-        'gpt-4o': { input: 0.005, output: 0.015 },
-        'o1-preview': { input: 0.015, output: 0.06 }, // Added for premium tier synthesizer
-        'gemini-2.0-flash': { input: 0.001, output: 0.004 },
-        'claude-opus-4-20250514': { input: 0.015, output: 0.075 }
-      }
-    };
 
-    const tierCosts = costs[tier] || costs.free;
-    let totalCost = 0;
-
-    Object.values(MODEL_CONFIGS[tier] || MODEL_CONFIGS.free).forEach(model => {
-      const modelCosts = tierCosts[model.model];
-      if (modelCosts) {
-        totalCost += (promptTokens / 1000) * modelCosts.input;
-        totalCost += (responseTokens / 1000) * modelCosts.output;
-      }
-    });
-
-    return totalCost;
-  }
 };

@@ -3,7 +3,8 @@
     "2025-06-18": 0.21317884999999998,
     "2025-06-20": 0.21750524999999996,
     "2025-06-21": 0.12019125,
-    "2025-06-22": 0.036483249999999995
+    "2025-06-22": 0.036483249999999995,
+    "2025-06-23": 0.007194
   },
   "hourly": {
     "2025-06-18-15": 0.013479099999999999,
@@ -19,76 +20,114 @@
     "2025-06-21-20": 0.03315155,
     "2025-06-21-23": 0.0870397,
     "2025-06-22-10": 0.0336,
-    "2025-06-22-11": 0.00288325
+    "2025-06-22-11": 0.00288325,
+    "2025-06-23-6": 0.00355695,
+    "2025-06-23-8": 0.0036370499999999997
   },
   "modelMetrics": {
     "gemini-gemini-1.5-flash": {
-      "calls": 35,
-      "totalCost": 0.0025188000000000003,
-      "totalResponseTime": 62146,
-      "totalQuality": 34.99999999999999,
-      "averageCost": 0.0000719657142857143,
-      "averageResponseTime": 1775.6,
+      "calls": 37,
+      "totalCost": 0.0025296000000000003,
+      "totalResponseTime": 63084,
+      "totalQuality": 36.99999999999999,
+      "averageCost": 0.00006836756756756757,
+      "averageResponseTime": 1704.972972972973,
       "averageQuality": 0.9999999999999998,
-      "costEfficiency": 13.895505796410983,
-      "lastUpdated": 1750605033644,
+      "costEfficiency": 14.626818469323208,
+      "lastUpdated": 1750681157829,
       "samples": [
         {
           "timestamp": 1750605033644,
           "cost": 0.0000054,
           "responseTime": 484,
           "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750676182637,
+          "cost": 0.0000054,
+          "responseTime": 472,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750681157829,
+          "cost": 0.0000054,
+          "responseTime": 466,
+          "quality": 0.9999999999999999
         }
       ]
     },
     "claude-claude-3-haiku-20240307": {
-      "calls": 35,
-      "totalCost": 0.018351750000000003,
-      "totalResponseTime": 128965,
-      "totalQuality": 34.599999999999994,
-      "averageCost": 0.0005243357142857144,
-      "averageResponseTime": 3684.714285714286,
-      "averageQuality": 0.9885714285714284,
-      "costEfficiency": 1.885378778590597,
-      "lastUpdated": 1750605034561,
+      "calls": 37,
+      "totalCost": 0.01872375,
+      "totalResponseTime": 133549,
+      "totalQuality": 36.599999999999994,
+      "averageCost": 0.0005060472972972973,
+      "averageResponseTime": 3609.4324324324325,
+      "averageQuality": 0.9891891891891891,
+      "costEfficiency": 1.9547366312837973,
+      "lastUpdated": 1750681159851,
       "samples": [
         {
           "timestamp": 1750605034561,
           "cost": 0.00015725,
           "responseTime": 1398,
           "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750676184264,
+          "cost": 0.00018975,
+          "responseTime": 2097,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750681159851,
+          "cost": 0.00018224999999999998,
+          "responseTime": 2487,
+          "quality": 0.9999999999999999
         }
       ]
     },
     "openai-gpt-4o-mini": {
-      "calls": 48,
-      "totalCost": 0.016018050000000002,
-      "totalResponseTime": 406657,
-      "totalQuality": 44.699999999999996,
-      "averageCost": 0.00033370937500000003,
-      "averageResponseTime": 8472.020833333334,
-      "averageQuality": 0.9312499999999999,
-      "costEfficiency": 2.79060185228539,
-      "lastUpdated": 1750605033848,
+      "calls": 50,
+      "totalCost": 0.016049250000000004,
+      "totalResponseTime": 409133,
+      "totalQuality": 46.699999999999996,
+      "averageCost": 0.0003209850000000001,
+      "averageResponseTime": 8182.66,
+      "averageQuality": 0.9339999999999999,
+      "costEfficiency": 2.9097932925214565,
+      "lastUpdated": 1750681158858,
       "samples": [
         {
           "timestamp": 1750605033848,
           "cost": 0.0000156,
           "responseTime": 689,
           "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750676183145,
+          "cost": 0.0000168,
+          "responseTime": 981,
+          "quality": 0.9999999999999999
+        },
+        {
+          "timestamp": 1750681158858,
+          "cost": 0.000014399999999999998,
+          "responseTime": 1495,
+          "quality": 0.9999999999999999
         }
       ]
     },
     "openai-gpt-4o": {
-      "calls": 42,
-      "totalCost": 0.55047,
-      "totalResponseTime": 327613,
-      "totalQuality": 34.150000000000006,
-      "averageCost": 0.013106428571428571,
-      "averageResponseTime": 7800.309523809524,
-      "averageQuality": 0.8130952380952382,
-      "costEfficiency": 0.062037894889821435,
-      "lastUpdated": 1750605036588,
+      "calls": 44,
+      "totalCost": 0.55725,
+      "totalResponseTime": 333265,
+      "totalQuality": 36.150000000000006,
+      "averageCost": 0.012664772727272728,
+      "averageResponseTime": 7574.204545454545,
+      "averageQuality": 0.8215909090909093,
+      "costEfficiency": 0.06487213997308211,
+      "lastUpdated": 1750681162930,
       "samples": [
         {
           "timestamp": 1750602042393,
@@ -113,14 +152,26 @@
           "cost": 0.002705,
           "responseTime": 2025,
           "quality": 1
+        },
+        {
+          "timestamp": 1750676186839,
+          "cost": 0.0033450000000000003,
+          "responseTime": 2574,
+          "quality": 1
+        },
+        {
+          "timestamp": 1750681162930,
+          "cost": 0.0034349999999999997,
+          "responseTime": 3078,
+          "quality": 1
         }
       ]
     }
   },
   "totalCosts": {
-    "today": 0.036483249999999995,
-    "thisHour": 0.00288325,
+    "today": 0.007194,
+    "thisHour": 0.0036370499999999997,
     "thisMonth": 0
   },
-  "lastSaved": "2025-06-23T10:41:12.864Z"
+  "lastSaved": "2025-06-23T16:26:09.627Z"
 }

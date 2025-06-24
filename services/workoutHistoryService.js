@@ -1,6 +1,7 @@
 const admin = require('firebase-admin');
 const { WORKOUT_COLLECTIONS, VALIDATION_SCHEMAS } = require('../types/workout');
 const monitoringService = require('./monitoringService');
+const logger = require('../utils/visualLogger');
 
 /**
  * Workout History Service
@@ -47,10 +48,26 @@ class WorkoutHistoryService {
     try {
       await this.firestore.collection('_test').limit(1).get();
       this.isFirestoreAvailable = true;
-      console.log('✅ Workout History Service: Firestore connection established');
+      logger.success(
+        'Workout History Service: Firestore connection established',
+        {
+          'Database': 'neurastack-backend',
+          'Collections': 'workouts, completions, feedback, stats',
+          'Status': 'Connected and ready'
+        },
+        'workout'
+      );
     } catch (error) {
       this.isFirestoreAvailable = false;
-      console.warn('⚠️ Workout History Service: Firestore unavailable, using local cache:', error.message);
+      logger.warning(
+        'Workout History Service: Firestore unavailable - Using local cache',
+        {
+          'Error': error.message,
+          'Fallback': 'Local cache active',
+          'Impact': 'Workout history will not persist between restarts'
+        },
+        'workout'
+      );
     }
   }
 

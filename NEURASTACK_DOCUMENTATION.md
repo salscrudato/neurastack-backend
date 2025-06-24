@@ -7,7 +7,7 @@ NeuraStack is a production-grade AI ensemble system that combines multiple AI mo
 - **Microservice-based** with configuration-driven AI ensemble
 - **Multi-tier system** (Free/Premium) with cost-optimized model selection
 - **Memory management** with Firestore persistence and local fallback
-- **Caching layer** with Redis primary and in-memory fallback
+- **Caching layer** with high-performance in-memory caching
 - **Security middleware** with rate limiting and input validation
 
 ## Core Services

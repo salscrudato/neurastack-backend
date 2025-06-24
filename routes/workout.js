@@ -97,11 +97,11 @@ router.post('/generate-workout', async (req, res) => {
     await workoutHistoryService.storeWorkout(workoutRecord);
 
     // Log success
-    monitoringService.log('info', 'Flexible workout generated successfully', {
+    monitoringService.log('info', 'Single-prompt workout generated successfully', {
       userId,
       workoutId,
       workoutType: workoutResult.data.workout.type,
-      exerciseCount: workoutResult.data.workout.exercises ? workoutResult.data.workout.exercises.length : 0,
+      exerciseCount: workoutResult.data.workout.mainWorkout?.exercises?.length || 0,
       duration: workoutResult.data.workout.duration
     }, correlationId);
 
@@ -123,7 +123,7 @@ router.post('/generate-workout', async (req, res) => {
     });
 
   } catch (error) {
-    monitoringService.log('error', 'Flexible workout generation failed', {
+    monitoringService.log('error', 'Single-prompt workout generation failed', {
       error: error.message,
       stack: error.stack,
       workoutId

@@ -4,6 +4,7 @@
  */
 
 const { v4: generateUUID } = require('uuid');
+const logger = require('../utils/visualLogger');
 
 class MonitoringService {
   constructor() {
@@ -82,27 +83,34 @@ class MonitoringService {
       };
     }
 
-    // Console output with formatting
-    const logString = `[${timestamp}] ${level.toUpperCase()} ${correlationId ? `[${correlationId}] ` : ''}${message}`;
-    
+    // Enhanced visual console output
+    const details = {
+      ...data,
+      ...(correlationId && this.correlationIds.has(correlationId) ? {
+        'Correlation ID': correlationId,
+        'Endpoint': this.correlationIds.get(correlationId).endpoint,
+        'Duration': `${Date.now() - this.correlationIds.get(correlationId).startTime}ms`
+      } : {})
+    };
+
     switch (level.toLowerCase()) {
       case 'error':
-        console.error(logString, data);
+        logger.error(message, details, 'system');
         this.recordError(message, data, correlationId);
         break;
       case 'warn':
-        console.warn(logString, data);
+        logger.warning(message, details, 'system');
         break;
       case 'info':
-        console.info(logString, data);
+        logger.info(message, details, 'system');
         break;
       case 'debug':
         if (process.env.NODE_ENV === 'development') {
-          console.debug(logString, data);
+          logger.inline('debug', message, 'system');
         }
         break;
       default:
-        console.log(logString, data);
+        logger.inline('info', message, 'system');
     }
 
     // In production, you would send this to a logging service
