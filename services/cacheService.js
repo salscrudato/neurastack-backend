@@ -1,6 +1,6 @@
 /**
- * Production-Grade Caching Service
- * Supports Redis with in-memory fallback for cost optimization
+ * Memory-Only Caching Service
+ * High-performance in-memory caching for NeuraStack backend
  */
 
 const crypto = require('crypto');
@@ -8,8 +8,6 @@ const crypto = require('crypto');
 class CacheService {
   constructor() {
     this.memoryCache = new Map();
-    this.redisClient = null;
-    this.isRedisAvailable = false;
     this.cacheStats = {
       hits: 0,
       misses: 0,
@@ -17,62 +15,20 @@ class CacheService {
       deletes: 0,
       errors: 0
     };
-    
+
     // Default TTL configurations (in seconds)
     this.defaultTTL = {
       ensemble: 300,      // 5 minutes for ensemble responses
       workout: 1800,      // 30 minutes for workout plans
       memory: 600,        // 10 minutes for memory queries
-      cost: 60,           // 1 minute for cost estimates
       health: 30          // 30 seconds for health checks
     };
-    
-    this.initializeRedis();
+
     this.startCleanupInterval();
+    console.log('💾 Memory cache service initialized');
   }
 
-  /**
-   * Initialize Redis connection if available
-   */
-  async initializeRedis() {
-    try {
-      // Only initialize Redis if REDIS_URL is provided
-      if (process.env.REDIS_URL) {
-        const redis = require('redis');
-        this.redisClient = redis.createClient({
-          url: process.env.REDIS_URL,
-          retry_strategy: (options) => {
-            if (options.error && options.error.code === 'ECONNREFUSED') {
-              console.warn('⚠️ Redis connection refused, using memory cache');
-              return undefined; // Stop retrying
-            }
-            if (options.total_retry_time > 1000 * 60 * 60) {
-              console.warn('⚠️ Redis retry time exhausted, using memory cache');
-              return undefined;
-            }
-            return Math.min(options.attempt * 100, 3000);
-          }
-        });
 
-        this.redisClient.on('connect', () => {
-          console.log('✅ Redis connected successfully');
-          this.isRedisAvailable = true;
-        });
-
-        this.redisClient.on('error', (err) => {
-          console.warn('⚠️ Redis error, falling back to memory cache:', err.message);
-          this.isRedisAvailable = false;
-        });
-
-        await this.redisClient.connect();
-      } else {
-        console.log('📝 No Redis URL provided, using memory cache only');
-      }
-    } catch (error) {
-      console.warn('⚠️ Redis initialization failed, using memory cache:', error.message);
-      this.isRedisAvailable = false;
-    }
-  }
 
   /**
    * Generate cache key from input parameters
@@ -90,31 +46,13 @@ class CacheService {
    */
   async get(key) {
     try {
-      let value = null;
-
-      // Try Redis first if available
-      if (this.isRedisAvailable && this.redisClient) {
-        try {
-          value = await this.redisClient.get(key);
-          if (value) {
-            value = JSON.parse(value);
-            this.cacheStats.hits++;
-            console.log(`🎯 Cache HIT (Redis): ${key}`);
-            return value;
-          }
-        } catch (redisError) {
-          console.warn('⚠️ Redis get failed, trying memory cache:', redisError.message);
-          this.isRedisAvailable = false;
-        }
-      }
-
-      // Fallback to memory cache
+      // Check memory cache
       const memoryEntry = this.memoryCache.get(key);
       if (memoryEntry) {
         // Check if expired
         if (Date.now() < memoryEntry.expiresAt) {
           this.cacheStats.hits++;
-          console.log(`🎯 Cache HIT (Memory): ${key}`);
+          console.log(`🎯 Cache HIT: ${key}`);
           return memoryEntry.value;
         } else {
           // Remove expired entry
@@ -138,28 +76,14 @@ class CacheService {
   async set(key, value, ttlSeconds = null) {
     try {
       const ttl = ttlSeconds || this.defaultTTL.ensemble;
-      const serializedValue = JSON.stringify(value);
 
-      // Try Redis first if available
-      if (this.isRedisAvailable && this.redisClient) {
-        try {
-          await this.redisClient.setEx(key, ttl, serializedValue);
-          this.cacheStats.sets++;
-          console.log(`💾 Cache SET (Redis): ${key} (TTL: ${ttl}s)`);
-          return true;
-        } catch (redisError) {
-          console.warn('⚠️ Redis set failed, using memory cache:', redisError.message);
-          this.isRedisAvailable = false;
-        }
-      }
-
-      // Fallback to memory cache
+      // Store in memory cache
       this.memoryCache.set(key, {
         value,
         expiresAt: Date.now() + (ttl * 1000)
       });
       this.cacheStats.sets++;
-      console.log(`💾 Cache SET (Memory): ${key} (TTL: ${ttl}s)`);
+      console.log(`💾 Cache SET: ${key} (TTL: ${ttl}s)`);
       return true;
     } catch (error) {
       this.cacheStats.errors++;
@@ -173,22 +97,8 @@ class CacheService {
    */
   async delete(key) {
     try {
-      let deleted = false;
-
-      // Try Redis first if available
-      if (this.isRedisAvailable && this.redisClient) {
-        try {
-          const result = await this.redisClient.del(key);
-          deleted = result > 0;
-        } catch (redisError) {
-          console.warn('⚠️ Redis delete failed:', redisError.message);
-          this.isRedisAvailable = false;
-        }
-      }
-
-      // Also delete from memory cache
-      const memoryDeleted = this.memoryCache.delete(key);
-      deleted = deleted || memoryDeleted;
+      // Delete from memory cache
+      const deleted = this.memoryCache.delete(key);
 
       if (deleted) {
         this.cacheStats.deletes++;
@@ -208,15 +118,6 @@ class CacheService {
    */
   async clear() {
     try {
-      // Clear Redis if available
-      if (this.isRedisAvailable && this.redisClient) {
-        try {
-          await this.redisClient.flushAll();
-        } catch (redisError) {
-          console.warn('⚠️ Redis clear failed:', redisError.message);
-        }
-      }
-
       // Clear memory cache
       this.memoryCache.clear();
       console.log('🧹 Cache cleared');
@@ -232,15 +133,15 @@ class CacheService {
    * Get cache statistics
    */
   getStats() {
-    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0 
+    const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
       ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
       : 0;
 
     return {
       ...this.cacheStats,
       hitRate: `${hitRate}%`,
-      memoryEntries: this.memoryCache.size,
-      redisAvailable: this.isRedisAvailable
+      memoryKeys: this.memoryCache.size,
+      type: 'memory-only'
     };
   }
 
@@ -381,22 +282,7 @@ class CacheService {
     return await this.get(cacheKey);
   }
 
-  /**
-   * Cache cost estimate
-   */
-  async cacheCostEstimate(prompt, tier, response) {
-    const cacheKey = this.generateKey('cost', { prompt, tier });
-    await this.set(cacheKey, response, this.defaultTTL.cost);
-    return cacheKey;
-  }
 
-  /**
-   * Get cached cost estimate
-   */
-  async getCachedCostEstimate(prompt, tier) {
-    const cacheKey = this.generateKey('cost', { prompt, tier });
-    return await this.get(cacheKey);
-  }
 
   /**
    * Invalidate cache entries by pattern
@@ -404,19 +290,6 @@ class CacheService {
   async invalidatePattern(pattern) {
     try {
       let invalidated = 0;
-
-      // For Redis, use SCAN to find matching keys
-      if (this.isRedisAvailable && this.redisClient) {
-        try {
-          const keys = await this.redisClient.keys(`${pattern}*`);
-          if (keys.length > 0) {
-            await this.redisClient.del(keys);
-            invalidated += keys.length;
-          }
-        } catch (redisError) {
-          console.warn('⚠️ Redis pattern invalidation failed:', redisError.message);
-        }
-      }
 
       // For memory cache, iterate through keys
       for (const key of this.memoryCache.keys()) {
@@ -456,7 +329,7 @@ class CacheService {
       let warmedCount = 0;
 
       for (const prompt of commonPrompts) {
-        const cacheKey = this.generateEnsembleKey(prompt, 'cache-warming', 'free');
+        const cacheKey = this.generateKey('ensemble', { prompt, userId: 'cache-warming', tier: 'free' });
         const exists = await this.get(cacheKey);
 
         if (!exists) {
@@ -499,7 +372,7 @@ class CacheService {
       },
       usage: {
         memoryKeys: this.memoryCache.size,
-        redisAvailable: this.isRedisAvailable,
+        type: 'memory-only',
         estimatedSize: this.estimateCacheSize()
       },
       efficiency: {
@@ -517,7 +390,7 @@ class CacheService {
 
     for (const [key, value] of this.memoryCache.entries()) {
       estimatedSize += key.length * 2;
-      estimatedSize += JSON.stringify(value.data).length * 2;
+      estimatedSize += JSON.stringify(value.value).length * 2;
     }
 
     return {
@@ -569,7 +442,7 @@ class CacheService {
       let preloadedCount = 0;
 
       for (const prompt of commonUserPrompts) {
-        const cacheKey = this.generateEnsembleKey(prompt, userId, userTier);
+        const cacheKey = this.generateKey('ensemble', { prompt, userId, tier: userTier });
         const exists = await this.get(cacheKey);
 
         if (!exists) {
@@ -594,59 +467,33 @@ class CacheService {
   }
 
   /**
-   * Distributed cache coordination
-   */
-  async syncWithDistributedCache() {
-    if (!this.isRedisAvailable) return;
-
-    try {
-      const memoryKeys = Array.from(this.memoryCache.keys());
-      let syncedCount = 0;
-
-      for (const key of memoryKeys.slice(0, 100)) {
-        const memoryValue = this.memoryCache.get(key);
-        const redisValue = await this.redisClient.get(key);
-
-        if (!redisValue && memoryValue && !this.isExpired(memoryValue)) {
-          await this.redisClient.setex(key, memoryValue.ttl, JSON.stringify(memoryValue.data));
-          syncedCount++;
-        }
-      }
-
-      console.log(`🔄 Distributed cache sync completed: ${syncedCount} entries synced`);
-
-    } catch (error) {
-      console.error('Distributed cache sync failed:', error);
-    }
-  }
-
-  /**
    * Get health status
    */
   getHealthStatus() {
     const stats = this.getStats();
-    const isHealthy = stats.redisAvailable || stats.memoryKeys > 0;
+    const isHealthy = stats.memoryKeys >= 0; // Always healthy if memory cache is available
 
     return {
       status: isHealthy ? 'healthy' : 'degraded',
-      redisAvailable: stats.redisAvailable,
+      type: 'memory-only',
       memoryKeys: stats.memoryKeys,
       hitRate: stats.hitRate,
       timestamp: new Date().toISOString()
     };
   }
 
+
+
   /**
    * Graceful shutdown
    */
   async shutdown() {
     try {
-      if (this.redisClient) {
-        await this.redisClient.quit();
-        console.log('✅ Redis connection closed');
-      }
+      // Clear memory cache
+      this.memoryCache.clear();
+      console.log('✅ Memory cache cleared for shutdown');
     } catch (error) {
-      console.warn('⚠️ Error closing Redis connection:', error.message);
+      console.warn('⚠️ Error during cache shutdown:', error.message);
     }
   }
 }

@@ -22,7 +22,6 @@ const clients = require('./vendorClients'); // Connects to different AI provider
 const { getMemoryManager } = require('./memoryManager'); // Manages conversation memory
 const { v4: generateUUID } = require('uuid'); // Creates unique IDs for tracking requests
 const cacheService = require('./cacheService'); // Stores responses for faster retrieval
-const costMonitoringService = require('./costMonitoringService'); // Monitors API costs
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager'); // Organizes context for AI
 /**
  * Enhanced Ensemble Runner Class
@@ -202,21 +201,12 @@ class EnhancedEnsembleRunner {
       }
     }
 
-    // Track cost and performance metrics
+    // Track performance metrics
     const responseTime = Date.now() - startTime;
     const quality = this.calculateResponseQuality(response, responseTime, 0, false);
 
-    try {
-      await costMonitoringService.trackAPICall(
-        { provider, model },
-        promptTokens,
-        actualResponseTokens,
-        responseTime,
-        quality
-      );
-    } catch (costError) {
-      console.warn(`⚠️ Failed to track API call cost:`, costError.message);
-    }
+    // Log API call performance for monitoring
+    console.log(`🤖 API Call: ${model} - ${responseTime}ms, Quality: ${quality.toFixed(2)}, Tokens: ${actualResponseTokens}`);
 
     return response;
   }
@@ -580,20 +570,8 @@ No AI responses were available. Please provide a helpful response indicating tha
       const responseContent = synthResponse.choices[0].message.content;
       const quality = this.calculateResponseQuality(responseContent, responseTime, 0, true);
 
-      // Track synthesis cost and fine-tuned model performance
-      try {
-        await costMonitoringService.trackAPICall(
-          { provider: synthesizerConfig.provider, model: synthesizerConfig.model },
-          Math.ceil(synthPayload.length / 4),
-          synthResponse.usage?.completion_tokens || Math.ceil(responseContent.length / 4),
-          responseTime,
-          quality
-        );
-
-        // Fine-tuned model tracking removed for simplicity
-      } catch (costError) {
-        console.warn(`⚠️ Failed to track synthesis cost:`, costError.message);
-      }
+      // Log synthesis performance for monitoring
+      console.log(`🎭 Synthesis: ${synthesizerConfig.model} - ${responseTime}ms, Quality: ${quality.toFixed(2)}`);
 
       return {
         content: responseContent,
@@ -706,6 +684,51 @@ No AI responses were available. Please provide a helpful response indicating tha
         maxConcurrentRequests: this.metrics.maxConcurrentRequests
       });
     }, 5 * 60 * 1000); // Every 5 minutes
+  }
+
+  /**
+   * Update metrics for tracking performance
+   */
+  updateMetrics(type, value) {
+    try {
+      if (!this.metrics) {
+        this.metrics = {
+          cacheHits: 0,
+          cacheMisses: 0,
+          totalRequests: 0,
+          successfulRequests: 0,
+          averageProcessingTime: 0,
+          concurrentRequests: 0,
+          maxConcurrentRequests: 0,
+          responseTimes: []
+        };
+      }
+
+      switch (type) {
+        case 'cache_hit':
+          this.metrics.cacheHits++;
+          break;
+        case 'cache_miss':
+          this.metrics.cacheMisses++;
+          break;
+        case 'response_time':
+          this.metrics.responseTimes.push(value);
+          if (this.metrics.responseTimes.length > 100) {
+            this.metrics.responseTimes.shift();
+          }
+          this.metrics.averageProcessingTime =
+            this.metrics.responseTimes.reduce((a, b) => a + b, 0) / this.metrics.responseTimes.length;
+          break;
+        case 'request':
+          this.metrics.totalRequests++;
+          break;
+        case 'success':
+          this.metrics.successfulRequests++;
+          break;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to update metrics:', error.message);
+    }
   }
 
   getMetrics() {

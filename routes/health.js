@@ -2,14 +2,12 @@ const express = require('express');
 const axios = require('axios');
 const router = express.Router();
 const openai = require('../config/openai');
-const { testPrompt } = require('../config/prompts');
 const enhancedEnsemble = require('../services/enhancedEnsembleRunner');
 const monitoringService = require('../services/monitoringService');
 const clients = require('../services/vendorClients');
 const ensembleConfig = require('../config/ensemblePrompts');
 const workoutService = require('../services/workoutService');
 const cacheService = require('../services/cacheService');
-const costMonitoringService = require('../services/costMonitoringService');
 const securityMiddleware = require('../middleware/securityMiddleware');
 
 router.get('/health', (req, res) => {
@@ -20,7 +18,7 @@ router.get('/openai-test', async (req, res) => {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: testPrompt }],
+      messages: [{ role: 'user', content: 'Hello! Can you provide a brief overview of the Neurastack backend project?' }],
     });
 
     res.status(200).json({
@@ -436,82 +434,7 @@ router.get('/tier-info', async (req, res) => {
   }
 });
 
-// Cost estimation endpoint
-router.post('/estimate-cost', async (req, res) => {
-  try {
-    const { prompt, tier } = req.body;
 
-    if (!prompt) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Prompt is required for cost estimation'
-      });
-    }
-
-    // Check cache first for cost estimates
-    try {
-      const cachedEstimate = await cacheService.getCachedCostEstimate(prompt, tier || ensembleConfig.meta.tier);
-      if (cachedEstimate) {
-        return res.status(200).json({
-          ...cachedEstimate,
-          cached: true,
-          cacheTimestamp: new Date().toISOString()
-        });
-      }
-    } catch (cacheError) {
-      console.warn('⚠️ Cost estimate cache lookup failed:', cacheError.message);
-    }
-
-    // Rough token estimation (1 token ≈ 4 characters for English)
-    const promptTokens = Math.ceil(prompt.length / 4);
-    const responseTokens = tier === 'free' ? 150 : 250; // Estimated response tokens
-
-    const estimatedCost = ensembleConfig.estimateCost(promptTokens, responseTokens, tier || ensembleConfig.meta.tier);
-
-    // Prepare response
-    const costResponse = {
-      status: 'success',
-      data: {
-        prompt: {
-          length: prompt.length,
-          estimatedTokens: promptTokens
-        },
-        tier: tier || ensembleConfig.meta.tier,
-        estimatedCost: {
-          total: `$${estimatedCost.toFixed(6)}`,
-          breakdown: {
-            promptTokens,
-            responseTokens,
-            modelsUsed: Object.keys(ensembleConfig.models).length
-          }
-        },
-        comparison: {
-          free: `$${ensembleConfig.estimateCost(promptTokens, 150, 'free').toFixed(6)}`,
-          premium: `$${ensembleConfig.estimateCost(promptTokens, 250, 'premium').toFixed(6)}`
-        }
-      },
-      timestamp: new Date().toISOString()
-    };
-
-    // Cache the cost estimate for future use
-    try {
-      await cacheService.cacheCostEstimate(prompt, tier || ensembleConfig.meta.tier, costResponse);
-    } catch (cacheError) {
-      console.warn('⚠️ Failed to cache cost estimate:', cacheError.message);
-    }
-
-    res.status(200).json(costResponse);
-
-  } catch (error) {
-    monitoringService.log('error', 'Cost estimation failed', { error: error.message });
-
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to estimate cost',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // Legacy workout endpoint removed - use /workout/generate-workout instead
 
@@ -597,85 +520,7 @@ router.post('/cache/clear', async (req, res) => {
   }
 });
 
-// Cost monitoring report endpoint
-router.get('/cost/report', async (req, res) => {
-  try {
-    const report = costMonitoringService.getReport();
 
-    res.status(200).json({
-      status: 'success',
-      data: report,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to generate cost report',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Cost optimization recommendations endpoint
-router.get('/cost/recommendations', async (req, res) => {
-  try {
-    const report = costMonitoringService.getReport();
-    const recommendations = [];
-
-    // Generate actionable recommendations based on cost data
-    if (report.costs.utilizationPercent.daily > 80) {
-      recommendations.push({
-        type: 'cost_alert',
-        priority: 'high',
-        message: 'Daily cost limit approaching. Consider optimizing model usage.',
-        action: 'Review high-cost operations and enable caching'
-      });
-    }
-
-    if (report.modelPerformance.length > 0) {
-      const topModel = report.modelPerformance[0];
-      recommendations.push({
-        type: 'model_optimization',
-        priority: 'medium',
-        message: `${topModel.model} shows best cost efficiency`,
-        action: `Consider using ${topModel.model} for similar workloads`
-      });
-    }
-
-    if (report.costs.today > 0) {
-      const projectedMonthly = report.costs.today * 30;
-      recommendations.push({
-        type: 'budget_projection',
-        priority: 'info',
-        message: `Projected monthly cost: $${projectedMonthly.toFixed(2)}`,
-        action: 'Monitor usage patterns and adjust limits if needed'
-      });
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        recommendations,
-        summary: {
-          totalRecommendations: recommendations.length,
-          highPriority: recommendations.filter(r => r.priority === 'high').length,
-          costOptimizationOpportunities: recommendations.filter(r => r.type === 'model_optimization').length
-        }
-      },
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to generate cost recommendations',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // Vector database statistics endpoint
 router.get('/vector/stats', async (req, res) => {
@@ -987,6 +832,52 @@ function estimateTokenCount(text) {
 }
 
 /**
+ * Estimate request cost based on prompt and responses
+ */
+async function estimateRequestCost(prompt, roles) {
+  try {
+    const promptTokens = estimateTokenCount(prompt);
+    let totalResponseTokens = 0;
+
+    roles.forEach(role => {
+      if (role.content) {
+        totalResponseTokens += estimateTokenCount(role.content);
+      }
+    });
+
+    // Rough cost estimation based on token usage
+    // GPT-4o-mini: ~$0.00015/1K input tokens, ~$0.0006/1K output tokens
+    // Gemini Flash: ~$0.000075/1K tokens
+    // Claude Haiku: ~$0.00025/1K input tokens, ~$0.00125/1K output tokens
+
+    const inputCost = (promptTokens / 1000) * 0.0002; // Average input cost
+    const outputCost = (totalResponseTokens / 1000) * 0.0008; // Average output cost
+    const totalCost = inputCost + outputCost;
+
+    return {
+      totalCost: parseFloat(totalCost.toFixed(6)),
+      breakdown: {
+        inputTokens: promptTokens,
+        outputTokens: totalResponseTokens,
+        inputCost: parseFloat(inputCost.toFixed(6)),
+        outputCost: parseFloat(outputCost.toFixed(6))
+      }
+    };
+  } catch (error) {
+    console.warn('Cost estimation failed:', error.message);
+    return {
+      totalCost: 0.001, // Fallback estimate
+      breakdown: {
+        inputTokens: 0,
+        outputTokens: 0,
+        inputCost: 0,
+        outputCost: 0
+      }
+    };
+  }
+}
+
+/**
  * Assess content complexity
  */
 function assessComplexity(content) {
@@ -1060,23 +951,6 @@ function getQualityDistribution(roles) {
   return distribution;
 }
 
-/**
- * Estimate request cost
- */
-async function estimateRequestCost(prompt, roles) {
-  const promptTokens = estimateTokenCount(prompt);
-  const responseTokens = roles.reduce((sum, role) => sum + estimateTokenCount(role.content || ''), 0);
 
-  // Rough cost estimation based on token usage
-  const estimatedCost = (promptTokens * 0.0001 + responseTokens * 0.0002) * roles.length;
-
-  return {
-    promptTokens,
-    responseTokens,
-    totalTokens: promptTokens + responseTokens,
-    estimatedCost: `$${estimatedCost.toFixed(6)}`,
-    modelsUsed: roles.length
-  };
-}
 
 module.exports = router;

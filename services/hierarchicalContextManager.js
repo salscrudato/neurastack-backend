@@ -11,7 +11,41 @@ class HierarchicalContextManager {
   constructor() {
     this.memoryManager = getMemoryManager();
     this.cacheService = cacheService;
-    
+
+    // Initialize content analyzer with simple token estimation
+    this.contentAnalyzer = {
+      estimateTokenCount: (text) => {
+        if (!text || typeof text !== 'string') return 0;
+        return Math.ceil(text.length / 4); // Rough estimation: 4 characters per token
+      }
+    };
+
+    // Initialize simple compression service
+    this.compressionService = {
+      compressContext: async (content, maxTokens, options = {}) => {
+        const originalTokens = this.contentAnalyzer.estimateTokenCount(content);
+        if (originalTokens <= maxTokens) {
+          return {
+            compressed: content,
+            compressedTokens: originalTokens,
+            compressionRatio: 1.0,
+            strategy: 'no_compression'
+          };
+        }
+
+        // Simple truncation compression
+        const targetLength = Math.floor(content.length * (maxTokens / originalTokens));
+        const compressed = content.substring(0, targetLength) + '...';
+
+        return {
+          compressed,
+          compressedTokens: this.contentAnalyzer.estimateTokenCount(compressed),
+          compressionRatio: maxTokens / originalTokens,
+          strategy: 'truncation'
+        };
+      }
+    };
+
     // Context optimization settings
     this.config = {
       maxUserProfileTokens: 150,
@@ -430,12 +464,24 @@ class HierarchicalContextManager {
   async optimizeContextWithDynamicSizing(contextStructure, maxTokens, breakdown) {
     console.log(`🎯 Optimizing with dynamic breakdown:`, breakdown);
 
+    // Ensure contextStructure has all required properties with defaults
+    const safeContextStructure = {
+      userProfile: contextStructure?.userProfile || null,
+      sessionSummary: contextStructure?.sessionSummary || null,
+      conversationThemes: contextStructure?.conversationThemes || null,
+      relevantMemories: contextStructure?.relevantMemories || [],
+      recentContext: contextStructure?.recentContext || null
+    };
+
+    // Ensure breakdown has all required properties with defaults
+    const safeBreakdown = breakdown || {};
+
     const optimizedSections = await Promise.all([
-      this.compressUserProfile(contextStructure.userProfile, breakdown.userProfile || Math.floor(maxTokens * 0.15)),
-      this.compressSessionSummary(contextStructure.sessionSummary, breakdown.sessionSummary || Math.floor(maxTokens * 0.20)),
-      this.compressThemes(contextStructure.conversationThemes, breakdown.conversationThemes || Math.floor(maxTokens * 0.10)),
-      this.compressMemories(contextStructure.relevantMemories, breakdown.relevantMemories || Math.floor(maxTokens * 0.45)),
-      this.compressRecentContext(contextStructure.recentContext, breakdown.recentContext || Math.floor(maxTokens * 0.10))
+      this.compressUserProfile(safeContextStructure.userProfile, safeBreakdown.userProfile || Math.floor(maxTokens * 0.15)),
+      this.compressSessionSummary(safeContextStructure.sessionSummary, safeBreakdown.sessionSummary || Math.floor(maxTokens * 0.20)),
+      this.compressThemes(safeContextStructure.conversationThemes, safeBreakdown.conversationThemes || Math.floor(maxTokens * 0.10)),
+      this.compressMemories(safeContextStructure.relevantMemories, safeBreakdown.relevantMemories || Math.floor(maxTokens * 0.45)),
+      this.compressRecentContext(safeContextStructure.recentContext, safeBreakdown.recentContext || Math.floor(maxTokens * 0.10))
     ]);
 
     const [userProfile, sessionSummary, themes, memories, recentContext] = optimizedSections;
