@@ -31,6 +31,12 @@ const admin = require('firebase-admin'); // Google's database service for storin
 // ============================================================================
 const logger = require('./utils/visualLogger');
 
+// Log application startup
+logger.inline('info', 'NeuraStack Backend starting up...', 'startup');
+logger.inline('info', `Node.js version: ${process.version}`, 'startup');
+logger.inline('info', `Environment: ${process.env.NODE_ENV || 'development'}`, 'startup');
+logger.inline('info', `Port: ${process.env.PORT || '8080'}`, 'startup');
+
 // ============================================================================
 // FIREBASE INITIALIZATION - Database connection setup
 // ============================================================================
@@ -58,6 +64,8 @@ function initializeFirebase() {
 
     // Try environment variables first (for production deployment)
     if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+      logger.inline('info', 'Using Firebase environment variables for production', 'firebase');
+
       const serviceAccount = {
         type: "service_account",
         project_id: process.env.FIREBASE_PROJECT_ID,
@@ -76,6 +84,8 @@ function initializeFirebase() {
 
     } else {
       // Fallback to service account file (for local development)
+      logger.inline('info', 'Attempting to use Firebase service account file', 'firebase');
+
       try {
         const serviceAccount = require('./config/firebase-service-account.json');
 
@@ -86,7 +96,17 @@ function initializeFirebase() {
 
         firebaseConfig = createFirebaseConfig(serviceAccount, 'service account file');
       } catch (fileError) {
-        throw new Error('No Firebase credentials found. Set environment variables or provide service account file.');
+        logger.warning(
+          'Firebase service account file not found, using minimal configuration',
+          { 'Error': fileError.message },
+          'firebase'
+        );
+
+        // Use minimal configuration for production if no credentials are available
+        firebaseConfig = {
+          projectId: process.env.FIREBASE_PROJECT_ID || 'neurastack-backend',
+          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'neurastack-backend.firebasestorage.app'
+        };
       }
     }
 
@@ -146,7 +166,9 @@ function createFirebaseConfig(serviceAccount, credentialType) {
 }
 
 // Initialize Firebase now
+logger.inline('info', 'Starting Firebase initialization...', 'firebase');
 initializeFirebase();
+logger.inline('info', 'Firebase initialization completed', 'firebase');
 
 // ============================================================================
 // SERVICE IMPORTS - Our custom business logic modules

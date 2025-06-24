@@ -1,4 +1,5 @@
 .env
+.env.yaml
 
 # Firebase credentials
 firebase-admin-key.json
