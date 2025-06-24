@@ -1,31 +1,66 @@
 /**
- * Memory-Only Caching Service
- * High-performance in-memory caching for NeuraStack backend
+ * Enhanced Multi-Tier Memory Caching Service
+ * High-performance in-memory caching with intelligent tiering for NeuraStack backend
  */
 
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 class CacheService {
   constructor() {
-    this.memoryCache = new Map();
+    // Multi-tier cache storage for optimal performance
+    this.memoryCache = new Map(); // Legacy compatibility
+    this.cache = {
+      hot: new Map(),    // Frequently accessed, keep in memory
+      warm: new Map(),   // Moderately accessed, compressed
+      cold: new Map()    // Rarely accessed, heavily compressed
+    };
+
+    // Enhanced cache statistics
     this.cacheStats = {
       hits: 0,
       misses: 0,
       sets: 0,
       deletes: 0,
-      errors: 0
+      errors: 0,
+      evictions: 0,
+      compressionSavings: 0,
+      tierPromotions: 0,
+      tierDemotions: 0,
+      predictiveHits: 0
     };
 
-    // Default TTL configurations (in seconds)
+    // Access patterns for intelligent caching
+    this.accessPatterns = new Map();
+    this.metadata = new Map();
+
+    // Enhanced TTL configurations (in milliseconds for precision)
     this.defaultTTL = {
-      ensemble: 300,      // 5 minutes for ensemble responses
-      workout: 1800,      // 30 minutes for workout plans
-      memory: 600,        // 10 minutes for memory queries
-      health: 30          // 30 seconds for health checks
+      ensemble: 300000,      // 5 minutes for ensemble responses
+      workout: 1800000,      // 30 minutes for workout plans
+      memory: 600000,        // 10 minutes for memory queries
+      health: 30000,         // 30 seconds for health checks
+      hot: 600000,           // 10 minutes for hot cache
+      warm: 3600000,         // 1 hour for warm cache
+      cold: 14400000         // 4 hours for cold cache
+    };
+
+    // Production-grade configuration
+    this.config = {
+      maxMemoryUsage: 200 * 1024 * 1024, // 200MB max memory usage
+      compressionThreshold: 512, // Compress entries larger than 512 bytes
+      hotCacheMaxSize: 1000,
+      warmCacheMaxSize: 5000,
+      coldCacheMaxSize: 44000,
+      accessCountThreshold: 3, // Promote to hot after 3 accesses
+      memoryPressureThreshold: 0.8,
+      cleanupInterval: 120000, // 2 minutes
+      compressionLevel: 6 // zlib compression level
     };
 
     this.startCleanupInterval();
-    console.log('💾 Memory cache service initialized');
+    this.startMemoryMonitoring();
+    console.log('💾 Enhanced multi-tier memory cache service initialized');
   }
 
 
@@ -45,14 +80,17 @@ class CacheService {
    * Get value from cache
    */
   async get(key) {
+    const startTime = Date.now();
+
     try {
-      // Check memory cache
+      // Check legacy memory cache first for backward compatibility
       const memoryEntry = this.memoryCache.get(key);
       if (memoryEntry) {
         // Check if expired
         if (Date.now() < memoryEntry.expiresAt) {
           this.cacheStats.hits++;
-          console.log(`🎯 Cache HIT: ${key}`);
+          this.updateAccessPattern(key);
+          console.log(`🎯 Cache HIT (legacy): ${key}`);
           return memoryEntry.value;
         } else {
           // Remove expired entry
@@ -60,36 +98,167 @@ class CacheService {
         }
       }
 
+      // Check multi-tier cache system
+      let entry = this.cache.hot.get(key);
+      let tier = 'hot';
+
+      if (!entry || entry.expiresAt <= Date.now()) {
+        // Check warm cache
+        entry = this.cache.warm.get(key);
+        tier = 'warm';
+
+        if (!entry || entry.expiresAt <= Date.now()) {
+          // Check cold cache
+          entry = this.cache.cold.get(key);
+          tier = 'cold';
+        }
+      }
+
+      if (entry && entry.expiresAt > Date.now()) {
+        this.cacheStats.hits++;
+
+        // Decompress if needed
+        let value = entry.value;
+        if (entry.compressed) {
+          value = await this.decompress(value);
+        }
+
+        // Update access pattern and potentially promote
+        this.updateAccessPattern(key);
+        await this.considerPromotion(key, tier, entry);
+
+        console.log(`🎯 Cache HIT (${tier}): ${key}`);
+        return value;
+      }
+
+      // Clean up expired entries
+      if (entry) {
+        this.cache[tier].delete(key);
+        this.metadata.delete(key);
+      }
+
       this.cacheStats.misses++;
       console.log(`❌ Cache MISS: ${key}`);
       return null;
+
     } catch (error) {
       this.cacheStats.errors++;
-      console.error('❌ Cache get error:', error.message);
+      console.error('❌ Enhanced cache get error:', error.message);
       return null;
     }
   }
 
   /**
-   * Set value in cache
+   * Enhanced set method with multi-tier support
    */
   async set(key, value, ttlSeconds = null) {
     try {
-      const ttl = ttlSeconds || this.defaultTTL.ensemble;
+      // Determine TTL based on cache type or use provided value
+      let ttl;
+      if (ttlSeconds) {
+        ttl = ttlSeconds * 1000; // Convert to milliseconds
+      } else {
+        // Auto-detect cache type from key prefix
+        if (key.startsWith('ensemble:')) {
+          ttl = this.defaultTTL.ensemble;
+        } else if (key.startsWith('workout:')) {
+          ttl = this.defaultTTL.workout;
+        } else if (key.startsWith('memory:')) {
+          ttl = this.defaultTTL.memory;
+        } else if (key.startsWith('health:')) {
+          ttl = this.defaultTTL.health;
+        } else {
+          ttl = this.defaultTTL.ensemble; // Default fallback
+        }
+      }
 
-      // Store in memory cache
+      const expiresAt = Date.now() + ttl;
+
+      // Store in legacy memory cache for backward compatibility
       this.memoryCache.set(key, {
         value,
-        expiresAt: Date.now() + (ttl * 1000)
+        expiresAt
       });
+
+      // Determine which tier to store in based on expected access pattern
+      const tier = this.determineTier(key, value);
+      await this.storeInTier(key, value, expiresAt, tier);
+
       this.cacheStats.sets++;
-      console.log(`💾 Cache SET: ${key} (TTL: ${ttl}s)`);
+      console.log(`💾 Cache SET: ${key} (TTL: ${ttl/1000}s, Tier: ${tier})`);
       return true;
     } catch (error) {
       this.cacheStats.errors++;
-      console.error('❌ Cache set error:', error.message);
+      console.error('❌ Enhanced cache set error:', error.message);
       return false;
     }
+  }
+
+  /**
+   * Determine optimal tier for new cache entry
+   */
+  determineTier(key, value) {
+    // Check if we have access pattern history
+    const pattern = this.accessPatterns.get(key);
+    if (pattern && pattern.count >= this.config.accessCountThreshold) {
+      return 'hot'; // Frequently accessed items go to hot cache
+    }
+
+    // Check value size - large values go to cold cache with compression
+    const valueSize = JSON.stringify(value).length;
+    if (valueSize > this.config.compressionThreshold * 4) {
+      return 'cold';
+    }
+
+    // Check key type for intelligent placement
+    if (key.startsWith('ensemble:') || key.startsWith('health:')) {
+      return 'warm'; // Ensemble responses are moderately accessed
+    }
+
+    if (key.startsWith('workout:')) {
+      return 'hot'; // Workout data is frequently accessed
+    }
+
+    return 'warm'; // Default to warm cache
+  }
+
+  /**
+   * Store entry in specified tier
+   */
+  async storeInTier(key, value, expiresAt, tier) {
+    // Check capacity and evict if necessary
+    const cache = this.cache[tier];
+    const maxSize = this.config[`${tier}CacheMaxSize`];
+
+    if (cache.size >= maxSize) {
+      this.evictLeastRecentlyUsed(tier);
+    }
+
+    // Compress if storing in warm or cold cache and above threshold
+    let compressed = false;
+    let storeValue = value;
+
+    if ((tier === 'warm' || tier === 'cold') &&
+        JSON.stringify(value).length > this.config.compressionThreshold) {
+      storeValue = await this.compress(value);
+      compressed = true;
+    }
+
+    cache.set(key, {
+      value: storeValue,
+      expiresAt,
+      compressed,
+      tier,
+      createdAt: Date.now()
+    });
+
+    // Update metadata
+    this.metadata.set(key, {
+      tier,
+      compressed,
+      size: compressed ? storeValue.length : JSON.stringify(value).length,
+      createdAt: Date.now()
+    });
   }
 
   /**
@@ -146,13 +315,197 @@ class CacheService {
   }
 
   /**
-   * Start cleanup interval for memory cache
+   * Enhanced cleanup interval with memory monitoring
    */
   startCleanupInterval() {
-    // Clean expired entries every 5 minutes
     setInterval(() => {
       this.cleanupMemoryCache();
-    }, 5 * 60 * 1000);
+      this.cleanupMultiTierCache();
+      this.optimizeMemoryUsage();
+    }, this.config.cleanupInterval);
+  }
+
+  /**
+   * Start memory monitoring for production deployment
+   */
+  startMemoryMonitoring() {
+    setInterval(() => {
+      const memoryUsage = this.calculateMemoryUsage();
+      if (memoryUsage > this.config.maxMemoryUsage * this.config.memoryPressureThreshold) {
+        console.warn(`⚠️ Cache memory pressure detected: ${(memoryUsage / 1024 / 1024).toFixed(2)}MB`);
+        this.aggressiveCleanup();
+      }
+    }, 30000); // Check every 30 seconds
+  }
+
+  /**
+   * Update access pattern for intelligent caching
+   */
+  updateAccessPattern(key) {
+    const pattern = this.accessPatterns.get(key) || { count: 0, lastAccess: 0, frequency: 0 };
+    const now = Date.now();
+
+    pattern.count++;
+    pattern.frequency = pattern.count / Math.max(1, (now - pattern.lastAccess) / 3600000); // accesses per hour
+    pattern.lastAccess = now;
+
+    this.accessPatterns.set(key, pattern);
+  }
+
+  /**
+   * Consider promoting cache entry to higher tier
+   */
+  async considerPromotion(key, currentTier, entry) {
+    const pattern = this.accessPatterns.get(key);
+    if (!pattern) return;
+
+    // Promote to hot cache if frequently accessed
+    if (currentTier !== 'hot' && pattern.count >= this.config.accessCountThreshold) {
+      await this.promoteToHot(key, entry);
+    }
+    // Promote from cold to warm if moderately accessed
+    else if (currentTier === 'cold' && pattern.count >= 2) {
+      await this.promoteToWarm(key, entry);
+    }
+  }
+
+  /**
+   * Compress data for storage efficiency
+   */
+  async compress(data) {
+    try {
+      const jsonString = JSON.stringify(data);
+      const compressed = zlib.deflateSync(jsonString, { level: this.config.compressionLevel });
+      this.cacheStats.compressionSavings += jsonString.length - compressed.length;
+      return compressed;
+    } catch (error) {
+      console.error('Compression error:', error);
+      return data; // Return original data if compression fails
+    }
+  }
+
+  /**
+   * Decompress data
+   */
+  async decompress(compressedData) {
+    try {
+      if (Buffer.isBuffer(compressedData)) {
+        const decompressed = zlib.inflateSync(compressedData);
+        return JSON.parse(decompressed.toString());
+      }
+      return compressedData; // Return as-is if not compressed
+    } catch (error) {
+      console.error('Decompression error:', error);
+      return compressedData;
+    }
+  }
+
+  /**
+   * Calculate total memory usage
+   */
+  calculateMemoryUsage() {
+    let totalSize = 0;
+
+    // Calculate legacy cache size
+    for (const [key, entry] of this.memoryCache) {
+      totalSize += JSON.stringify({ key, entry }).length;
+    }
+
+    // Calculate multi-tier cache size
+    for (const tier of ['hot', 'warm', 'cold']) {
+      for (const [key, entry] of this.cache[tier]) {
+        if (entry.compressed && Buffer.isBuffer(entry.value)) {
+          totalSize += entry.value.length;
+        } else {
+          totalSize += JSON.stringify({ key, entry }).length;
+        }
+      }
+    }
+
+    return totalSize;
+  }
+
+  /**
+   * Cleanup multi-tier cache
+   */
+  cleanupMultiTierCache() {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const tier of ['hot', 'warm', 'cold']) {
+      for (const [key, entry] of this.cache[tier]) {
+        if (entry.expiresAt <= now) {
+          this.cache[tier].delete(key);
+          this.metadata.delete(key);
+          this.accessPatterns.delete(key);
+          cleaned++;
+        }
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log(`🧹 Cleaned ${cleaned} expired entries from multi-tier cache`);
+    }
+  }
+
+  /**
+   * Optimize memory usage by moving entries between tiers
+   */
+  optimizeMemoryUsage() {
+    const memoryUsage = this.calculateMemoryUsage();
+
+    if (memoryUsage > this.config.maxMemoryUsage * 0.7) {
+      console.log(`🔧 Optimizing memory usage: ${(memoryUsage / 1024 / 1024).toFixed(2)}MB`);
+
+      // Move least accessed items to lower tiers
+      this.demoteStaleEntries();
+    }
+  }
+
+  /**
+   * Demote stale entries to lower tiers
+   */
+  demoteStaleEntries() {
+    const now = Date.now();
+    const staleThreshold = 10 * 60 * 1000; // 10 minutes
+
+    // Demote from hot to warm
+    for (const [key, entry] of this.cache.hot) {
+      const pattern = this.accessPatterns.get(key);
+      if (pattern && (now - pattern.lastAccess) > staleThreshold) {
+        this.demoteToWarm(key, entry);
+      }
+    }
+
+    // Demote from warm to cold
+    for (const [key, entry] of this.cache.warm) {
+      const pattern = this.accessPatterns.get(key);
+      if (pattern && (now - pattern.lastAccess) > staleThreshold * 2) {
+        this.demoteToCold(key, entry);
+      }
+    }
+  }
+
+  /**
+   * Aggressive cleanup during memory pressure
+   */
+  aggressiveCleanup() {
+    console.log('🧹 Starting aggressive cache cleanup...');
+
+    // Remove expired entries first
+    this.cleanupMemoryCache();
+    this.cleanupMultiTierCache();
+
+    // Demote entries aggressively
+    this.demoteStaleEntries();
+
+    // Remove least recently used entries if still over limit
+    const memoryUsage = this.calculateMemoryUsage();
+    if (memoryUsage > this.config.maxMemoryUsage * 0.9) {
+      this.evictLeastRecentlyUsed();
+    }
+
+    console.log('🧹 Aggressive cleanup completed');
   }
 
   /**
@@ -485,13 +838,149 @@ class CacheService {
 
 
   /**
-   * Graceful shutdown
+   * Promote entry to hot cache
+   */
+  async promoteToHot(key, entry) {
+    if (this.cache.hot.size >= this.config.hotCacheMaxSize) {
+      this.evictLeastRecentlyUsed('hot');
+    }
+
+    // Decompress if needed for hot cache
+    let value = entry.value;
+    if (entry.compressed) {
+      value = await this.decompress(value);
+    }
+
+    this.cache.hot.set(key, {
+      value,
+      expiresAt: Date.now() + this.defaultTTL.hot,
+      compressed: false,
+      tier: 'hot'
+    });
+
+    // Remove from lower tiers
+    this.cache.warm.delete(key);
+    this.cache.cold.delete(key);
+
+    this.cacheStats.tierPromotions++;
+  }
+
+  /**
+   * Promote entry to warm cache
+   */
+  async promoteToWarm(key, entry) {
+    if (this.cache.warm.size >= this.config.warmCacheMaxSize) {
+      this.evictLeastRecentlyUsed('warm');
+    }
+
+    let value = entry.value;
+    let compressed = entry.compressed;
+
+    // Compress if not already compressed and above threshold
+    if (!compressed && JSON.stringify(value).length > this.config.compressionThreshold) {
+      value = await this.compress(value);
+      compressed = true;
+    }
+
+    this.cache.warm.set(key, {
+      value,
+      expiresAt: Date.now() + this.defaultTTL.warm,
+      compressed,
+      tier: 'warm'
+    });
+
+    // Remove from cold tier
+    this.cache.cold.delete(key);
+
+    this.cacheStats.tierPromotions++;
+  }
+
+  /**
+   * Demote entry to warm cache
+   */
+  async demoteToWarm(key, entry) {
+    let value = entry.value;
+    let compressed = false;
+
+    // Compress for warm cache
+    if (JSON.stringify(value).length > this.config.compressionThreshold) {
+      value = await this.compress(value);
+      compressed = true;
+    }
+
+    this.cache.warm.set(key, {
+      value,
+      expiresAt: entry.expiresAt,
+      compressed,
+      tier: 'warm'
+    });
+
+    this.cache.hot.delete(key);
+    this.cacheStats.tierDemotions++;
+  }
+
+  /**
+   * Demote entry to cold cache
+   */
+  async demoteToCold(key, entry) {
+    let value = entry.value;
+    let compressed = entry.compressed;
+
+    // Ensure compression for cold cache
+    if (!compressed) {
+      value = await this.compress(value);
+      compressed = true;
+    }
+
+    this.cache.cold.set(key, {
+      value,
+      expiresAt: entry.expiresAt,
+      compressed,
+      tier: 'cold'
+    });
+
+    this.cache.warm.delete(key);
+    this.cacheStats.tierDemotions++;
+  }
+
+  /**
+   * Evict least recently used entries
+   */
+  evictLeastRecentlyUsed(tier = 'cold', count = 1) {
+    const cache = tier ? this.cache[tier] : this.cache.cold;
+    const entries = Array.from(cache.entries());
+
+    // Sort by last access time
+    entries.sort((a, b) => {
+      const patternA = this.accessPatterns.get(a[0]) || { lastAccess: 0 };
+      const patternB = this.accessPatterns.get(b[0]) || { lastAccess: 0 };
+      return patternA.lastAccess - patternB.lastAccess;
+    });
+
+    // Remove least recently used entries
+    for (let i = 0; i < Math.min(count, entries.length); i++) {
+      const [key] = entries[i];
+      cache.delete(key);
+      this.metadata.delete(key);
+      this.accessPatterns.delete(key);
+      this.cacheStats.evictions++;
+    }
+  }
+
+  /**
+   * Enhanced graceful shutdown
    */
   async shutdown() {
     try {
-      // Clear memory cache
+      // Clear all caches
       this.memoryCache.clear();
-      console.log('✅ Memory cache cleared for shutdown');
+      this.cache.hot.clear();
+      this.cache.warm.clear();
+      this.cache.cold.clear();
+      this.metadata.clear();
+      this.accessPatterns.clear();
+
+      console.log('✅ Enhanced cache service shutdown completed');
     } catch (error) {
       console.warn('⚠️ Error during cache shutdown:', error.message);
     }

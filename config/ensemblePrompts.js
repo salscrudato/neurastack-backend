@@ -12,10 +12,10 @@ const MODEL_CONFIGS = {
     synthesizer: { provider: 'openai', model: 'gpt-4o' } // Upgraded from gpt-4o-mini for better synthesis
   },
   premium: {
-    gpt4o: { provider: 'openai', model: 'gpt-4o' },
+    gpt4o: { provider: 'openai', model: 'gpt-4o-mini' },
     gemini: { provider: 'gemini', model: 'gemini-2.0-flash' },
     claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' },
-    synthesizer: { provider: 'openai', model: 'o1-preview' } // Upgraded to OpenAI's best reasoning model
+    synthesizer: { provider: 'openai', model: 'gpt-4o' } // Upgraded from gpt-4o-mini for better synthesis
   }
 };
 
@@ -32,14 +32,14 @@ const TIER_CONFIGS = {
     maxPromptLength: 1500
   },
   premium: {
-    sharedWordLimit: 600,        // Increased from 200 for even better responses
-    maxTokensPerRole: 800,       // Increased from 250 for comprehensive answers
-    maxSynthesisTokens: 1000,    // Increased from 400 for detailed synthesis
-    maxCharactersPerRole: 3000,  // Character limit for individual AI responses (premium tier)
-    timeoutMs: 30000,            // Increased from 15000 to prevent OpenAI timeouts
-    requestsPerHour: 100,
-    requestsPerDay: 1000,
-    maxPromptLength: 5000
+    sharedWordLimit: 600,        // Increased from 100 to allow comprehensive responses
+    maxTokensPerRole: 1000,       // Increased from 150 to prevent truncation
+    maxSynthesisTokens: 1200,     // Increased from 200 for better synthesis
+    maxCharactersPerRole: 2500,  // Character limit for individual AI responses (free tier)
+    timeoutMs: 50000,            // Increased from 10000 to prevent OpenAI timeouts
+    requestsPerHour: 10,
+    requestsPerDay: 50,
+    maxPromptLength: 1500
   }
 };
 

@@ -117,9 +117,17 @@ class EnhancedVendorClients {
         failureCount: 0,
         successCount: 0,
         lastFailureTime: null,
-        threshold: 5, // failures before opening
-        timeout: 60000, // 1 minute before trying again
-        resetSuccessCount: 3 // successes needed to close circuit
+        threshold: 3, // Reduced threshold for faster detection
+        timeout: 30000, // Reduced timeout for faster recovery (30 seconds)
+        resetSuccessCount: 2, // Reduced successes needed to close circuit
+
+        // Enhanced circuit breaker features
+        failureRate: 0, // Track failure rate over time window
+        timeWindow: 60000, // 1 minute time window for failure rate calculation
+        recentRequests: [], // Track recent requests for failure rate
+        adaptiveThreshold: true, // Enable adaptive threshold based on load
+        gracefulDegradation: true, // Enable graceful degradation
+        fallbackStrategy: 'best_effort' // Fallback strategy when circuit is open
       });
 
       this.requestQueues.set(provider, []);
@@ -128,7 +136,16 @@ class EnhancedVendorClients {
         successfulRequests: 0,
         failedRequests: 0,
         averageResponseTime: 0,
-        lastRequestTime: null
+        lastRequestTime: null,
+
+        // Enhanced metrics
+        responseTimeHistory: [], // Track response time history
+        errorTypes: new Map(), // Track different error types
+        loadFactor: 0, // Current load factor (0-1)
+        healthScore: 1.0, // Overall health score (0-1)
+        lastHealthCheck: Date.now(),
+        consecutiveFailures: 0,
+        consecutiveSuccesses: 0
       });
     });
   }
@@ -193,27 +210,113 @@ class EnhancedVendorClients {
     return Promise.reject(error);
   }
 
-  recordCircuitBreakerSuccess(provider) {
+  recordCircuitBreakerSuccess(provider, responseTime = 0) {
     const breaker = this.circuitBreakers.get(provider);
-    breaker.successCount++;
+    const metrics = this.metrics.get(provider);
+    const now = Date.now();
 
+    breaker.successCount++;
+    metrics.consecutiveSuccesses++;
+    metrics.consecutiveFailures = 0;
+
+    // Add to recent requests
+    breaker.recentRequests.push({ timestamp: now, success: true, responseTime });
+
+    // Clean old requests outside time window
+    breaker.recentRequests = breaker.recentRequests.filter(
+      req => now - req.timestamp <= breaker.timeWindow
+    );
+
+    // Update failure rate
+    const totalRecent = breaker.recentRequests.length;
+    const failedRecent = breaker.recentRequests.filter(req => !req.success).length;
+    breaker.failureRate = totalRecent > 0 ? failedRecent / totalRecent : 0;
+
+    // Improve health score
+    metrics.healthScore = Math.min(1.0, metrics.healthScore + 0.05);
+
+    // Update response time history
+    if (responseTime > 0) {
+      metrics.responseTimeHistory.push(responseTime);
+      if (metrics.responseTimeHistory.length > 100) {
+        metrics.responseTimeHistory.shift(); // Keep only last 100 measurements
+      }
+
+      // Update average response time
+      metrics.averageResponseTime = metrics.responseTimeHistory.reduce((a, b) => a + b, 0) /
+                                   metrics.responseTimeHistory.length;
+    }
+
+    // Close circuit breaker if conditions are met
     if (breaker.state === 'HALF_OPEN' && breaker.successCount >= breaker.resetSuccessCount) {
       breaker.state = 'CLOSED';
       breaker.failureCount = 0;
       breaker.successCount = 0;
-      console.log(`🔄 Circuit breaker CLOSED for ${provider}`);
+      console.log(`🔄 Circuit breaker CLOSED for ${provider}`, {
+        healthScore: metrics.healthScore,
+        failureRate: breaker.failureRate,
+        avgResponseTime: metrics.averageResponseTime
+      });
     }
   }
 
-  recordCircuitBreakerFailure(provider) {
+  recordCircuitBreakerFailure(provider, error) {
     const breaker = this.circuitBreakers.get(provider);
-    breaker.failureCount++;
-    breaker.lastFailureTime = Date.now();
-    breaker.successCount = 0;
+    const metrics = this.metrics.get(provider);
+    const now = Date.now();
 
-    if (breaker.state === 'CLOSED' && breaker.failureCount >= breaker.threshold) {
+    breaker.failureCount++;
+    breaker.lastFailureTime = now;
+    breaker.successCount = 0;
+    metrics.consecutiveFailures++;
+    metrics.consecutiveSuccesses = 0;
+
+    // Track error types for analysis
+    const errorType = this.categorizeError(error);
+    const errorCount = metrics.errorTypes.get(errorType) || 0;
+    metrics.errorTypes.set(errorType, errorCount + 1);
+
+    // Add to recent requests for failure rate calculation
+    breaker.recentRequests.push({ timestamp: now, success: false, error: errorType });
+
+    // Clean old requests outside time window
+    breaker.recentRequests = breaker.recentRequests.filter(
+      req => now - req.timestamp <= breaker.timeWindow
+    );
+
+    // Calculate failure rate
+    const totalRecent = breaker.recentRequests.length;
+    const failedRecent = breaker.recentRequests.filter(req => !req.success).length;
+    breaker.failureRate = totalRecent > 0 ? failedRecent / totalRecent : 0;
+
+    // Update health score
+    metrics.healthScore = Math.max(0, metrics.healthScore - 0.1);
+
+    // Adaptive threshold based on load and error patterns
+    let effectiveThreshold = breaker.threshold;
+    if (breaker.adaptiveThreshold) {
+      // Lower threshold during high load or for critical errors
+      if (metrics.loadFactor > 0.8 || errorType === 'critical') {
+        effectiveThreshold = Math.max(1, breaker.threshold - 1);
+      }
+    }
+
+    // Open circuit breaker if threshold exceeded or failure rate too high
+    if (breaker.state === 'CLOSED' &&
+        (breaker.failureCount >= effectiveThreshold || breaker.failureRate > 0.5)) {
       breaker.state = 'OPEN';
-      console.warn(`⚠️ Circuit breaker OPENED for ${provider} after ${breaker.failureCount} failures`);
+      console.warn(`⚠️ Circuit breaker OPENED for ${provider}`, {
+        failures: breaker.failureCount,
+        threshold: effectiveThreshold,
+        failureRate: breaker.failureRate,
+        errorType,
+        healthScore: metrics.healthScore
+      });
+
+      // Trigger graceful degradation if enabled
+      if (breaker.gracefulDegradation) {
+        this.enableGracefulDegradation(provider);
+      }
     }
   }
 
@@ -235,16 +338,100 @@ class EnhancedVendorClients {
 
   async executeWithCircuitBreaker(provider, operation) {
     if (this.isCircuitBreakerOpen(provider)) {
-      throw new Error(`Circuit breaker is OPEN for ${provider}`);
+      // Try graceful degradation if available
+      const fallbackResult = await this.tryGracefulDegradation(provider, operation);
+      if (fallbackResult) {
+        return fallbackResult;
+      }
+      throw new Error(`Circuit breaker is OPEN for ${provider} and no fallback available`);
     }
 
+    const startTime = Date.now();
     try {
       const result = await operation();
-      this.recordCircuitBreakerSuccess(provider);
+      const responseTime = Date.now() - startTime;
+      this.recordCircuitBreakerSuccess(provider, responseTime);
       return result;
     } catch (error) {
-      this.recordCircuitBreakerFailure(provider);
+      this.recordCircuitBreakerFailure(provider, error);
       throw error;
+    }
+  }
+
+  /**
+   * Categorize errors for better handling and analysis
+   */
+  categorizeError(error) {
+    const message = error.message?.toLowerCase() || '';
+
+    if (message.includes('timeout') || message.includes('etimedout')) {
+      return 'timeout';
+    } else if (message.includes('rate limit') || message.includes('429')) {
+      return 'rate_limit';
+    } else if (message.includes('network') || message.includes('econnreset')) {
+      return 'network';
+    } else if (message.includes('500') || message.includes('internal server')) {
+      return 'server_error';
+    } else if (message.includes('401') || message.includes('unauthorized')) {
+      return 'auth_error';
+    } else if (message.includes('400') || message.includes('bad request')) {
+      return 'client_error';
+    } else if (message.includes('503') || message.includes('unavailable')) {
+      return 'critical';
+    } else {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Enable graceful degradation for a provider
+   */
+  enableGracefulDegradation(provider) {
+    const breaker = this.circuitBreakers.get(provider);
+    console.log(`🔄 Enabling graceful degradation for ${provider}`);
+
+    // Set fallback strategy based on provider capabilities
+    switch (provider) {
+      case 'openai':
+        breaker.fallbackStrategy = 'use_cache_or_simple_response';
+        break;
+      case 'claude':
+        breaker.fallbackStrategy = 'use_alternative_model';
+        break;
+      case 'gemini':
+        breaker.fallbackStrategy = 'reduce_complexity';
+        break;
+      default:
+        breaker.fallbackStrategy = 'best_effort';
+    }
+  }
+
+  /**
+   * Try graceful degradation when circuit breaker is open
+   */
+  async tryGracefulDegradation(provider, operation) {
+    const breaker = this.circuitBreakers.get(provider);
+
+    switch (breaker.fallbackStrategy) {
+      case 'use_cache_or_simple_response':
+        // Return a simple cached response or basic acknowledgment
+        return {
+          content: 'Service temporarily unavailable. Please try again in a moment.',
+          fallback: true,
+          provider: 'fallback'
+        };
+
+      case 'use_alternative_model':
+        // Try to use a different model from the same provider
+        console.log(`🔄 Attempting fallback for ${provider}`);
+        return null; // Let the ensemble handle with remaining providers
+
+      case 'reduce_complexity':
+        // Simplify the request and try again
+        return null; // Let the ensemble handle with remaining providers
+
+      default:
+        return null;
     }
   }
 

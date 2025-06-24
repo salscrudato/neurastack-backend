@@ -32,31 +32,79 @@ class EnhancedEnsembleRunner {
     // Initialize the memory manager (handles conversation history)
     this.memoryManager = null;
 
-    // Queue system for managing multiple requests
+    // Enhanced queue system for production-grade request management
     this.requestQueue = [];
+    this.priorityQueues = {
+      high: [],    // Critical requests (premium users, retries)
+      medium: [],  // Standard requests (regular users)
+      low: []      // Background requests (analytics, cleanup)
+    };
     this.activeRequests = new Map();
+    this.connectionPools = new Map(); // Connection pools for each provider
+    this.loadBalancer = new Map(); // Load balancing state for providers
 
-    // Performance tracking - keeps track of how well the system is performing
+    // Enhanced performance tracking for production deployment
     this.metrics = {
       totalRequests: 0, // How many requests we've processed
       successfulRequests: 0, // How many worked correctly
       failedRequests: 0, // How many had errors
       averageProcessingTime: 0, // How long requests typically take
       concurrentRequests: 0, // How many are running right now
-      maxConcurrentRequests: 0 // The most we've handled at once
+      maxConcurrentRequests: 0, // The most we've handled at once
+
+      // Advanced production metrics
+      requestsPerSecond: 0,
+      errorRate: 0,
+      timeoutRate: 0,
+      retryRate: 0,
+      queueLength: 0,
+      averageQueueTime: 0,
+      synthesisQuality: 0,
+      modelPerformance: new Map(),
+      responseTimePercentiles: { p50: 0, p95: 0, p99: 0 },
+      memoryPressure: 0,
+      circuitBreakerStatus: new Map(),
+
+      // Time-series data for trending
+      responseTimeHistory: [],
+      errorHistory: [],
+
+      // Real-time monitoring
+      lastMinuteRequests: [],
+      recentErrors: [],
+      performanceAlerts: [],
+
+      // Quality metrics
+      confidenceScores: [],
+      votingAccuracy: 0,
+      consensusStrength: 0,
+      cacheHitRate: 0,
+      memoryUsage: 0,
+      lastHealthCheck: Date.now()
     };
 
-    // Configuration settings - these control how the system behaves
+    // Enhanced configuration for production deployment with 25+ concurrent users
     this.config = {
-      maxConcurrentRequests: meta.tier === 'free' ? 5 : 10, // Free users get fewer simultaneous requests
-      timeoutMs: limits.timeoutMs || 15000, // How long to wait before giving up (15 seconds)
-      retryAttempts: meta.tier === 'free' ? 1 : 2, // How many times to retry failed requests
+      maxConcurrentRequests: meta.tier === 'free' ? 25 : 50, // Increased for production load
+      timeoutMs: limits.timeoutMs || 30000, // Increased timeout for stability (30 seconds)
+      retryAttempts: meta.tier === 'free' ? 2 : 3, // More retries for resilience
       retryDelayMs: 1000, // How long to wait between retries (1 second)
       memoryContextTokens: Math.floor(limits.maxTokensPerRole * 0.6) || 1500, // How much conversation history to include
       synthesisMaxTokens: limits.maxSynthesisTokens || 400, // Maximum length for the final combined answer
       maxPromptLength: limits.maxPromptLength || 5000, // Maximum length for user questions
-      requestsPerHour: limits.requestsPerHour || 100, // Rate limiting - requests per hour
-      requestsPerDay: limits.requestsPerDay || 1000 // Rate limiting - requests per day
+      requestsPerHour: limits.requestsPerHour || 500, // Increased rate limits for production
+      requestsPerDay: limits.requestsPerDay || 5000, // Increased daily limits
+
+      // New production-grade settings
+      connectionPoolSize: 10, // Connection pool for API clients
+      queueMaxSize: 100, // Maximum queue size before rejecting requests
+      priorityLevels: 3, // Number of priority levels for request queuing
+      adaptiveTimeout: true, // Enable adaptive timeout based on load
+      loadBalancing: true, // Enable intelligent load balancing
+      circuitBreakerThreshold: 5, // Failures before opening circuit breaker
+      circuitBreakerTimeout: 60000, // Circuit breaker timeout (1 minute)
+      healthCheckInterval: 30000, // Health check interval (30 seconds)
+      metricsCollectionInterval: 5000 // Metrics collection interval (5 seconds)
     };
 
     // Usage tracking for rate limiting
@@ -64,12 +112,444 @@ class EnhancedEnsembleRunner {
       hourlyRequests: new Map(),
       dailyRequests: new Map()
     };
-    
+
+    // Initialize vendor clients for AI providers
+    this.vendorClients = require('./vendorClients');
+
+    // Start metrics collection for production monitoring
     this.startMetricsCollection();
+
+    console.log('🚀 Enhanced Ensemble Runner initialized with production-grade monitoring');
   }
 
   getMemoryManager() {
     return getMemoryManager();
+  }
+
+  /**
+   * Start real-time metrics collection for production monitoring
+   */
+  startMetricsCollection() {
+    // Collect metrics every 5 seconds
+    setInterval(() => {
+      this.collectRealTimeMetrics();
+    }, this.config.metricsCollectionInterval);
+
+    // Calculate percentiles every minute
+    setInterval(() => {
+      this.calculateResponseTimePercentiles();
+      this.updateErrorRate();
+      this.checkPerformanceAlerts();
+    }, 60000);
+
+    // Clean up old data every hour
+    setInterval(() => {
+      this.cleanupOldMetrics();
+    }, 3600000);
+  }
+
+  /**
+   * Collect real-time metrics
+   */
+  collectRealTimeMetrics() {
+    const now = Date.now();
+
+    // Update requests per second
+    this.metrics.lastMinuteRequests = this.metrics.lastMinuteRequests.filter(
+      timestamp => now - timestamp < 60000
+    );
+    this.metrics.requestsPerSecond = this.metrics.lastMinuteRequests.length / 60;
+
+    // Update queue length
+    this.metrics.queueLength = this.getTotalQueueSize();
+
+    // Update memory pressure
+    this.metrics.memoryUsage = process.memoryUsage().heapUsed;
+    this.metrics.memoryPressure = this.metrics.memoryUsage / process.memoryUsage().heapTotal;
+
+    // Update circuit breaker status
+    this.updateCircuitBreakerStatus();
+
+    // Calculate synthesis quality average
+    if (this.metrics.confidenceScores.length > 0) {
+      this.metrics.synthesisQuality = this.metrics.confidenceScores.reduce((a, b) => a + b, 0) /
+                                     this.metrics.confidenceScores.length;
+    }
+  }
+
+  /**
+   * Calculate response time percentiles
+   */
+  calculateResponseTimePercentiles() {
+    if (this.metrics.responseTimeHistory.length === 0) return;
+
+    const sorted = [...this.metrics.responseTimeHistory].sort((a, b) => a - b);
+    const len = sorted.length;
+
+    this.metrics.responseTimePercentiles = {
+      p50: sorted[Math.floor(len * 0.5)],
+      p95: sorted[Math.floor(len * 0.95)],
+      p99: sorted[Math.floor(len * 0.99)]
+    };
+  }
+
+  /**
+   * Update error rate
+   */
+  updateErrorRate() {
+    const totalRequests = this.metrics.totalRequests;
+    if (totalRequests > 0) {
+      this.metrics.errorRate = this.metrics.failedRequests / totalRequests;
+      this.metrics.timeoutRate = this.metrics.errorHistory.filter(
+        error => error.type === 'timeout'
+      ).length / totalRequests;
+      this.metrics.retryRate = this.metrics.errorHistory.filter(
+        error => error.retry
+      ).length / totalRequests;
+    }
+  }
+
+  /**
+   * Check for performance alerts
+   */
+  checkPerformanceAlerts() {
+    const alerts = [];
+
+    // High error rate alert
+    if (this.metrics.errorRate > 0.1) {
+      alerts.push({
+        type: 'high_error_rate',
+        severity: 'warning',
+        message: `Error rate is ${(this.metrics.errorRate * 100).toFixed(2)}%`,
+        timestamp: Date.now()
+      });
+    }
+
+    // High response time alert
+    if (this.metrics.responseTimePercentiles.p95 > 10000) {
+      alerts.push({
+        type: 'high_response_time',
+        severity: 'warning',
+        message: `95th percentile response time is ${this.metrics.responseTimePercentiles.p95}ms`,
+        timestamp: Date.now()
+      });
+    }
+
+    // Memory pressure alert
+    if (this.metrics.memoryPressure > 0.8) {
+      alerts.push({
+        type: 'memory_pressure',
+        severity: 'critical',
+        message: `Memory usage is ${(this.metrics.memoryPressure * 100).toFixed(2)}%`,
+        timestamp: Date.now()
+      });
+    }
+
+    // Queue length alert
+    if (this.metrics.queueLength > this.config.queueMaxSize * 0.8) {
+      alerts.push({
+        type: 'queue_pressure',
+        severity: 'warning',
+        message: `Queue length is ${this.metrics.queueLength}`,
+        timestamp: Date.now()
+      });
+    }
+
+    // Add new alerts
+    this.metrics.performanceAlerts.push(...alerts);
+
+    // Keep only recent alerts (last hour)
+    const oneHourAgo = Date.now() - 3600000;
+    this.metrics.performanceAlerts = this.metrics.performanceAlerts.filter(
+      alert => alert.timestamp > oneHourAgo
+    );
+
+    // Log critical alerts
+    alerts.filter(alert => alert.severity === 'critical').forEach(alert => {
+      console.error(`🚨 CRITICAL ALERT: ${alert.message}`);
+    });
+  }
+
+  /**
+   * Update circuit breaker status
+   */
+  updateCircuitBreakerStatus() {
+    const vendorClients = require('./vendorClients');
+    const providers = ['openai', 'xai', 'gemini', 'claude'];
+
+    providers.forEach(provider => {
+      const breaker = vendorClients.circuitBreakers?.get(provider);
+      if (breaker) {
+        this.metrics.circuitBreakerStatus.set(provider, {
+          state: breaker.state,
+          failureCount: breaker.failureCount,
+          successCount: breaker.successCount,
+          failureRate: breaker.failureRate || 0
+        });
+      }
+    });
+  }
+
+  /**
+   * Clean up old metrics data
+   */
+  cleanupOldMetrics() {
+    const oneHourAgo = Date.now() - 3600000;
+
+    // Keep only last hour of response times
+    this.metrics.responseTimeHistory = this.metrics.responseTimeHistory.slice(-1000);
+
+    // Keep only recent errors
+    this.metrics.errorHistory = this.metrics.errorHistory.filter(
+      error => error.timestamp > oneHourAgo
+    );
+
+    // Keep only recent confidence scores
+    this.metrics.confidenceScores = this.metrics.confidenceScores.slice(-100);
+
+    console.log('🧹 Cleaned up old metrics data');
+  }
+
+  /**
+   * Advanced request queuing with priority levels
+   */
+  async enqueueRequest(requestData, priority = 'medium') {
+    const queueSize = this.getTotalQueueSize();
+
+    // Reject if queue is full
+    if (queueSize >= this.config.queueMaxSize) {
+      throw new Error('Request queue is full. Please try again later.');
+    }
+
+    // Create request object with metadata
+    const request = {
+      id: generateUUID(),
+      data: requestData,
+      priority,
+      timestamp: Date.now(),
+      retryCount: 0,
+      estimatedProcessingTime: this.estimateProcessingTime(requestData)
+    };
+
+    // Add to appropriate priority queue
+    this.priorityQueues[priority].push(request);
+
+    // Process queue if we have capacity
+    this.processQueue();
+
+    return request.id;
+  }
+
+  /**
+   * Process requests from priority queues
+   */
+  async processQueue() {
+    if (this.metrics.concurrentRequests >= this.config.maxConcurrentRequests) {
+      return; // At capacity
+    }
+
+    // Process high priority first, then medium, then low
+    const priorities = ['high', 'medium', 'low'];
+
+    for (const priority of priorities) {
+      const queue = this.priorityQueues[priority];
+
+      while (queue.length > 0 && this.metrics.concurrentRequests < this.config.maxConcurrentRequests) {
+        const request = queue.shift();
+        this.executeRequest(request);
+      }
+    }
+  }
+
+  /**
+   * Execute individual request with enhanced error handling and metrics
+   */
+  async executeRequest(request) {
+    const startTime = Date.now();
+    this.metrics.concurrentRequests++;
+    this.metrics.maxConcurrentRequests = Math.max(
+      this.metrics.maxConcurrentRequests,
+      this.metrics.concurrentRequests
+    );
+    this.activeRequests.set(request.id, request);
+
+    // Track queue time
+    const queueTime = startTime - request.timestamp;
+    this.updateAverageQueueTime(queueTime);
+
+    try {
+      const result = await this.runEnsemble(
+        request.data.prompt,
+        request.data.userId,
+        request.data.sessionId
+      );
+
+      // Request completed successfully
+      const processingTime = Date.now() - startTime;
+      this.activeRequests.delete(request.id);
+      this.metrics.concurrentRequests--;
+      this.metrics.successfulRequests++;
+
+      // Update metrics
+      this.metrics.responseTimeHistory.push(processingTime);
+      this.metrics.lastMinuteRequests.push(Date.now());
+
+      // Track confidence score if available
+      if (result.data?.synthesis?.confidence?.score) {
+        this.metrics.confidenceScores.push(result.data.synthesis.confidence.score);
+      }
+
+      // Track voting accuracy if available
+      if (result.data?.voting?.confidence) {
+        this.updateVotingAccuracy(result.data.voting);
+      }
+
+      // Process next request in queue
+      this.processQueue();
+
+      return result;
+
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      this.handleRequestError(request, error, processingTime);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle request errors with retry logic and enhanced metrics
+   */
+  async handleRequestError(request, error, processingTime = 0) {
+    this.activeRequests.delete(request.id);
+    this.metrics.concurrentRequests--;
+    this.metrics.failedRequests++;
+
+    // Track error details
+    const errorDetails = {
+      type: this.categorizeError(error),
+      message: error.message,
+      timestamp: Date.now(),
+      processingTime,
+      retry: false,
+      requestId: request.id
+    };
+
+    this.metrics.errorHistory.push(errorDetails);
+
+    // Retry logic for transient errors
+    if (request.retryCount < this.config.retryAttempts && this.isRetryableError(error)) {
+      request.retryCount++;
+      request.priority = 'high'; // Bump priority for retries
+      errorDetails.retry = true;
+
+      // Exponential backoff
+      const delay = this.config.retryDelayMs * Math.pow(2, request.retryCount - 1);
+
+      setTimeout(() => {
+        this.priorityQueues.high.unshift(request); // Add to front of high priority queue
+        this.processQueue();
+      }, delay);
+
+      console.warn(`🔄 Retrying request ${request.id} (attempt ${request.retryCount}/${this.config.retryAttempts})`);
+
+    } else {
+      // Max retries exceeded or non-retryable error
+      console.error(`❌ Request ${request.id} failed permanently:`, {
+        error: error.message,
+        retryCount: request.retryCount,
+        processingTime
+      });
+    }
+
+    // Process next request
+    this.processQueue();
+  }
+
+  /**
+   * Categorize errors for better analysis
+   */
+  categorizeError(error) {
+    const message = error.message?.toLowerCase() || '';
+
+    if (message.includes('timeout') || message.includes('etimedout')) {
+      return 'timeout';
+    } else if (message.includes('rate limit') || message.includes('429')) {
+      return 'rate_limit';
+    } else if (message.includes('network') || message.includes('econnreset')) {
+      return 'network';
+    } else if (message.includes('500') || message.includes('internal server')) {
+      return 'server_error';
+    } else if (message.includes('401') || message.includes('unauthorized')) {
+      return 'auth_error';
+    } else if (message.includes('400') || message.includes('bad request')) {
+      return 'client_error';
+    } else if (message.includes('503') || message.includes('unavailable')) {
+      return 'service_unavailable';
+    } else {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Update average queue time
+   */
+  updateAverageQueueTime(queueTime) {
+    if (!this.metrics.averageQueueTime) {
+      this.metrics.averageQueueTime = queueTime;
+    } else {
+      // Exponential moving average
+      this.metrics.averageQueueTime = (this.metrics.averageQueueTime * 0.9) + (queueTime * 0.1);
+    }
+  }
+
+  /**
+   * Update voting accuracy metrics
+   */
+  updateVotingAccuracy(votingResult) {
+    if (votingResult.consensus === 'strong') {
+      this.metrics.votingAccuracy = Math.min(1.0, this.metrics.votingAccuracy + 0.1);
+    } else if (votingResult.consensus === 'weak') {
+      this.metrics.votingAccuracy = Math.max(0.0, this.metrics.votingAccuracy - 0.05);
+    }
+
+    // Track consensus strength
+    const consensusValues = { strong: 1.0, moderate: 0.6, weak: 0.2 };
+    this.metrics.consensusStrength = (this.metrics.consensusStrength * 0.9) +
+                                    (consensusValues[votingResult.consensus] * 0.1);
+  }
+
+  /**
+   * Determine if error is retryable
+   */
+  isRetryableError(error) {
+    const retryableErrors = [
+      'timeout',
+      'network',
+      'rate_limit',
+      'service_unavailable',
+      'internal_server_error'
+    ];
+
+    const errorMessage = error.message.toLowerCase();
+    return retryableErrors.some(retryable => errorMessage.includes(retryable));
+  }
+
+  /**
+   * Get total queue size across all priorities
+   */
+  getTotalQueueSize() {
+    return Object.values(this.priorityQueues).reduce((total, queue) => total + queue.length, 0);
+  }
+
+  /**
+   * Estimate processing time based on request complexity
+   */
+  estimateProcessingTime(requestData) {
+    const baseTime = 3000; // 3 seconds base
+    const promptLength = requestData.prompt?.length || 0;
+    const complexityMultiplier = Math.min(promptLength / 1000, 3); // Max 3x for very long prompts
+
+    return Math.round(baseTime * (1 + complexityMultiplier));
   }
 
   /**
@@ -504,60 +984,116 @@ class EnhancedEnsembleRunner {
     const startTime = Date.now();
 
     try {
-      console.log(`🔄 [${correlationId}] Starting advanced synthesis with weighted voting...`);
+      console.log(`🔄 [${correlationId}] Starting optimized synthesis with intelligent processing...`);
 
       // Get optimal synthesizer model (fine-tuned if available)
       const synthesizerConfig = this.getOptimalModelConfig('ensemble_synthesis', 'free');
 
-      // Simple synthesis approach - use successful responses
+      // Filter and rank successful responses
       const successfulOutputs = roleOutputs.filter(r => r.status === 'fulfilled');
 
-      console.log(`📊 [${correlationId}] Using simple synthesis with ${successfulOutputs.length} successful responses`);
+      // Calculate response quality scores for intelligent synthesis
+      const rankedOutputs = successfulOutputs.map(output => ({
+        ...output,
+        qualityScore: this.calculateResponseQualityScore(output.content),
+        wordCount: output.content.split(' ').length,
+        uniqueness: this.calculateUniqueness(output.content, successfulOutputs)
+      })).sort((a, b) => b.qualityScore - a.qualityScore);
+
+      console.log(`📊 [${correlationId}] Processing ${successfulOutputs.length} responses with quality ranking`);
 
       const modelNames = {
         gpt4o: 'GPT-4o',
         gemini: 'Gemini 2.0 Flash',
-        claude: 'Claude Opus'
+        claude: 'Claude 3.5 Haiku',
+        xai: 'Grok Beta'
       };
 
-      // Build synthesis payload based on strategy
+      // Optimized synthesis strategy based on response quality and count
       let synthPayload;
+      let synthesisStrategy;
 
-      if (successfulOutputs.length >= 2) {
+      if (rankedOutputs.length >= 3) {
+        // Multi-response synthesis with quality weighting
+        synthesisStrategy = 'comprehensive';
+        const topResponses = rankedOutputs.slice(0, 3); // Use top 3 responses
+
         synthPayload = `User Question: "${userPrompt}"
 
-AI responses to synthesize:
+High-quality AI responses to synthesize (ranked by quality):
 
-${successfulOutputs
-  .map((output, index) => `### ${modelNames[output.role] || output.role}\n${output.content}`)
+${topResponses
+  .map((output, index) => `### Response ${index + 1}: ${modelNames[output.role] || output.role} (Quality: ${output.qualityScore.toFixed(2)})
+${output.content}`)
   .join('\n\n')}
 
-Please synthesize these responses into a comprehensive, well-structured answer.`;
-      } else if (successfulOutputs.length === 1) {
-        // Single response - just clean it up
+Synthesize these responses into a comprehensive, well-structured answer that combines the best insights from each response. Focus on accuracy, completeness, and clarity.`;
+
+      } else if (rankedOutputs.length === 2) {
+        // Dual response synthesis
+        synthesisStrategy = 'comparative';
         synthPayload = `User Question: "${userPrompt}"
 
-AI Response:
-### ${modelNames[successfulOutputs[0].role] || successfulOutputs[0].role}
-${successfulOutputs[0].content}
+Two AI responses to synthesize:
 
-Please clean up and improve this response while maintaining its core message.`;
+### Primary Response: ${modelNames[rankedOutputs[0].role] || rankedOutputs[0].role}
+${rankedOutputs[0].content}
+
+### Secondary Response: ${modelNames[rankedOutputs[1].role] || rankedOutputs[1].role}
+${rankedOutputs[1].content}
+
+Synthesize these responses by combining their strengths and resolving any differences. Prioritize the higher-quality insights.`;
+
+      } else if (rankedOutputs.length === 1) {
+        // Single response enhancement
+        synthesisStrategy = 'enhancement';
+        const response = rankedOutputs[0];
+
+        if (response.qualityScore > 0.7) {
+          // High quality - minimal processing
+          synthPayload = `User Question: "${userPrompt}"
+
+High-quality AI Response:
+${response.content}
+
+Please review and lightly enhance this response for clarity and completeness while preserving its quality.`;
+        } else {
+          // Lower quality - more substantial improvement
+          synthPayload = `User Question: "${userPrompt}"
+
+AI Response to improve:
+${response.content}
+
+Please significantly improve this response by enhancing clarity, accuracy, and completeness while addressing the user's question thoroughly.`;
+        }
       } else {
-        // No successful responses
+        // No successful responses - fallback
+        synthesisStrategy = 'fallback';
         synthPayload = `User Question: "${userPrompt}"
 
-No AI responses were available. Please provide a helpful response indicating that the service is temporarily unavailable and suggest the user try again.`;
+No AI responses were available. Please provide a helpful, informative response to this question based on your knowledge, and include a note that our AI ensemble is temporarily experiencing issues.`;
       }
 
+      // Optimize token usage based on synthesis strategy
+      const maxTokens = this.calculateOptimalTokens(synthesisStrategy, rankedOutputs.length);
+      const temperature = this.calculateOptimalTemperature(synthesisStrategy, synthesizerConfig.isFineTuned);
+
+      // Enhanced synthesis with optimized parameters
       const synthResponse = await Promise.race([
         clients.openai.chat.completions.create({
           model: synthesizerConfig.model,
           messages: [
-            { role: 'system', content: systemPrompts.synthesizer },
+            {
+              role: 'system',
+              content: this.getOptimizedSystemPrompt(synthesisStrategy, systemPrompts.synthesizer)
+            },
             { role: 'user', content: synthPayload }
           ],
-          max_tokens: this.config.synthesisMaxTokens,
-          temperature: synthesizerConfig.isFineTuned ? 0.4 : 0.6 // Lower temperature for fine-tuned models
+          max_tokens: maxTokens,
+          temperature: temperature,
+          presence_penalty: 0.1, // Encourage diverse vocabulary
+          frequency_penalty: 0.1, // Reduce repetition
+          top_p: 0.9 // Nucleus sampling for better quality
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Synthesis timeout')), this.config.timeoutMs)
@@ -627,8 +1163,133 @@ No AI responses were available. Please provide a helpful response indicating tha
 
   updateAverageProcessingTime(processingTime) {
     const totalSuccessful = this.metrics.successfulRequests;
-    this.metrics.averageProcessingTime = 
+    this.metrics.averageProcessingTime =
       ((this.metrics.averageProcessingTime * (totalSuccessful - 1)) + processingTime) / totalSuccessful;
+  }
+
+  /**
+   * Calculate response quality score for synthesis optimization
+   */
+  calculateResponseQualityScore(content) {
+    if (!content || typeof content !== 'string') return 0;
+
+    let score = 0.3; // Base score
+    const wordCount = content.split(' ').length;
+    const sentenceCount = content.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+    const paragraphCount = content.split('\n\n').filter(p => p.trim().length > 0).length;
+
+    // Length optimization (0-0.25 points)
+    if (wordCount >= 50 && wordCount <= 300) score += 0.25;
+    else if (wordCount >= 30 && wordCount < 50) score += 0.15;
+    else if (wordCount > 300 && wordCount <= 500) score += 0.20;
+    else if (wordCount > 500) score += 0.05;
+
+    // Structure quality (0-0.2 points)
+    if (sentenceCount >= 3) score += 0.1;
+    if (paragraphCount >= 2) score += 0.05;
+    if (/^[A-Z]/.test(content)) score += 0.02; // Proper capitalization
+    if (/[.!?]$/.test(content.trim())) score += 0.03; // Proper ending
+
+    // Content sophistication (0-0.25 points)
+    const sophisticationWords = ['because', 'therefore', 'however', 'furthermore', 'consequently', 'specifically', 'particularly', 'essentially', 'ultimately'];
+    const foundSophistication = sophisticationWords.filter(word => content.toLowerCase().includes(word)).length;
+    score += Math.min(foundSophistication * 0.03, 0.15);
+
+    // Technical depth (0-0.1 points)
+    const technicalWords = ['analysis', 'approach', 'method', 'process', 'system', 'implementation', 'solution'];
+    const foundTechnical = technicalWords.filter(word => content.toLowerCase().includes(word)).length;
+    score += Math.min(foundTechnical * 0.02, 0.1);
+
+    // Clarity indicators (0-0.1 points)
+    if (content.includes(':') || content.includes('•') || content.includes('-')) score += 0.05; // Lists/structure
+    if (/\d+/.test(content)) score += 0.03; // Contains numbers/data
+    if (content.includes('example') || content.includes('instance')) score += 0.02; // Examples
+
+    return Math.max(0, Math.min(1, score));
+  }
+
+  /**
+   * Calculate uniqueness of response compared to others
+   */
+  calculateUniqueness(content, allOutputs) {
+    if (allOutputs.length <= 1) return 1.0;
+
+    const words = new Set(content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+    let totalOverlap = 0;
+    let comparisons = 0;
+
+    allOutputs.forEach(other => {
+      if (other.content !== content) {
+        const otherWords = new Set(other.content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+        const intersection = new Set([...words].filter(x => otherWords.has(x)));
+        const union = new Set([...words, ...otherWords]);
+
+        if (union.size > 0) {
+          totalOverlap += intersection.size / union.size;
+          comparisons++;
+        }
+      }
+    });
+
+    const averageOverlap = comparisons > 0 ? totalOverlap / comparisons : 0;
+    return Math.max(0, 1 - averageOverlap); // Higher uniqueness = lower overlap
+  }
+
+  /**
+   * Calculate optimal token count based on synthesis strategy
+   */
+  calculateOptimalTokens(strategy, responseCount) {
+    const baseTokens = this.config.synthesisMaxTokens || 400;
+
+    switch (strategy) {
+      case 'comprehensive':
+        return Math.min(600, baseTokens * 1.5); // More tokens for complex synthesis
+      case 'comparative':
+        return Math.min(500, baseTokens * 1.25); // Moderate increase for comparison
+      case 'enhancement':
+        return Math.min(450, baseTokens * 1.1); // Slight increase for enhancement
+      case 'fallback':
+        return Math.min(300, baseTokens * 0.75); // Fewer tokens for fallback
+      default:
+        return baseTokens;
+    }
+  }
+
+  /**
+   * Calculate optimal temperature based on synthesis strategy
+   */
+  calculateOptimalTemperature(strategy, isFineTuned) {
+    const baseTemp = isFineTuned ? 0.4 : 0.6;
+
+    switch (strategy) {
+      case 'comprehensive':
+        return baseTemp + 0.1; // Slightly more creative for complex synthesis
+      case 'comparative':
+        return baseTemp; // Standard temperature for comparison
+      case 'enhancement':
+        return baseTemp - 0.1; // More focused for enhancement
+      case 'fallback':
+        return baseTemp + 0.2; // More creative for fallback responses
+      default:
+        return baseTemp;
+    }
+  }
+
+  /**
+   * Get optimized system prompt based on synthesis strategy
+   */
+  getOptimizedSystemPrompt(strategy, basePrompt) {
+    const strategyPrompts = {
+      comprehensive: `${basePrompt}\n\nFocus on creating a comprehensive synthesis that combines the best insights from multiple high-quality responses. Prioritize accuracy, completeness, and logical flow.`,
+
+      comparative: `${basePrompt}\n\nYou are synthesizing two responses. Compare their strengths, resolve differences intelligently, and create a balanced, well-reasoned answer.`,
+
+      enhancement: `${basePrompt}\n\nYou are enhancing a single response. Improve clarity, add relevant details, and ensure the response fully addresses the user's question while maintaining the original insights.`,
+
+      fallback: `${basePrompt}\n\nProvide a helpful, informative response based on your knowledge. Be thorough and accurate, and briefly mention that our AI ensemble is temporarily experiencing issues.`
+    };
+
+    return strategyPrompts[strategy] || basePrompt;
   }
 
   createErrorResponse(error, correlationId, sessionId, processingTime) {
