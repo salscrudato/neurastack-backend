@@ -134,15 +134,16 @@ function initializeFirebase() {
       return;
     }
 
-    logger.error(
-      'Firebase initialization failed - Application cannot start',
+    // In production, log the error but don't exit - allow the app to start without Firebase
+    logger.warning(
+      'Firebase initialization failed - Application will start without Firebase features',
       {
         'Error': error.message,
-        'Solution': 'Set Firebase environment variables or check config/firebase-service-account.json exists and is valid'
+        'Impact': 'Memory and workout history features will use local cache only',
+        'Solution': 'Set Firebase environment variables for full functionality'
       },
       'firebase'
     );
-    process.exit(1); // Exit the application since Firebase is required
   }
 }
 
