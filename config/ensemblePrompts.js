@@ -7,14 +7,14 @@ const TIER = process.env.NEURASTACK_TIER || 'free'; // 'free', 'premium'
 const MODEL_CONFIGS = {
   free: {
     gpt4o: { provider: 'openai', model: 'gpt-4o-mini' },
-    gemini: { provider: 'gemini', model: 'gemini-1.5-flash' },
-    claude: { provider: 'claude', model: 'claude-3-haiku-20240307' },
+    gemini: { provider: 'gemini', model: 'gemini-2.0-flash' },
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' },
     synthesizer: { provider: 'openai', model: 'gpt-4o' } // Upgraded from gpt-4o-mini for better synthesis
   },
   premium: {
     gpt4o: { provider: 'openai', model: 'gpt-4o' },
     gemini: { provider: 'gemini', model: 'gemini-2.0-flash' },
-    claude: { provider: 'claude', model: 'claude-opus-4-20250514' },
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' },
     synthesizer: { provider: 'openai', model: 'o1-preview' } // Upgraded to OpenAI's best reasoning model
   }
 };
@@ -22,14 +22,14 @@ const MODEL_CONFIGS = {
 // Tier-specific configurations
 const TIER_CONFIGS = {
   free: {
-    sharedWordLimit: 400,        // Increased from 100 to allow comprehensive responses
-    maxTokensPerRole: 600,       // Increased from 150 to prevent truncation
-    maxSynthesisTokens: 800,     // Increased from 200 for better synthesis
-    maxCharactersPerRole: 2000,  // Character limit for individual AI responses (free tier)
-    timeoutMs: 25000,            // Increased from 10000 to prevent OpenAI timeouts
+    sharedWordLimit: 600,        // Increased from 100 to allow comprehensive responses
+    maxTokensPerRole: 1000,       // Increased from 150 to prevent truncation
+    maxSynthesisTokens: 1200,     // Increased from 200 for better synthesis
+    maxCharactersPerRole: 2500,  // Character limit for individual AI responses (free tier)
+    timeoutMs: 50000,            // Increased from 10000 to prevent OpenAI timeouts
     requestsPerHour: 10,
     requestsPerDay: 50,
-    maxPromptLength: 1000
+    maxPromptLength: 1500
   },
   premium: {
     sharedWordLimit: 600,        // Increased from 200 for even better responses

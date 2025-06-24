@@ -58,7 +58,7 @@ describe('Default Ensemble Tests', () => {
           confidence: 0.86,
           quality: 0.83,
           metadata: {
-            model: 'claude-3-haiku-20240307',
+            model: 'claude-3-5-haiku-latest',
             provider: 'claude',
             processingTimeMs: 780,
             tokenCount: 35,

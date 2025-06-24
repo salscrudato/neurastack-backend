@@ -120,17 +120,17 @@ NEURASTACK_TIER - Tier configuration (free/premium, default: free)
 // Free Tier (Cost-optimized)
 models: {
   gpt4o: "gpt-4o-mini",
-  gemini: "gemini-1.5-flash",
-  claude: "claude-3-haiku-20240307",
-  synthesizer: "gpt-4o-mini"
+  gemini: "gemini-2.0-flash",
+  claude: "claude-3-5-haiku-latest",
+  synthesizer: "gpt-4o"
 }
 
 // Premium Tier (Performance-optimized)
 models: {
   gpt4o: "gpt-4o",
-  gemini: "gemini-1.5-pro",
-  claude: "claude-3-5-sonnet-20241022",
-  synthesizer: "gpt-4o"
+  gemini: "gemini-2.0-flash",
+  claude: "claude-3-5-haiku-latest",
+  synthesizer: "o1-preview"
 }
 ```
 

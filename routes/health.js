@@ -119,7 +119,7 @@ router.get('/claude-test', async (req, res) => {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
-        model: 'claude-opus-4-20250514',
+        model: 'claude-3-5-haiku-latest',
         max_tokens: 1024,
         messages: [
           {

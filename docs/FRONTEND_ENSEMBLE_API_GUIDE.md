@@ -89,7 +89,7 @@ const data = await response.json();
         "role": "gemini",
         "content": "Think of quantum computers as...",
         "status": "fulfilled",
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.0-flash",
         "provider": "gemini",
         "responseTime": 420
       },
@@ -97,7 +97,7 @@ const data = await response.json();
         "role": "claude",
         "content": "Quantum computing represents a paradigm shift...",
         "status": "fulfilled",
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-3-5-haiku-latest",
         "provider": "claude",
         "responseTime": 1200
       }

@@ -289,7 +289,7 @@ describe('Health Router', () => {
     it('should return 200 with Claude response when API call succeeds', async () => {
       const mockClaudeResponse = {
         data: {
-          model: 'claude-opus-4-20250514',
+          model: 'claude-3-5-haiku-latest',
           content: [{
             text: 'Neural networks are computer systems inspired by the human brain. They consist of interconnected nodes (neurons) that process information by recognizing patterns in data, learning from examples to make predictions or decisions.'
           }]
@@ -304,14 +304,14 @@ describe('Health Router', () => {
 
       expect(response.body).toEqual({
         status: 'ok',
-        model: 'claude-opus-4-20250514',
+        model: 'claude-3-5-haiku-latest',
         response: 'Neural networks are computer systems inspired by the human brain. They consist of interconnected nodes (neurons) that process information by recognizing patterns in data, learning from examples to make predictions or decisions.'
       });
 
       expect(axios.post).toHaveBeenCalledWith(
         'https://api.anthropic.com/v1/messages',
         {
-          model: 'claude-opus-4-20250514',
+          model: 'claude-3-5-haiku-latest',
           max_tokens: 1024,
           messages: [
             {

@@ -38,8 +38,8 @@ const logger = require('./utils/visualLogger');
 // Firebase is Google's cloud database where we store user memories and workout history
 
 /**
- * Initialize Firebase with simplified configuration using latest service account
- * Uses only the current neurastack-backend database - no legacy fallbacks
+ * Initialize Firebase with environment variables or service account file
+ * Supports both production (env vars) and development (service account file) configurations
  */
 function initializeFirebase() {
   try {
@@ -56,24 +56,49 @@ function initializeFirebase() {
 
     let firebaseConfig;
 
-    // Use the latest service account (your current neurastack-backend database)
-    const serviceAccount = require('./config/firebase-service-account.json');
+    // Try environment variables first (for production deployment)
+    if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+      const serviceAccount = {
+        type: "service_account",
+        project_id: process.env.FIREBASE_PROJECT_ID,
+        private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+        private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        client_email: process.env.FIREBASE_CLIENT_EMAIL,
+        client_id: process.env.FIREBASE_CLIENT_ID,
+        auth_uri: "https://accounts.google.com/o/oauth2/auth",
+        token_uri: "https://oauth2.googleapis.com/token",
+        auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+        client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.FIREBASE_CLIENT_EMAIL)}`,
+        universe_domain: "googleapis.com"
+      };
 
-    // Validate service account structure
-    if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) {
-      throw new Error('Invalid service account configuration - missing required fields');
+      firebaseConfig = createFirebaseConfig(serviceAccount, 'environment variables');
+
+    } else {
+      // Fallback to service account file (for local development)
+      try {
+        const serviceAccount = require('./config/firebase-service-account.json');
+
+        // Validate service account structure
+        if (!serviceAccount.project_id || !serviceAccount.client_email || !serviceAccount.private_key) {
+          throw new Error('Invalid service account configuration - missing required fields');
+        }
+
+        firebaseConfig = createFirebaseConfig(serviceAccount, 'service account file');
+      } catch (fileError) {
+        throw new Error('No Firebase credentials found. Set environment variables or provide service account file.');
+      }
     }
-
-    firebaseConfig = createFirebaseConfig(serviceAccount, 'latest service account');
 
     admin.initializeApp(firebaseConfig);
 
     logger.success(
       'Firebase initialized successfully with neurastack-backend database',
       {
-        'Project ID': serviceAccount.project_id,
-        'Client Email': serviceAccount.client_email,
-        'Database': 'neurastack-backend (latest)'
+        'Project ID': process.env.FIREBASE_PROJECT_ID,
+        'Client Email': process.env.FIREBASE_CLIENT_EMAIL || 'from service account file',
+        'Database': 'neurastack-backend',
+        'Method': process.env.FIREBASE_PRIVATE_KEY ? 'Environment Variables' : 'Service Account File'
       },
       'firebase'
     );
@@ -93,7 +118,7 @@ function initializeFirebase() {
       'Firebase initialization failed - Application cannot start',
       {
         'Error': error.message,
-        'Solution': 'Check config/firebase-service-account.json exists and is valid, and FIREBASE_PROJECT_ID is set'
+        'Solution': 'Set Firebase environment variables or check config/firebase-service-account.json exists and is valid'
       },
       'firebase'
     );
