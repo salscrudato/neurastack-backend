@@ -9,9 +9,24 @@ const { MEMORY_TYPE_CONFIG } = require('../types/memory');
 
 class MemoryLifecycleManager {
   constructor() {
-    this.firestore = admin.firestore();
+    this.firestore = null; // Will be initialized when needed
     this.isRunning = false;
     this.scheduledTasks = [];
+  }
+
+  /**
+   * Get Firestore instance, initializing if needed
+   */
+  getFirestore() {
+    if (!this.firestore) {
+      try {
+        this.firestore = admin.firestore();
+      } catch (error) {
+        console.warn('⚠️ Firebase not available for memory lifecycle management:', error.message);
+        return null;
+      }
+    }
+    return this.firestore;
   }
 
   /**
@@ -118,13 +133,19 @@ class MemoryLifecycleManager {
    */
   async deleteExpiredMemories() {
     try {
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        console.warn('⚠️ Firestore not available, skipping expired memory cleanup');
+        return { deleted: 0 };
+      }
+
       const now = new Date();
-      const expiredQuery = this.firestore.collection('memories')
+      const expiredQuery = firestore.collection('memories')
         .where('retention.expiresAt', '<=', now)
         .limit(100); // Process in batches
 
       const snapshot = await expiredQuery.get();
-      const batch = this.firestore.batch();
+      const batch = firestore.batch();
       
       snapshot.docs.forEach(doc => {
         batch.delete(doc.ref);
@@ -147,15 +168,21 @@ class MemoryLifecycleManager {
    */
   async deleteLowQualityMemories() {
     try {
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        console.warn('⚠️ Firestore not available, skipping low-quality memory cleanup');
+        return { deleted: 0 };
+      }
+
       const cutoffDate = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)); // 7 days ago
-      
-      const lowQualityQuery = this.firestore.collection('memories')
+
+      const lowQualityQuery = firestore.collection('memories')
         .where('weights.composite', '<', 0.2)
         .where('createdAt', '<', cutoffDate)
         .limit(50);
 
       const snapshot = await lowQualityQuery.get();
-      const batch = this.firestore.batch();
+      const batch = firestore.batch();
       
       snapshot.docs.forEach(doc => {
         batch.delete(doc.ref);
@@ -178,10 +205,16 @@ class MemoryLifecycleManager {
    */
   async enforceMemoryLimits() {
     try {
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        console.warn('⚠️ Firestore not available, skipping memory limit enforcement');
+        return { deleted: 0 };
+      }
+
       let totalDeleted = 0;
 
       // Get all users with memories
-      const usersQuery = this.firestore.collection('memories')
+      const usersQuery = firestore.collection('memories')
         .select('userId')
         .limit(1000);
       
@@ -211,7 +244,12 @@ class MemoryLifecycleManager {
    */
   async enforceUserMemoryTypeLimit(userId, memoryType, maxCount) {
     try {
-      const userMemoriesQuery = this.firestore.collection('memories')
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        return 0;
+      }
+
+      const userMemoriesQuery = firestore.collection('memories')
         .where('userId', '==', userId)
         .where('memoryType', '==', memoryType)
         .orderBy('weights.composite', 'desc');
@@ -224,7 +262,7 @@ class MemoryLifecycleManager {
 
       // Delete excess memories (keep the highest weighted ones)
       const toDelete = snapshot.docs.slice(maxCount);
-      const batch = this.firestore.batch();
+      const batch = firestore.batch();
       
       toDelete.forEach(doc => {
         batch.delete(doc.ref);
@@ -243,6 +281,12 @@ class MemoryLifecycleManager {
    */
   async updateMemoryWeights() {
     try {
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        console.warn('⚠️ Firestore not available, skipping memory weight updates');
+        return { updated: 0 };
+      }
+
       const startTime = Date.now();
       let totalUpdated = 0;
 
@@ -251,7 +295,7 @@ class MemoryLifecycleManager {
       let lastDoc = null;
 
       while (true) {
-        let query = this.firestore.collection('memories')
+        let query = firestore.collection('memories')
           .where('retention.isArchived', '==', false)
           .orderBy('updatedAt')
           .limit(batchSize);
@@ -264,7 +308,7 @@ class MemoryLifecycleManager {
         
         if (snapshot.empty) break;
 
-        const batch = this.firestore.batch();
+        const batch = firestore.batch();
         
         snapshot.docs.forEach(doc => {
           const memory = doc.data();
@@ -327,16 +371,22 @@ class MemoryLifecycleManager {
    */
   async archiveOldMemories() {
     try {
+      const firestore = this.getFirestore();
+      if (!firestore) {
+        console.warn('⚠️ Firestore not available, skipping memory archival');
+        return { archived: 0 };
+      }
+
       const cutoffDate = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
-      
-      const oldMemoriesQuery = this.firestore.collection('memories')
+
+      const oldMemoriesQuery = firestore.collection('memories')
         .where('createdAt', '<', cutoffDate)
         .where('retention.isArchived', '==', false)
         .where('weights.composite', '<', 0.5)
         .limit(100);
 
       const snapshot = await oldMemoriesQuery.get();
-      const batch = this.firestore.batch();
+      const batch = firestore.batch();
       
       snapshot.docs.forEach(doc => {
         batch.update(doc.ref, {
