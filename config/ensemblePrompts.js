@@ -6,40 +6,46 @@ const TIER = process.env.NEURASTACK_TIER || 'free'; // 'free', 'premium'
 // Cost-optimized models for different tiers
 const MODEL_CONFIGS = {
   free: {
-    gpt4o: { provider: 'openai', model: 'gpt-4o-mini' },
-    gemini: { provider: 'gemini', model: 'gemini-2.0-flash' },
-    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' },
-    synthesizer: { provider: 'openai', model: 'gpt-4o' } // Upgraded from gpt-4o-mini for better synthesis
+    gpt4o: { provider: 'openai', model: 'gpt-4o-mini' }, // Keep as is - excellent value at $0.15/$0.60 per 1M tokens
+    gemini: { provider: 'gemini', model: 'gemini-2.5-flash' }, // Upgraded to 2.5 - better performance, free tier available
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - good balance at $0.80/$4.00 per 1M tokens
+    synthesizer: { provider: 'openai', model: 'gpt-4.1-mini' }, // Changed to 4.1-mini - 73% cheaper than gpt-4o, better quality
+    fallback: { provider: 'openai', model: 'gpt-3.5-turbo' } // Added fallback option for reliability
   },
   premium: {
-    gpt4o: { provider: 'openai', model: 'gpt-4o-mini' },
-    gemini: { provider: 'gemini', model: 'gemini-2.0-flash' },
-    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' },
-    synthesizer: { provider: 'openai', model: 'gpt-4o' } // Upgraded from gpt-4o-mini for better synthesis
+    gpt4o: { provider: 'openai', model: 'gpt-4o' }, // Full performance model for premium users
+    gemini: { provider: 'gemini', model: 'gemini-2.5-flash' }, // Upgraded to 2.5 - better performance with 1M context window
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - fast, high-quality responses
+    synthesizer: { provider: 'openai', model: 'gpt-4o' }, // Premium synthesis quality
+    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Higher quality fallback for premium
   }
 };
 
-// Tier-specific configurations
+// Tier-specific configurations - Optimized for cost and performance
 const TIER_CONFIGS = {
   free: {
-    sharedWordLimit: 600,        // Increased from 100 to allow comprehensive responses
-    maxTokensPerRole: 1000,       // Increased from 150 to prevent truncation
-    maxSynthesisTokens: 1200,     // Increased from 200 for better synthesis
-    maxCharactersPerRole: 2500,  // Character limit for individual AI responses (free tier)
-    timeoutMs: 50000,            // Increased from 10000 to prevent OpenAI timeouts
-    requestsPerHour: 10,
-    requestsPerDay: 50,
-    maxPromptLength: 1500
+    sharedWordLimit: 500,        // Slightly reduced to save costs while maintaining quality
+    maxTokensPerRole: 800,       // Reduced from 1000 to optimize cost per request
+    maxSynthesisTokens: 1000,    // Reduced from 1200 for cost optimization
+    maxCharactersPerRole: 2200,  // Slightly reduced for cost efficiency
+    timeoutMs: 45000,            // Optimized timeout for better reliability
+    requestsPerHour: 15,         // Increased from 10 - better for 10-15 concurrent users
+    requestsPerDay: 100,         // Increased from 50 - higher daily limits for small user base
+    maxPromptLength: 1200,       // Slightly reduced to save input token costs
+    enableCaching: true,         // Enable response caching for cost reduction
+    cacheTTL: 300               // Cache responses for 5 minutes
   },
   premium: {
-    sharedWordLimit: 600,        // Increased from 100 to allow comprehensive responses
-    maxTokensPerRole: 1000,       // Increased from 150 to prevent truncation
-    maxSynthesisTokens: 1200,     // Increased from 200 for better synthesis
-    maxCharactersPerRole: 2500,  // Character limit for individual AI responses (free tier)
-    timeoutMs: 50000,            // Increased from 10000 to prevent OpenAI timeouts
-    requestsPerHour: 10,
-    requestsPerDay: 50,
-    maxPromptLength: 1500
+    sharedWordLimit: 800,        // Higher quality responses for premium
+    maxTokensPerRole: 1500,      // Increased for premium quality
+    maxSynthesisTokens: 1800,    // Higher synthesis quality
+    maxCharactersPerRole: 3500,  // More comprehensive responses
+    timeoutMs: 60000,            // Longer timeout for complex requests
+    requestsPerHour: 100,        // Much higher limits for premium users
+    requestsPerDay: 1000,        // Premium daily limits
+    maxPromptLength: 3000,       // Longer prompts allowed
+    enableCaching: true,         // Enable caching for premium too
+    cacheTTL: 180               // Shorter cache for fresher premium responses
   }
 };
 

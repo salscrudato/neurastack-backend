@@ -1003,8 +1003,8 @@ class EnhancedEnsembleRunner {
       console.log(`📊 [${correlationId}] Processing ${successfulOutputs.length} responses with quality ranking`);
 
       const modelNames = {
-        gpt4o: 'GPT-4o',
-        gemini: 'Gemini 2.0 Flash',
+        gpt4o: meta.tier === 'premium' ? 'GPT-4o' : 'GPT-4o-mini',
+        gemini: 'Gemini 2.5 Flash',
         claude: 'Claude 3.5 Haiku',
         xai: 'Grok Beta'
       };

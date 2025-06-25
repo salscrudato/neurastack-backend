@@ -77,7 +77,7 @@ router.get('/gemini-test', async (req, res) => {
   try {
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [
           {
@@ -100,7 +100,7 @@ router.get('/gemini-test', async (req, res) => {
 
     res.status(200).json({
       status: 'ok',
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       response: generatedText
     });
   } catch (error) {

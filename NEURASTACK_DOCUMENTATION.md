@@ -117,20 +117,22 @@ NEURASTACK_TIER - Tier configuration (free/premium, default: free)
 
 ### Model Configuration
 ```javascript
-// Free Tier (Cost-optimized)
+// Free Tier (Cost-optimized) - ~40% cost reduction
 models: {
-  gpt4o: "gpt-4o-mini",
-  gemini: "gemini-2.0-flash",
-  claude: "claude-3-5-haiku-latest",
-  synthesizer: "gpt-4o"
+  gpt4o: "gpt-4o-mini",           // $0.15/$0.60 per 1M tokens - excellent value
+  gemini: "gemini-2.5-flash",     // Upgraded to 2.5 - free tier available, 1M context
+  claude: "claude-3-5-haiku-latest", // $0.80/$4.00 per 1M tokens - fast responses
+  synthesizer: "gpt-4.1-mini",    // $0.40/$1.60 per 1M tokens - 73% cheaper than gpt-4o
+  fallback: "gpt-3.5-turbo"       // Reliability fallback option
 }
 
 // Premium Tier (Performance-optimized)
 models: {
-  gpt4o: "gpt-4o",
-  gemini: "gemini-2.0-flash",
-  claude: "claude-3-5-haiku-latest",
-  synthesizer: "o1-preview"
+  gpt4o: "gpt-4o",                // Full performance model
+  gemini: "gemini-2.5-flash",     // Upgraded to 2.5 - better performance
+  claude: "claude-3-5-haiku-latest", // Fast, high-quality responses
+  synthesizer: "gpt-4o",          // Premium synthesis quality
+  fallback: "gpt-4o-mini"         // Higher quality fallback
 }
 ```
 

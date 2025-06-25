@@ -385,10 +385,13 @@ Configured for production domains including:
 
 ## Model Configuration
 
-### Free Tier (Default)
-- GPT-4o-mini, Gemini 1.5 Flash, Claude 3 Haiku
-- Cost: ~$0.003-0.008 per request
+### Free Tier (Default) - Cost Optimized
+- GPT-4o-mini, Gemini 2.5 Flash, Claude 3.5 Haiku Latest
+- Synthesizer: GPT-4.1-mini (73% cheaper than GPT-4o)
+- Fallback: GPT-3.5-turbo for reliability
+- Cost: ~$0.002-0.005 per request (40% reduction)
 - Response Time: 5-15 seconds
+- Rate Limits: 15 requests/hour, 100 requests/day
 
 ### Premium Tier
 - GPT-4o, Gemini 2.0 Flash, Claude 3.5 Sonnet

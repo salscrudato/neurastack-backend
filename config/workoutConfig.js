@@ -3,15 +3,15 @@
  * Centralized configuration for workout generation including prompts, templates, and AI settings
  */
 
-// AI Model Configuration for Workout Generation
+// AI Model Configuration for Workout Generation - Cost Optimized
 const WORKOUT_AI_CONFIG = {
-  // Single optimized workout generation model
+  // Single optimized workout generation model - using cost-effective GPT-4o-mini
   workoutGenerator: {
     provider: 'openai',
-    model: 'gpt-4o', // High-quality model for direct workout generation
-    temperature: 0.25,
-    maxTokens: 1500,
-    timeoutMs: 60000
+    model: 'gpt-4o-mini', // Cost-optimized model - $0.15/$0.60 per 1M tokens vs $2.50/$10.00 for gpt-4o
+    temperature: 0.25,     // Deterministic for consistent workout quality
+    maxTokens: 1500,       // Sufficient for comprehensive workout plans
+    timeoutMs: 60000       // 60s timeout for reliable generation
   }
 };
 
