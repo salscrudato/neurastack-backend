@@ -1,6 +1,25 @@
 /**
- * Enhanced Multi-Tier Memory Caching Service
- * High-performance in-memory caching with intelligent tiering for NeuraStack backend
+ * ⚡ Enhanced Multi-Tier Memory Caching Service
+ *
+ * 🎯 PURPOSE: Provide lightning-fast response caching for optimal performance
+ *
+ * 📋 EXECUTION FLOW:
+ * 1. Check HOT cache (most frequently accessed data)
+ * 2. Check WARM cache (moderately accessed, compressed)
+ * 3. Check COLD cache (rarely accessed, heavily compressed)
+ * 4. If cache miss, fetch data and intelligently place in appropriate tier
+ *
+ * 🏗️ CACHE ARCHITECTURE:
+ * - 🔥 HOT: Frequently accessed data (uncompressed, fastest access)
+ * - 🌡️ WARM: Moderately accessed data (light compression, fast access)
+ * - ❄️ COLD: Rarely accessed data (heavy compression, slower access)
+ *
+ * 🔧 INTELLIGENT FEATURES:
+ * - 📊 Access pattern learning and prediction
+ * - 🎯 Automatic tier promotion/demotion based on usage
+ * - 📦 Smart compression to maximize memory efficiency
+ * - 🧠 Predictive cache warming for better hit rates
+ * - 📈 Real-time performance analytics and optimization
  */
 
 const crypto = require('crypto');
