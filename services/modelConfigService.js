@@ -97,18 +97,18 @@ class ModelConfigService {
           capabilities: ['text-generation', 'reasoning', 'analysis']
         },
         {
-          id: 'gemini-2-5-flash-free',
-          name: 'Gemini 2.5 Flash (Free)',
+          id: 'gemini-1-5-flash-free',
+          name: 'Gemini 1.5 Flash (Free)',
           provider: 'gemini',
-          model: 'gemini-2.5-flash',
+          model: 'gemini-1.5-flash',
           tier: 'free',
           isActive: true,
           priority: 2,
-          costPerInputToken: 0.000075,
+          costPerInputToken: 0.000075, // Lower cost than 2.5 Flash
           costPerOutputToken: 0.0003,
-          maxTokens: 800,
+          maxTokens: 1200, // Increased token limit to encourage longer responses
           timeoutMs: 30000,
-          description: 'Fast and efficient Gemini model with large context window',
+          description: 'Cost-effective Gemini model optimized for longer, detailed responses',
           capabilities: ['text-generation', 'multimodal', 'reasoning']
         },
         {

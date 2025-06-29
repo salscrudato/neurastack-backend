@@ -8,10 +8,11 @@ This document outlines the comprehensive model optimization implemented to impro
 ### Free Tier Optimizations
 
 #### Model Updates
-- **Gemini**: Upgraded from `gemini-2.0-flash` to `gemini-2.5-flash`
-  - Better performance at same cost
-  - Free tier available
-  - 1M token context window
+- **Gemini**: Optimized from `gemini-2.5-flash` to `gemini-1.5-flash`
+  - Lower cost while maintaining quality
+  - Optimized for longer, more detailed responses
+  - Enhanced token limits (50% increase) to encourage comprehensive answers
+  - Improved confidence scoring through better response length
   
 - **Synthesizer**: Changed from `gpt-4o` to `gpt-4.1-mini`
   - 73% cost reduction ($0.40/$1.60 vs $2.50/$10.00 per 1M tokens)

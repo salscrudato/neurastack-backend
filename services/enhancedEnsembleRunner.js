@@ -639,6 +639,8 @@ class EnhancedEnsembleRunner {
         break;
 
       case 'gemini':
+        // Increase token limit specifically for Gemini to encourage longer responses
+        const geminiMaxTokens = Math.floor(maxTokens * 1.5); // 50% more tokens for Gemini
         const geminiResponse = await clients.gemini.post(
           `/models/${model}:generateContent`,
           {
@@ -648,8 +650,10 @@ class EnhancedEnsembleRunner {
               }]
             }],
             generationConfig: {
-              maxOutputTokens: maxTokens,
-              temperature: 0.7
+              maxOutputTokens: geminiMaxTokens,
+              temperature: 0.8, // Slightly higher temperature for more creative/longer responses
+              topP: 0.95, // Encourage more diverse vocabulary
+              topK: 40 // Allow more token choices for longer responses
             }
           }
         );

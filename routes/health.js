@@ -254,20 +254,35 @@ router.post('/default-ensemble', async (req, res) => {
         synthesis: {
           ...ensembleResult.synthesis,
           confidence: synthesisConfidence,
+          _confidenceDescription: "Overall confidence in the synthesized response, calculated from individual model confidence scores (70%) plus synthesis quality factors (30%). Higher scores indicate more reliable responses.",
           qualityScore: calculateQualityScore(ensembleResult.synthesis.content),
+          _qualityScoreDescription: "Response quality assessment based on content structure, length optimization, and reasoning indicators. Scores range 0-1 with higher values indicating better structured, more comprehensive responses.",
           metadata: {
             basedOnResponses: enhancedRoles.length,
+            _basedOnResponsesDescription: "Number of AI models that successfully contributed to this synthesis. More contributing models generally increase reliability.",
             averageConfidence: enhancedRoles.reduce((sum, role) => sum + role.confidence.score, 0) / enhancedRoles.length,
-            consensusLevel: calculateConsensusLevel(enhancedRoles)
+            _averageConfidenceDescription: "Mean confidence score across all individual model responses. Indicates overall ensemble agreement and response quality.",
+            consensusLevel: calculateConsensusLevel(enhancedRoles),
+            _consensusLevelDescription: "Measure of agreement between different AI models. Higher consensus suggests more reliable and consistent responses across the ensemble."
           }
         },
-        roles: enhancedRoles,
+        roles: enhancedRoles.map(role => ({
+          ...role,
+          _confidenceDescription: "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+          _qualityDescription: "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+          _metadataDescription: "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
+        })),
         voting: {
           winner: votingResult.winner,
+          _winnerDescription: "AI model selected as having the best response based on weighted voting algorithm considering confidence, response time, length optimization, and model reliability factors.",
           confidence: votingResult.confidence,
+          _confidenceDescription: "Normalized weight (0-1) of the winning model's response. Higher values indicate stronger consensus that this model provided the best answer.",
           consensus: votingResult.consensus,
+          _consensusDescription: "Strength of agreement in voting: 'strong' (winner >60% weight, >20% lead), 'moderate' (winner >45% weight), 'weak' (distributed weights). Strong consensus indicates high ensemble agreement.",
           weights: votingResult.weights,
-          recommendation: votingResult.recommendation
+          _weightsDescription: "Normalized voting weights for each model calculated from: base confidence × time performance × length optimization × model reliability. Shows relative contribution strength of each model.",
+          recommendation: votingResult.recommendation,
+          _recommendationDescription: "Ensemble system's assessment of response reliability and suggested confidence level for end users based on voting patterns and consensus strength."
         },
         metadata: {
           ...ensembleResult.metadata,
@@ -276,17 +291,25 @@ router.post('/default-ensemble', async (req, res) => {
           correlationId,
           confidenceAnalysis: {
             overallConfidence: synthesisConfidence.score,
+            _overallConfidenceDescription: "Final confidence score for the entire ensemble response, combining synthesis quality with voting consensus adjustments.",
             modelAgreement: calculateModelAgreement(enhancedRoles),
+            _modelAgreementDescription: "Measure of similarity between different AI model responses (0-1). Higher values indicate models provided consistent, aligned answers.",
             responseConsistency: calculateResponseConsistency(enhancedRoles),
+            _responseConsistencyDescription: "Assessment of how consistent the responses are across models in terms of content quality and structure. Higher consistency increases ensemble reliability.",
             qualityDistribution: getQualityDistribution(enhancedRoles),
+            _qualityDistributionDescription: "Breakdown of response quality levels (high/medium/low) across all models. More 'high' quality responses indicate better ensemble performance.",
             votingAnalysis: {
               consensusStrength: votingResult.consensus,
+              _consensusStrengthDescription: "Categorical assessment of voting agreement: strong consensus indicates clear winner, weak consensus suggests close competition between models.",
               winnerMargin: Math.max(...Object.values(votingResult.weights)) -
                            (Object.values(votingResult.weights).sort((a, b) => b - a)[1] || 0),
-              distributionEntropy: calculateWeightEntropy(votingResult.weights)
+              _winnerMarginDescription: "Numerical difference between the winning model's weight and the second-place model. Larger margins indicate clearer ensemble decisions.",
+              distributionEntropy: calculateWeightEntropy(votingResult.weights),
+              _distributionEntropyDescription: "Measure of weight distribution randomness. Lower entropy means concentrated voting (clear winner), higher entropy means distributed voting (close competition)."
             }
           },
-          costEstimate: await estimateRequestCost(prompt, enhancedRoles)
+          costEstimate: await estimateRequestCost(prompt, enhancedRoles),
+          _costEstimateDescription: "Estimated API costs for this ensemble request including input/output tokens and per-model pricing. Helps track usage and optimize cost efficiency."
         }
       },
       correlationId
@@ -1105,7 +1128,9 @@ function calculateWeightedVote(roles) {
       'gpt-4o': 1.15,
       'gpt-4o-mini': 1.0,
       'claude-3-5-haiku-latest': 1.05,
-      'gemini-2.0-flash': 1.1
+      'gemini-2.0-flash': 1.1,
+      'gemini-2.5-flash': 1.1,
+      'gemini-1.5-flash': 1.05 // Slightly lower reliability but good cost-effectiveness
     };
     const modelName = role.metadata?.model || role.model;
     const reliabilityMultiplier = modelReliability[modelName] || 1.0;
