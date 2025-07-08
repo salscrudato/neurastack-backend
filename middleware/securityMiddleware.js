@@ -100,7 +100,8 @@ class SecurityMiddleware {
         'Authorization',
         'X-User-Id',
         'X-Correlation-ID',
-        'X-API-Key'
+        'X-API-Key',
+        'Cache-Control'
       ]
     };
   }

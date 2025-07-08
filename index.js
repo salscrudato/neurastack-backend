@@ -268,7 +268,8 @@ const corsOptions = {
     'X-Requested-With',  // 🌐 AJAX request identifier
     'X-User-Id',         // 👤 User identification for personalization
     'X-Session-Id',      // 🔗 Session tracking for conversations
-    'X-Correlation-ID'   // 🔍 Request tracking for debugging
+    'X-Correlation-ID',  // 🔍 Request tracking for debugging
+    'Cache-Control'      // 🗄️ Browser cache control headers
   ]
 };
 
