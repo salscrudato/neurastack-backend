@@ -34,25 +34,31 @@ class EnhancedVendorClients {
         maxRetries: 2
       });
 
-      // Enhanced Axios clients with connection pooling
+      // Enhanced Axios clients with optimized connection pooling for 25+ concurrent users
       const axiosConfig = {
-        timeout: 30000,
+        timeout: 45000, // Increased timeout for better reliability under load
         maxRedirects: 3,
-        // Connection pooling configuration
+        // Optimized connection pooling for high concurrency
         httpAgent: new (require('http').Agent)({
           keepAlive: true,
-          maxSockets: 10,
-          maxFreeSockets: 5,
-          timeout: 60000,
-          freeSocketTimeout: 30000
+          maxSockets: 25,        // Increased for 25+ concurrent users
+          maxFreeSockets: 10,    // More free sockets for better performance
+          timeout: 90000,        // Longer socket timeout for stability
+          freeSocketTimeout: 45000, // Balanced free socket timeout
+          scheduling: 'fifo'     // First-in-first-out scheduling for fairness
         }),
         httpsAgent: new (require('https').Agent)({
           keepAlive: true,
-          maxSockets: 10,
-          maxFreeSockets: 5,
-          timeout: 60000,
-          freeSocketTimeout: 30000
-        })
+          maxSockets: 25,        // Increased for 25+ concurrent users
+          maxFreeSockets: 10,    // More free sockets for better performance
+          timeout: 90000,        // Longer socket timeout for stability
+          freeSocketTimeout: 45000, // Balanced free socket timeout
+          scheduling: 'fifo'     // First-in-first-out scheduling for fairness
+        }),
+        // Additional performance optimizations
+        maxContentLength: 50 * 1024 * 1024, // 50MB max response size
+        maxBodyLength: 10 * 1024 * 1024,    // 10MB max request size
+        validateStatus: (status) => status < 500 // Retry on 5xx errors only
       };
 
       this.gemini = axios.create({
@@ -117,13 +123,16 @@ class EnhancedVendorClients {
         failureCount: 0,
         successCount: 0,
         lastFailureTime: null,
-        threshold: 3, // Reduced threshold for faster detection
-        timeout: 30000, // Reduced timeout for faster recovery (30 seconds)
-        resetSuccessCount: 2, // Reduced successes needed to close circuit
+        threshold: 5, // Optimized threshold for 25+ concurrent users
+        timeout: 20000, // Faster recovery for high-load scenarios (20 seconds)
+        resetSuccessCount: 3, // More successes needed for stability under load
 
-        // Enhanced circuit breaker features
+        // Enhanced circuit breaker features for production load
         failureRate: 0, // Track failure rate over time window
-        timeWindow: 60000, // 1 minute time window for failure rate calculation
+        timeWindow: 90000, // Extended time window for better failure rate calculation (90 seconds)
+        consecutiveFailures: 0, // Track consecutive failures for faster detection
+        lastSuccessTime: Date.now(), // Track last successful request
+        adaptiveThreshold: true, // Enable adaptive threshold based on load
         recentRequests: [], // Track recent requests for failure rate
         adaptiveThreshold: true, // Enable adaptive threshold based on load
         gracefulDegradation: true, // Enable graceful degradation

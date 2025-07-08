@@ -53,10 +53,10 @@ class CacheService {
     this.accessPatterns = new Map();
     this.metadata = new Map();
 
-    // Enhanced TTL configurations (in milliseconds for precision)
+    // Enhanced TTL configurations optimized for 25+ concurrent users (in milliseconds)
     this.defaultTTL = {
-      ensemble: 300000,      // 5 minutes for ensemble responses
-      workout: 1800000,      // 30 minutes for workout plans
+      ensemble: 600000,      // 10 minutes for ensemble responses (increased for better hit rate)
+      workout: 3600000,      // 60 minutes for workout plans (increased for better performance)
       memory: 600000,        // 10 minutes for memory queries
       health: 30000,         // 30 seconds for health checks
       hot: 600000,           // 10 minutes for hot cache

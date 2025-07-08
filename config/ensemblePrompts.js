@@ -24,28 +24,30 @@ const MODEL_CONFIGS = {
 // Tier-specific configurations - Optimized for cost and performance
 const TIER_CONFIGS = {
   free: {
-    sharedWordLimit: 500,        // Slightly reduced to save costs while maintaining quality
-    maxTokensPerRole: 800,       // Reduced from 1000 to optimize cost per request
-    maxSynthesisTokens: 1000,    // Reduced from 1200 for cost optimization
-    maxCharactersPerRole: 2200,  // Slightly reduced for cost efficiency
-    timeoutMs: 45000,            // Optimized timeout for better reliability
-    requestsPerHour: 15,         // Increased from 10 - better for 10-15 concurrent users
-    requestsPerDay: 100,         // Increased from 50 - higher daily limits for small user base
-    maxPromptLength: 1200,       // Slightly reduced to save input token costs
+    sharedWordLimit: 500,        // Optimized for cost while maintaining quality
+    maxTokensPerRole: 900,       // Increased slightly for better responses under load
+    maxSynthesisTokens: 1100,    // Increased for better synthesis quality
+    maxCharactersPerRole: 2400,  // Increased for better response quality
+    timeoutMs: 50000,            // Increased timeout for 25+ concurrent users (50 seconds)
+    requestsPerHour: 25,         // Optimized for 25+ concurrent users
+    requestsPerDay: 150,         // Increased daily limits for higher usage
+    maxPromptLength: 1500,       // Increased for more detailed prompts
     enableCaching: true,         // Enable response caching for cost reduction
-    cacheTTL: 300               // Cache responses for 5 minutes
+    cacheTTL: 600,              // Increased cache TTL for better performance (10 minutes)
+    concurrencyLimit: 25        // Added explicit concurrency limit
   },
   premium: {
     sharedWordLimit: 800,        // Higher quality responses for premium
-    maxTokensPerRole: 1500,      // Increased for premium quality
-    maxSynthesisTokens: 1800,    // Higher synthesis quality
-    maxCharactersPerRole: 3500,  // More comprehensive responses
-    timeoutMs: 60000,            // Longer timeout for complex requests
-    requestsPerHour: 100,        // Much higher limits for premium users
-    requestsPerDay: 1000,        // Premium daily limits
-    maxPromptLength: 3000,       // Longer prompts allowed
+    maxTokensPerRole: 1600,      // Increased for premium quality under load
+    maxSynthesisTokens: 2000,    // Higher synthesis quality
+    maxCharactersPerRole: 3800,  // More comprehensive responses
+    timeoutMs: 75000,            // Extended timeout for complex requests under load (75 seconds)
+    requestsPerHour: 150,        // Increased limits for premium users
+    requestsPerDay: 1500,        // Higher premium daily limits
+    maxPromptLength: 4000,       // Longer prompts allowed for premium
     enableCaching: true,         // Enable caching for premium too
-    cacheTTL: 180               // Shorter cache for fresher premium responses
+    cacheTTL: 300,              // Balanced cache for premium (5 minutes)
+    concurrencyLimit: 50        // Higher concurrency limit for premium
   }
 };
 

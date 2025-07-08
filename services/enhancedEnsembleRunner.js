@@ -95,22 +95,24 @@ class EnhancedEnsembleRunner {
       lastHealthCheck: Date.now()
     };
 
-    // Enhanced configuration for production deployment with 25+ concurrent users
+    // Optimized configuration for production deployment with 25+ concurrent users
     this.config = {
-      maxConcurrentRequests: meta.tier === 'free' ? 25 : 50, // Increased for production load
-      timeoutMs: limits.timeoutMs || 30000, // Increased timeout for stability (30 seconds)
-      retryAttempts: meta.tier === 'free' ? 2 : 3, // More retries for resilience
-      retryDelayMs: 1000, // How long to wait between retries (1 second)
-      memoryContextTokens: Math.floor(limits.maxTokensPerRole * 0.6) || 1500, // How much conversation history to include
-      synthesisMaxTokens: limits.maxSynthesisTokens || 400, // Maximum length for the final combined answer
-      maxPromptLength: limits.maxPromptLength || 5000, // Maximum length for user questions
-      requestsPerHour: limits.requestsPerHour || 500, // Increased rate limits for production
-      requestsPerDay: limits.requestsPerDay || 5000, // Increased daily limits
+      maxConcurrentRequests: meta.tier === 'free' ? 30 : 60, // Increased for better throughput
+      timeoutMs: limits.timeoutMs || 45000, // Optimized timeout for stability (45 seconds)
+      retryAttempts: meta.tier === 'free' ? 3 : 4, // More retries for better reliability
+      retryDelayMs: 800, // Reduced retry delay for faster recovery
+      memoryContextTokens: Math.floor(limits.maxTokensPerRole * 0.7) || 1800, // Increased context for better responses
+      synthesisMaxTokens: limits.maxSynthesisTokens || 500, // Increased for better synthesis quality
+      maxPromptLength: limits.maxPromptLength || 6000, // Increased for more detailed prompts
+      requestsPerHour: limits.requestsPerHour || 750, // Increased rate limits for production
+      requestsPerDay: limits.requestsPerDay || 7500, // Increased daily limits
 
-      // New production-grade settings
-      connectionPoolSize: 10, // Connection pool for API clients
-      queueMaxSize: 100, // Maximum queue size before rejecting requests
-      priorityLevels: 3, // Number of priority levels for request queuing
+      // Enhanced production-grade settings
+      connectionPoolSize: 15, // Larger connection pool for better concurrency
+      queueMaxSize: 150, // Larger queue size for peak load handling
+      priorityLevels: 4, // More priority levels for better request management
+      batchProcessing: true, // Enable batch processing for efficiency
+      adaptiveTimeout: true, // Enable adaptive timeout based on load
       adaptiveTimeout: true, // Enable adaptive timeout based on load
       loadBalancing: true, // Enable intelligent load balancing
       circuitBreakerThreshold: 5, // Failures before opening circuit breaker

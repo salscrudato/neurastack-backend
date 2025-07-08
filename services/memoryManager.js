@@ -173,25 +173,45 @@ class MemoryManager {
 
       if (this.isFirestoreAvailable) {
         try {
-          // Query Firestore
+          // Use optimized Firestore query strategy to avoid complex index requirements
           let firestoreQuery = this.firestore.collection('memories')
-            .where('userId', '==', userId)
-            .where('retention.isArchived', '==', includeArchived);
+            .where('userId', '==', userId);
 
-          if (sessionId) {
-            firestoreQuery = firestoreQuery.where('sessionId', '==', sessionId);
-          }
+          // Use simple ordering by creation time (requires minimal indexing)
+          firestoreQuery = firestoreQuery
+            .orderBy('createdAt', 'desc')
+            .limit(maxResults * 3); // Get more results for client-side filtering
 
-          if (memoryTypes && memoryTypes.length > 0) {
-            firestoreQuery = firestoreQuery.where('memoryType', 'in', memoryTypes);
-          }
+          const snapshot = await firestoreQuery.get();
+          let allMemories = snapshot.docs.map(doc => doc.data());
 
-          const snapshot = await firestoreQuery
-            .orderBy('weights.composite', 'desc')
-            .limit(maxResults * 2) // Get more to filter by importance
-            .get();
+          // Apply client-side filtering for complex conditions to avoid index requirements
+          memories = allMemories
+            .filter(memory => {
+              // Filter by archived status
+              const isArchived = memory.retention?.isArchived || false;
+              if (isArchived !== includeArchived) return false;
 
-          memories = snapshot.docs.map(doc => doc.data());
+              // Filter by session if specified
+              if (sessionId && memory.sessionId !== sessionId) return false;
+
+              // Filter by memory types if specified
+              if (memoryTypes && memoryTypes.length > 0 && !memoryTypes.includes(memory.memoryType)) return false;
+
+              // Filter by importance threshold
+              const importance = memory.weights?.composite || 0;
+              if (importance < minImportance) return false;
+
+              return true;
+            })
+            .sort((a, b) => {
+              // Sort by composite weight (importance) descending
+              const weightA = a.weights?.composite || 0;
+              const weightB = b.weights?.composite || 0;
+              return weightB - weightA;
+            })
+            .slice(0, maxResults);
+
         } catch (error) {
           console.warn('⚠️ Firestore query failed, falling back to local cache:', error.message);
           this.isFirestoreAvailable = false;

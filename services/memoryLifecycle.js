@@ -41,10 +41,11 @@ class MemoryLifecycleManager {
     console.log('🔄 Starting memory lifecycle management...');
     this.isRunning = true;
 
-    // Daily cleanup at 2 AM
+    // Optimized cleanup schedule for 25+ concurrent users
+    // Daily cleanup at 2 AM (reduced frequency for better performance)
     const dailyCleanup = cron.schedule('0 2 * * *', async () => {
-      console.log('🧹 Starting daily memory cleanup...');
-      await this.performDailyCleanup();
+      console.log('🧹 Starting optimized daily memory cleanup...');
+      await this.performOptimizedDailyCleanup();
     }, {
       scheduled: false,
       timezone: 'UTC'
@@ -94,28 +95,38 @@ class MemoryLifecycleManager {
   }
 
   /**
-   * Perform daily cleanup tasks
+   * Perform optimized daily cleanup tasks for high-load scenarios
    */
-  async performDailyCleanup() {
+  async performOptimizedDailyCleanup() {
     try {
       const startTime = Date.now();
       let totalProcessed = 0;
       let totalDeleted = 0;
 
-      // Clean up expired memories
-      const expiredResult = await this.deleteExpiredMemories();
-      totalDeleted += expiredResult.deleted;
+      console.log('🧹 Starting optimized memory cleanup for high-load environment...');
 
-      // Clean up low-quality memories
-      const lowQualityResult = await this.deleteLowQualityMemories();
-      totalDeleted += lowQualityResult.deleted;
+      // Batch cleanup operations for better performance
+      const cleanupPromises = [
+        this.deleteExpiredMemories(),
+        this.deleteLowQualityMemories(),
+        this.enforceMemoryLimits()
+      ];
 
-      // Enforce memory limits per user
-      const limitResult = await this.enforceMemoryLimits();
-      totalDeleted += limitResult.deleted;
+      // Execute cleanup operations in parallel for better performance
+      const results = await Promise.allSettled(cleanupPromises);
+
+      results.forEach((result, index) => {
+        const operationNames = ['expired memories', 'low-quality memories', 'memory limits'];
+        if (result.status === 'fulfilled') {
+          totalDeleted += result.value.deleted || 0;
+          console.log(`✅ ${operationNames[index]} cleanup: ${result.value.deleted || 0} deleted`);
+        } else {
+          console.error(`❌ ${operationNames[index]} cleanup failed:`, result.reason);
+        }
+      });
 
       const processingTime = Date.now() - startTime;
-      console.log(`🧹 Daily cleanup completed: ${totalDeleted} memories deleted in ${processingTime}ms`);
+      console.log(`🧹 Optimized daily cleanup completed: ${totalDeleted} memories deleted in ${processingTime}ms`);
 
       return {
         success: true,

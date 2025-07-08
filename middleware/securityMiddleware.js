@@ -16,14 +16,32 @@ class SecurityMiddleware {
   createRateLimit(options = {}) {
     const defaultOptions = {
       windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100, // limit each IP to 100 requests per windowMs
+      max: 150, // Increased limit for 25+ concurrent users (150 requests per 15 minutes)
       message: {
         error: 'Too many requests',
         message: 'Rate limit exceeded. Please try again later.',
-        retryAfter: Math.ceil(options.windowMs / 1000) || 900
+        retryAfter: Math.ceil((options.windowMs || 900000) / 1000)
       },
       standardHeaders: true,
       legacyHeaders: false,
+      // Enhanced options for better performance under load
+      skipSuccessfulRequests: false, // Count all requests for accurate limiting
+      skipFailedRequests: false,     // Count failed requests too
+      keyGenerator: (req) => {
+        // Use X-User-Id if available, otherwise fall back to IP
+        return req.headers['x-user-id'] || req.ip;
+      },
+      // Custom handler for rate limit exceeded
+      handler: (req, res) => {
+        const retryAfter = Math.ceil((options.windowMs || 900000) / 1000);
+        res.status(429).json({
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+          retryAfter,
+          timestamp: new Date().toISOString(),
+          correlationId: req.correlationId || 'unknown'
+        });
+      },
       ...options
     };
 
@@ -33,7 +51,7 @@ class SecurityMiddleware {
   /**
    * Simple rate limit check for custom logic
    */
-  checkRateLimit(userId, endpoint, maxRequests = 60, windowMs = 60000) {
+  checkRateLimit(userId, endpoint, maxRequests = 100, windowMs = 60000) {
     const key = `${userId}:${endpoint}`;
     const now = Date.now();
     const windowStart = now - windowMs;
@@ -41,10 +59,10 @@ class SecurityMiddleware {
     // Get or create rate limit data
     let rateLimitData = this.rateLimitStore.get(key) || { requests: [], firstRequest: now };
 
-    // Remove old requests outside the window
+    // Remove old requests outside the window (optimized for performance)
     rateLimitData.requests = rateLimitData.requests.filter(timestamp => timestamp > windowStart);
 
-    // Check if limit exceeded
+    // Check if limit exceeded (increased default for 25+ concurrent users)
     if (rateLimitData.requests.length >= maxRequests) {
       return {
         allowed: false,

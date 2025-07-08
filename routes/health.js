@@ -157,44 +157,81 @@ router.post('/default-ensemble', async (req, res) => {
   const correlationId = req.correlationId || 'unknown';
 
   try {
-    // Input validation
+    // Enhanced input validation and sanitization
     const prompt = req.body?.prompt || 'Quick sanity check: explain AI in 1-2 lines.';
     const userId = req.headers['x-user-id'] || req.userId || 'anonymous';
     const userTier = req.userTier || 'free';
     const sessionId = req.body?.sessionId || req.headers['x-session-id'] || `session_${userId}_${Date.now()}`;
 
-    // Check rate limits for free tier
-    if (userTier === 'free') {
-      try {
-        // Simple rate limiting check
-        const rateLimitResult = securityMiddleware.checkRateLimit(userId, 'ensemble');
-        if (!rateLimitResult.allowed) {
-          return res.status(429).json({
-            status: 'error',
-            message: 'Rate limit exceeded',
-            details: rateLimitResult.message,
-            retryAfter: rateLimitResult.retryAfter || 60,
-            timestamp: new Date().toISOString(),
-            correlationId
-          });
-        }
-      } catch (rateLimitError) {
+    // Enhanced input validation
+    if (typeof prompt !== 'string') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid prompt format. Prompt must be a string.',
+        timestamp: new Date().toISOString(),
+        correlationId
+      });
+    }
+
+    // Sanitize prompt (remove potentially harmful content)
+    const sanitizedPrompt = prompt.trim().replace(/[\x00-\x1F\x7F]/g, ''); // Remove control characters
+
+    // Enhanced rate limiting with tier-specific limits
+    const rateLimits = {
+      free: { maxRequests: 25, windowMs: 60000 },      // 25 requests per minute for free tier
+      premium: { maxRequests: 100, windowMs: 60000 }   // 100 requests per minute for premium
+    };
+
+    const currentLimit = rateLimits[userTier] || rateLimits.free;
+
+    try {
+      const rateLimitResult = securityMiddleware.checkRateLimit(
+        userId,
+        'ensemble',
+        currentLimit.maxRequests,
+        currentLimit.windowMs
+      );
+
+      if (!rateLimitResult.allowed) {
         return res.status(429).json({
           status: 'error',
           message: 'Rate limit exceeded',
-          details: rateLimitError.message,
-          retryAfter: rateLimitError.retryAfter || 60,
+          details: `Maximum ${currentLimit.maxRequests} requests per minute for ${userTier} tier`,
+          retryAfter: Math.ceil(currentLimit.windowMs / 1000),
           timestamp: new Date().toISOString(),
-          correlationId
+          correlationId,
+          tier: userTier
         });
       }
+    } catch (rateLimitError) {
+      return res.status(429).json({
+        status: 'error',
+        message: 'Rate limit exceeded',
+        details: rateLimitError.message,
+        retryAfter: 60,
+        timestamp: new Date().toISOString(),
+        correlationId
+      });
     }
 
-    // Validate prompt length
-    if (prompt.length > 5000) {
+    // Enhanced prompt length validation with tier-specific limits
+    const maxPromptLength = userTier === 'premium' ? 8000 : 5000;
+    if (sanitizedPrompt.length > maxPromptLength) {
       return res.status(400).json({
         status: 'error',
-        message: 'Prompt too long. Maximum 5000 characters allowed.',
+        message: `Prompt too long. Maximum ${maxPromptLength} characters allowed for ${userTier} tier.`,
+        currentLength: sanitizedPrompt.length,
+        maxLength: maxPromptLength,
+        timestamp: new Date().toISOString(),
+        correlationId
+      });
+    }
+
+    // Validate minimum prompt length
+    if (sanitizedPrompt.length < 3) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Prompt too short. Minimum 3 characters required.',
         timestamp: new Date().toISOString(),
         correlationId
       });
@@ -203,11 +240,13 @@ router.post('/default-ensemble', async (req, res) => {
     monitoringService.log('info', 'Enhanced ensemble request started', {
       userId,
       sessionId,
-      promptLength: prompt.length
+      promptLength: sanitizedPrompt.length,
+      originalLength: prompt.length,
+      tier: userTier
     }, correlationId);
 
-    // Execute enhanced ensemble with comprehensive error handling
-    const ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
+    // Execute enhanced ensemble with comprehensive error handling using sanitized prompt
+    const ensembleResult = await enhancedEnsemble.runEnsemble(sanitizedPrompt, userId, sessionId);
 
     // Calculate confidence scores for each response
     const enhancedRoles = ensembleResult.roles.map(role => {
@@ -1296,15 +1335,15 @@ function calculateWeightedVote(roles) {
       else lengthMultiplier = 0.7;
     }
 
-    // Enhanced model reliability with recent performance data
+    // Enhanced model reliability with optimized weights for 25+ concurrent users
     const modelReliability = {
-      'gpt-4o': 1.18, // Increased for premium performance
-      'gpt-4o-mini': 1.05, // Slightly increased for consistent performance
-      'claude-3-5-haiku-latest': 1.08, // Increased for structured responses
-      'gemini-2.0-flash': 1.12, // Good performance with longer responses
-      'gemini-2.5-flash': 1.15, // Premium Gemini performance
-      'gemini-1.5-flash': 1.08, // Adjusted for cost-effectiveness and longer responses
-      'grok-beta': 0.95 // Conservative rating for newer model
+      'gpt-4o': 1.20, // Premium performance with excellent concurrency handling
+      'gpt-4o-mini': 1.12, // Increased for excellent cost/performance ratio under load
+      'claude-3-5-haiku-latest': 1.15, // Excellent structured responses and speed
+      'gemini-2.0-flash': 1.18, // Outstanding performance with longer, detailed responses
+      'gemini-2.5-flash': 1.22, // Premium Gemini with superior performance
+      'gemini-1.5-flash': 1.14, // Optimized for cost-effectiveness with good response length
+      'grok-beta': 0.98 // Improved rating based on recent performance data
     };
     const roleModelName = role.metadata?.model || role.model;
     const reliabilityMultiplier = modelReliability[roleModelName] || 1.0;
@@ -1432,5 +1471,173 @@ function calculateWeightEntropy(weights) {
 }
 
 
+
+// ============================================================================
+// 🏥 ENHANCED MONITORING ENDPOINTS - Production-grade system monitoring
+// ============================================================================
+
+/**
+ * Enhanced system health endpoint with comprehensive monitoring
+ */
+router.get('/system/health', async (req, res) => {
+  try {
+    const healthMonitor = req.app.locals.healthMonitor;
+
+    if (!healthMonitor) {
+      return res.status(503).json({
+        status: 'unhealthy',
+        message: 'Health monitoring system not available',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const healthStatus = healthMonitor.getHealthStatus();
+    const statusCode = healthStatus.overall === 'healthy' ? 200 :
+                      healthStatus.overall === 'degraded' ? 200 : 503;
+
+    res.status(statusCode).json({
+      status: 'success',
+      data: healthStatus,
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+  }
+});
+
+/**
+ * Real-time performance metrics endpoint
+ */
+router.get('/system/metrics', async (req, res) => {
+  try {
+    const healthMonitor = req.app.locals.healthMonitor;
+
+    if (!healthMonitor) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Health monitoring system not available'
+      });
+    }
+
+    const healthStatus = healthMonitor.getHealthStatus();
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        system: healthStatus.metrics.system,
+        api: healthStatus.metrics.api,
+        ai: healthStatus.metrics.ai,
+        database: healthStatus.metrics.database,
+        cache: healthStatus.metrics.cache,
+        alerts: {
+          active: healthStatus.activeAlerts,
+          recent: healthStatus.alertHistory
+        }
+      },
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve system metrics',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+  }
+});
+
+/**
+ * Load testing status endpoint
+ */
+router.get('/system/load-status', async (req, res) => {
+  try {
+    const healthMonitor = req.app.locals.healthMonitor;
+
+    if (!healthMonitor) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Health monitoring system not available'
+      });
+    }
+
+    const healthStatus = healthMonitor.getHealthStatus();
+    const currentLoad = healthStatus.metrics.api.currentConcurrentRequests || 0;
+    const maxCapacity = 25; // Designed for 25+ concurrent users
+
+    const loadPercentage = (currentLoad / maxCapacity) * 100;
+    let loadStatus = 'optimal';
+
+    if (loadPercentage > 90) loadStatus = 'critical';
+    else if (loadPercentage > 75) loadStatus = 'high';
+    else if (loadPercentage > 50) loadStatus = 'moderate';
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        currentLoad,
+        maxCapacity,
+        loadPercentage: Math.round(loadPercentage),
+        loadStatus,
+        performance: {
+          averageResponseTime: healthStatus.metrics.api.averageResponseTime,
+          successRate: healthStatus.metrics.api.totalRequests > 0 ?
+            (healthStatus.metrics.api.successfulRequests / healthStatus.metrics.api.totalRequests * 100).toFixed(2) : 0,
+          queueLength: healthStatus.metrics.api.queueLength || 0
+        },
+        recommendations: generateLoadRecommendations(loadStatus, loadPercentage)
+      },
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve load status',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      correlationId: req.correlationId || 'unknown'
+    });
+  }
+});
+
+/**
+ * Generate load-based recommendations
+ */
+function generateLoadRecommendations(loadStatus, loadPercentage) {
+  const recommendations = [];
+
+  switch (loadStatus) {
+    case 'critical':
+      recommendations.push('Consider implementing request queuing');
+      recommendations.push('Scale horizontally if possible');
+      recommendations.push('Enable aggressive caching');
+      break;
+    case 'high':
+      recommendations.push('Monitor response times closely');
+      recommendations.push('Consider enabling request prioritization');
+      break;
+    case 'moderate':
+      recommendations.push('System performing well under current load');
+      recommendations.push('Monitor for sustained high load periods');
+      break;
+    default:
+      recommendations.push('System operating at optimal capacity');
+      recommendations.push('Ready for additional load');
+  }
+
+  return recommendations;
+}
 
 module.exports = router;

@@ -45,9 +45,11 @@ router.post('/generate-workout', async (req, res) => {
       hasOtherInfo: !!otherInformation
     }, correlationId);
 
-    // Basic validation - only essential fields
+    // Enhanced validation with better error messages
     const validation = workoutConfig.VALIDATION_RULES;
-    if (!age || age < validation.age.min || age > validation.age.max) {
+
+    // Validate age
+    if (!age || typeof age !== 'number' || age < validation.age.min || age > validation.age.max) {
       return res.status(400).json({
         status: 'error',
         message: `Age is required and must be between ${validation.age.min} and ${validation.age.max}`,
