@@ -10,14 +10,14 @@ const MODEL_CONFIGS = {
     gemini: { provider: 'gemini', model: 'gemini-1.5-flash' }, // Switched to 1.5-flash - lower cost, tends to generate longer responses
     claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - good balance at $0.80/$4.00 per 1M tokens
     synthesizer: { provider: 'openai', model: 'gpt-4.1-mini' }, // Changed to 4.1-mini - 73% cheaper than gpt-4o, better quality
-    fallback: { provider: 'openai', model: 'gpt-3.5-turbo' } // Added fallback option for reliability
+    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Reliable, cost-effective fallback ($0.15/$0.60 per 1M tokens)
   },
   premium: {
     gpt4o: { provider: 'openai', model: 'gpt-4o' }, // Full performance model for premium users
     gemini: { provider: 'gemini', model: 'gemini-2.5-flash' }, // Upgraded to 2.5 - better performance with 1M context window
     claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - fast, high-quality responses
     synthesizer: { provider: 'openai', model: 'gpt-4o' }, // Premium synthesis quality
-    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Higher quality fallback for premium
+    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Consistent reliable fallback for premium
   }
 };
 
@@ -171,7 +171,20 @@ SYNTHESIS INSTRUCTIONS:
 - Ensure your synthesis is more comprehensive and useful than any individual response
 - Structure your answer with excellent organization and logical flow
 - Be thorough yet efficient - include all essential information with appropriate depth
-- Create a response that is engaging, expertly organized, and maximally helpful to the user`
+- Create a response that is engaging, expertly organized, and maximally helpful to the user`,
+
+    // Fallback provider system prompt - reliable, comprehensive responses
+    fallback: `You are a reliable AI assistant serving as a fallback provider in our ensemble system. Your primary goal is to provide thorough, accurate, and helpful responses when other AI models are temporarily unavailable.
+
+Key responsibilities:
+- Provide comprehensive, well-structured responses that directly address the user's question
+- Maintain high quality standards even as a fallback option
+- Be thorough yet concise - include all essential information without unnecessary verbosity
+- Use clear, professional language that's accessible to the user
+- When appropriate, acknowledge that you're providing backup assistance while our primary ensemble is experiencing issues
+- Focus on accuracy and helpfulness above all else
+
+Your responses should be reliable, informative, and maintain the quality users expect from our AI ensemble system.`
   },
 
   // Helper function to get tier-specific configuration

@@ -577,9 +577,7 @@ class EnhancedEnsembleRunner {
       try {
         console.log(`🔄 [${correlationId}] Calling ${role} (${provider}) - Attempt ${attempt}/${maxRetries}`);
         
-        const result = await clients.executeWithCircuitBreaker(provider, async () => {
-          return await this.executeRoleCall(role, userPrompt, provider, model);
-        });
+        const result = await this.executeRoleCallWithCircuitBreaker(role, userPrompt, provider, model, correlationId);
         
         console.log(`✅ [${correlationId}] ${role} completed successfully`);
         return result;
@@ -588,13 +586,113 @@ class EnhancedEnsembleRunner {
         console.warn(`⚠️ [${correlationId}] ${role} attempt ${attempt} failed:`, error.message);
         
         if (attempt === maxRetries) {
-          throw error;
+          // Try fallback provider if original provider failed completely
+          try {
+            console.log(`🔄 [${correlationId}] Trying fallback provider for ${role}...`);
+            const fallbackResult = await this.tryFallbackProvider(role, userPrompt, correlationId);
+            console.log(`✅ [${correlationId}] ${role} completed with fallback provider`);
+            return fallbackResult;
+          } catch (fallbackError) {
+            console.error(`❌ [${correlationId}] ${role} fallback also failed:`, fallbackError.message);
+            throw error; // Throw original error
+          }
         }
         
         // Exponential backoff
         const delay = this.config.retryDelayMs * Math.pow(2, attempt - 1);
         await this.sleep(delay);
       }
+    }
+  }
+
+  /**
+   * Try fallback provider (reliable OpenAI model) when primary provider fails
+   */
+  async tryFallbackProvider(role, userPrompt, correlationId) {
+    const fallbackConfig = models.fallback;
+
+    if (!fallbackConfig || fallbackConfig.provider !== 'openai') {
+      throw new Error('No reliable fallback provider configured');
+    }
+
+    console.log(`🔄 [${correlationId}] Using fallback: ${fallbackConfig.model} for ${role} (bypassing circuit breaker)`);
+
+    // Bypass circuit breaker for fallback calls since we know OpenAI is reliable
+    const result = await this.executeRoleCallWithFallbackPrompt(role, userPrompt, fallbackConfig.provider, fallbackConfig.model, correlationId);
+
+    // Mark as fallback in the result
+    return {
+      ...result,
+      isFallback: true,
+      originalProvider: models[role].provider,
+      fallbackProvider: fallbackConfig.provider,
+      fallbackModel: fallbackConfig.model
+    };
+  }
+
+  /**
+   * Execute role call with circuit breaker, but allow fallback on circuit breaker failure
+   */
+  async executeRoleCallWithCircuitBreaker(role, userPrompt, provider, model, correlationId) {
+    try {
+      // Try with circuit breaker first
+      return await clients.executeWithCircuitBreaker(provider, async () => {
+        return await this.executeRoleCall(role, userPrompt, provider, model);
+      });
+    } catch (error) {
+      // If circuit breaker is open or provider fails, this will throw
+      console.warn(`⚠️ [${correlationId}] Circuit breaker blocked ${provider} or provider failed: ${error.message}`);
+      throw error; // Let the retry logic in callRoleWithResilience handle fallback
+    }
+  }
+
+  /**
+   * Execute role call with fallback-specific system prompt
+   */
+  async executeRoleCallWithFallbackPrompt(role, userPrompt, provider, model, correlationId) {
+    const maxTokens = limits.maxTokensPerRole || 250;
+    const startTime = Date.now();
+
+    console.log(`🔄 [${correlationId}] Executing fallback call for ${role} using ${model}`);
+
+    // Use fallback system prompt instead of role-specific prompt
+    const fallbackSystemPrompt = systemPrompts.fallback || systemPrompts[role];
+
+    let response;
+    let actualResponseTokens = 0;
+
+    try {
+      // Only OpenAI is supported as fallback provider for reliability
+      if (provider === 'openai') {
+        const openaiResponse = await clients.openai.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: fallbackSystemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: maxTokens,
+          temperature: 0.7
+        });
+        response = openaiResponse.choices[0].message.content;
+        actualResponseTokens = openaiResponse.usage?.completion_tokens || Math.ceil(response.length / 4);
+      } else {
+        throw new Error(`Unsupported fallback provider: ${provider}`);
+      }
+
+      // Truncate if needed
+      const maxCharacters = limits.maxCharactersPerRole || 2000;
+      if (response.length > maxCharacters) {
+        response = response.substring(0, maxCharacters) + '...';
+      }
+
+      const responseTime = Date.now() - startTime;
+      console.log(`✅ [${correlationId}] Fallback ${role} completed in ${responseTime}ms`);
+
+      return response;
+
+    } catch (error) {
+      console.error(`❌ [${correlationId}] Fallback execution failed for ${role}:`, error.message);
+      throw error;
     }
   }
 
@@ -924,10 +1022,14 @@ class EnhancedEnsembleRunner {
 
       const roleOutputs = await Promise.all(rolePromises);
       
-      // Log results
+      // Log results with fallback indicators
       roleOutputs.forEach(output => {
         const status = output.status === 'fulfilled' ? '✅' : '❌';
-        console.log(`${status} [${correlationId}] ${output.role}: ${output.content.substring(0, 50)}...`);
+        const fallbackIndicator = output.isFallback ? ' (FALLBACK)' : '';
+        const providerInfo = output.isFallback ?
+          `${output.originalProvider}→${output.fallbackProvider}` :
+          output.provider;
+        console.log(`${status} [${correlationId}] ${output.role} (${providerInfo})${fallbackIndicator}: ${output.content.substring(0, 50)}...`);
       });
 
       // Step 4: Synthesize response with fallback handling
