@@ -156,18 +156,45 @@ const data = await response.json();
 ### Primary Response
 - **`data.synthesis.content`**: The main AI response (use this for display)
 - **`data.synthesis.confidence.score`**: Confidence level (0-1, higher is better)
+- **`data.synthesis._confidenceDescription`**: Explanation of how confidence is calculated
 - **`data.synthesis.qualityScore`**: Response quality (0-1, higher is better)
+- **`data.synthesis._qualityScoreDescription`**: Explanation of quality assessment
 
 ### Individual Model Responses
 - **`data.roles[]`**: Array of responses from each AI model
 - **`data.roles[].content`**: Individual model response
 - **`data.roles[].responseTime`**: Time taken by each model (ms)
 - **`data.roles[].status`**: "fulfilled" or "rejected"
+- **`data.roles[]._confidenceDescription`**: Explanation of individual model confidence
+- **`data.roles[]._qualityDescription`**: Explanation of response quality metrics
+- **`data.roles[]._metadataDescription`**: Explanation of processing metrics
+
+### Voting System
+- **`data.voting.winner`**: Best performing AI model for this response
+- **`data.voting._winnerDescription`**: Explanation of winner selection algorithm
+- **`data.voting.confidence`**: Voting confidence (0-1, higher is better)
+- **`data.voting._confidenceDescription`**: Explanation of voting confidence calculation
+- **`data.voting.consensus`**: Voting agreement level ("strong", "moderate", "weak")
+- **`data.voting._consensusDescription`**: Explanation of consensus strength calculation
+- **`data.voting.weights`**: Individual model voting weights
+- **`data.voting._weightsDescription`**: Explanation of weight calculation algorithm
 
 ### Metadata
 - **`data.metadata.processingTimeMs`**: Total processing time
 - **`data.metadata.successfulRoles`**: Number of models that responded
 - **`data.metadata.costEstimate.totalCost`**: Request cost in USD
+- **`data.metadata._costEstimateDescription`**: Explanation of cost calculation
+- **`data.metadata.confidenceAnalysis`**: Detailed confidence metrics
+- **`data.metadata.confidenceAnalysis._*Description`**: Explanations for each confidence metric
+
+### Description Fields
+All response fields ending with `_*Description` provide human-readable explanations of:
+- How confidence/voting/scoring mechanisms work
+- What each calculated value means
+- How the values impact ensemble performance
+- Guidance for interpreting the results
+
+These description fields are backwards compatible and can be safely ignored by existing frontend implementations.
 
 ## Frontend Implementation Examples
 

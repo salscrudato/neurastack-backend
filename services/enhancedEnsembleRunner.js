@@ -1,19 +1,29 @@
 /**
- * Enhanced Ensemble Runner - The Brain of NeuraStack
+ * 🧠 Enhanced Ensemble Runner - The Brain of NeuraStack
  *
- * This service is like having multiple AI experts work together on your question.
- * Instead of asking just one AI model, we ask several different ones and then
- * combine their answers to give you the best possible response.
+ * 🎯 PURPOSE: Coordinate multiple AI models to work together for better responses
  *
- * Think of it like getting a second opinion from multiple doctors - each AI model
- * has different strengths, and by combining them, we get better, more reliable answers.
+ * 📋 EXECUTION FLOW:
+ * 1. Receive user prompt and context
+ * 2. Load conversation memory for context
+ * 3. Send prompt to multiple AI models in parallel
+ * 4. Collect and analyze all responses
+ * 5. Use weighted voting to select best response
+ * 6. Synthesize final answer combining insights
+ * 7. Store interaction in memory for future context
  *
- * What this does:
- * - Sends your question to multiple AI models (GPT, Claude, Gemini, etc.)
- * - Remembers your past conversations to give better context
- * - Combines all the AI responses into one comprehensive answer
- * - Tracks costs and performance to keep the service running efficiently
- * - Handles errors gracefully when individual AI models fail
+ * 💡 ANALOGY: Like having a panel of expert doctors discuss your case
+ *    - Each AI model is a specialist with different strengths
+ *    - They all examine the same question independently
+ *    - We combine their expertise for the most reliable answer
+ *
+ * 🔧 KEY FEATURES:
+ * - 🤖 Multi-AI coordination (GPT, Claude, Gemini, etc.)
+ * - 🧠 Conversation memory integration
+ * - ⚖️ Intelligent response voting and synthesis
+ * - 📊 Performance tracking and cost monitoring
+ * - 🛡️ Graceful error handling and fallbacks
+ * - ⚡ Parallel processing for speed
  */
 
 const ensembleConfig = require('../config/ensemblePrompts'); // Configuration for AI models and prompts
@@ -24,24 +34,26 @@ const { v4: generateUUID } = require('uuid'); // Creates unique IDs for tracking
 const cacheService = require('./cacheService'); // Stores responses for faster retrieval
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager'); // Organizes context for AI
 /**
- * Enhanced Ensemble Runner Class
- * This is the main class that coordinates multiple AI models to work together
+ * 🧠 Enhanced Ensemble Runner Class
+ *
+ * 🎯 PURPOSE: Main coordinator class for multi-AI ensemble processing
+ * 📋 RESPONSIBILITIES: Request queuing, AI coordination, response synthesis
  */
 class EnhancedEnsembleRunner {
   constructor() {
-    // Initialize the memory manager (handles conversation history)
-    this.memoryManager = null;
+    // 🧠 STEP 1: Initialize memory management
+    this.memoryManager = null; // 📝 Handles conversation history and context
 
-    // Enhanced queue system for production-grade request management
-    this.requestQueue = [];
+    // 🚦 STEP 2: Request queue system (handles multiple concurrent users)
+    this.requestQueue = [];           // 📋 Main request queue
     this.priorityQueues = {
-      high: [],    // Critical requests (premium users, retries)
-      medium: [],  // Standard requests (regular users)
-      low: []      // Background requests (analytics, cleanup)
+      high: [],    // 🔥 Critical requests (premium users, retries)
+      medium: [],  // 📊 Standard requests (regular users)
+      low: []      // 🔄 Background requests (analytics, cleanup)
     };
-    this.activeRequests = new Map();
-    this.connectionPools = new Map(); // Connection pools for each provider
-    this.loadBalancer = new Map(); // Load balancing state for providers
+    this.activeRequests = new Map();  // 📊 Currently processing requests
+    this.connectionPools = new Map(); // 🔗 Connection pools for each AI provider
+    this.loadBalancer = new Map();    // ⚖️ Load balancing state for providers
 
     // Enhanced performance tracking for production deployment
     this.metrics = {
@@ -627,6 +639,8 @@ class EnhancedEnsembleRunner {
         break;
 
       case 'gemini':
+        // Increase token limit specifically for Gemini to encourage longer responses
+        const geminiMaxTokens = Math.floor(maxTokens * 1.5); // 50% more tokens for Gemini
         const geminiResponse = await clients.gemini.post(
           `/models/${model}:generateContent`,
           {
@@ -636,8 +650,10 @@ class EnhancedEnsembleRunner {
               }]
             }],
             generationConfig: {
-              maxOutputTokens: maxTokens,
-              temperature: 0.7
+              maxOutputTokens: geminiMaxTokens,
+              temperature: 0.8, // Slightly higher temperature for more creative/longer responses
+              topP: 0.95, // Encourage more diverse vocabulary
+              topK: 40 // Allow more token choices for longer responses
             }
           }
         );

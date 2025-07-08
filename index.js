@@ -1,76 +1,97 @@
 /**
  * NeuraStack Backend Server - Main Entry Point
  *
- * This is the main server file that starts up the NeuraStack AI application.
- * It handles requests from users who want to use AI models or generate workouts.
- * Think of this as the "front desk" of our AI service - it receives requests
- * and directs them to the right place to get processed.
+ * 🎯 PURPOSE: This is the central hub of the NeuraStack AI system
  *
- * What this server does:
- * - Provides AI ensemble responses (combines multiple AI models for better answers)
- * - Generates personalized workout plans
- * - Manages user memory (remembers past conversations)
- * - Handles security and rate limiting (prevents abuse)
- * - Monitors system health and performance
+ * 📋 EXECUTION FLOW:
+ * 1. Load environment variables (.env file)
+ * 2. Initialize Firebase database connection
+ * 3. Set up Express web server with middleware
+ * 4. Register API routes (health, memory, workout)
+ * 5. Start server and background services
+ *
+ * 🔧 WHAT THIS SERVER DOES:
+ * - 🤖 AI Ensemble: Combines multiple AI models (GPT, Claude, Gemini) for better responses
+ * - 💪 Workout Generation: Creates personalized fitness plans using AI
+ * - 🧠 Memory Management: Remembers user conversations for context
+ * - 🛡️ Security: Rate limiting and request validation
+ * - 📊 Monitoring: Tracks performance and system health
+ *
+ * 💡 THINK OF IT AS: The "front desk" of our AI service - receives requests
+ *    and routes them to the right specialists for processing
  */
 
 // ============================================================================
-// ENVIRONMENT CONFIGURATION - Load environment variables first
+// 🔧 STEP 1: ENVIRONMENT SETUP - Load configuration first (CRITICAL ORDER)
 // ============================================================================
-require('dotenv').config(); // Loads environment variables from .env file
+require('dotenv').config(); // 📁 Loads API keys and settings from .env file
 
 // ============================================================================
-// DEPENDENCIES - External libraries and modules we need
+// 📦 STEP 2: CORE DEPENDENCIES - Essential libraries for server operation
 // ============================================================================
-const express = require('express'); // Web server framework - handles HTTP requests
-const cors = require('cors'); // Allows websites from different domains to use our API
-const admin = require('firebase-admin'); // Google's database service for storing user data
+const express = require('express');     // 🌐 Web server framework - handles HTTP requests/responses
+const cors = require('cors');           // 🔗 Cross-origin requests - allows frontend websites to call our API
+const admin = require('firebase-admin'); // 🔥 Google Firebase - cloud database for user data storage
 
 // ============================================================================
-// VISUAL LOGGING SYSTEM - Enhanced human-readable console output
+// 📝 STEP 3: ENHANCED LOGGING SYSTEM - Beautiful, readable console output
 // ============================================================================
-const logger = require('./utils/visualLogger');
+const logger = require('./utils/visualLogger'); // 🎨 Custom logger with colors and formatting
 
-// Log application startup
+// 🚀 STEP 4: STARTUP LOGGING - Show system information
 logger.inline('info', 'NeuraStack Backend starting up...', 'startup');
 logger.inline('info', `Node.js version: ${process.version}`, 'startup');
 logger.inline('info', `Environment: ${process.env.NODE_ENV || 'development'}`, 'startup');
 logger.inline('info', `Port: ${process.env.PORT || '8080'}`, 'startup');
 
 // ============================================================================
-// FIREBASE INITIALIZATION - Database connection setup
+// 🔥 STEP 5: FIREBASE DATABASE SETUP - Cloud storage initialization
 // ============================================================================
-// Initialize Firebase database connection FIRST before importing any services that use it
-// Firebase is Google's cloud database where we store user memories and workout history
+// 🎯 PURPOSE: Connect to Google's cloud database for storing:
+//    - User conversation memories (for context in future chats)
+//    - Workout history and preferences
+//    - System analytics and performance data
+//
+// 📋 EXECUTION ORDER: Must happen BEFORE importing services that use database
+// 💡 SUPPORTS: Both production (environment variables) and development (service account file)
 
 /**
- * Initialize Firebase with environment variables or service account file
- * Supports both production (env vars) and development (service account file) configurations
+ * 🔧 Firebase Initialization Function
+ *
+ * 📋 PROCESS:
+ * 1. Check if Firebase already initialized (prevents double-init)
+ * 2. Try environment variables first (production deployment)
+ * 3. Fallback to service account file (local development)
+ * 4. Create minimal config if no credentials (graceful degradation)
+ *
+ * 🛡️ ERROR HANDLING: Continues without Firebase if initialization fails
  */
 function initializeFirebase() {
   try {
-    // Skip initialization if Firebase is already initialized (for testing)
+    // 🔍 STEP 5.1: Check if already initialized (prevents conflicts in testing)
     if (admin.apps.length > 0) {
       logger.inline('info', 'Firebase already initialized - skipping', 'firebase');
-      return;
+      return; // ✅ Exit early - no work needed
     }
 
-    // Validate required environment variables (skip in test environment)
+    // 🔍 STEP 5.2: Validate environment (skip validation in test mode)
     if (process.env.NODE_ENV !== 'test' && !process.env.FIREBASE_PROJECT_ID) {
       throw new Error('FIREBASE_PROJECT_ID environment variable is required');
     }
 
-    let firebaseConfig;
+    let firebaseConfig; // 📝 Will hold our database connection settings
 
-    // Try environment variables first (for production deployment)
+    // 🔍 STEP 5.3: Try production credentials first (environment variables)
+    // 💡 WHY: Production deployments use environment variables for security
     if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
       logger.inline('info', 'Using Firebase environment variables for production', 'firebase');
 
+      // 🔧 Build service account object from environment variables
       const serviceAccount = {
         type: "service_account",
         project_id: process.env.FIREBASE_PROJECT_ID,
         private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-        private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // 🔧 Fix newline encoding
         client_email: process.env.FIREBASE_CLIENT_EMAIL,
         client_id: process.env.FIREBASE_CLIENT_ID,
         auth_uri: "https://accounts.google.com/o/oauth2/auth",
@@ -172,95 +193,117 @@ initializeFirebase();
 logger.inline('info', 'Firebase initialization completed', 'firebase');
 
 // ============================================================================
-// SERVICE IMPORTS - Our custom business logic modules
+// 🔧 STEP 6: SERVICE IMPORTS - Load our custom business logic modules
 // ============================================================================
-// Import our custom services and routes (these are the "workers" that do the actual work)
-const healthRoutes = require('./routes/health'); // Handles AI ensemble and health check requests
-const memoryRoutes = require('./routes/memory'); // Manages user conversation memories
-const workoutRoutes = require('./routes/workout'); // Generates personalized workout plans
-const MemoryLifecycleManager = require('./services/memoryLifecycle'); // Automatically cleans up old memories
-const monitoringService = require('./services/monitoringService'); // Tracks system performance and errors
-const cacheService = require('./services/cacheService'); // Stores frequently used data for faster responses
-const securityMiddleware = require('./middleware/securityMiddleware'); // Protects against spam and abuse
+// 💡 EXECUTION ORDER: Import services AFTER Firebase is initialized
+// 🎯 PURPOSE: These are the "workers" that handle specific tasks
+
+// 📍 ROUTE HANDLERS - Define API endpoints and their logic
+const healthRoutes = require('./routes/health');   // 🏥 AI ensemble + health checks + model testing
+const memoryRoutes = require('./routes/memory');   // 🧠 User conversation memory management
+const workoutRoutes = require('./routes/workout'); // 💪 Personalized workout plan generation
+const adminRoutes = require('./routes/admin');     // 🎛️ Model management admin interface
+
+// 📍 BACKGROUND SERVICES - Handle ongoing system tasks
+const MemoryLifecycleManager = require('./services/memoryLifecycle'); // 🗑️ Auto-cleanup old memories
+const monitoringService = require('./services/monitoringService');     // 📊 Performance tracking & alerts
+const cacheService = require('./services/cacheService');               // ⚡ Fast response caching
+const securityMiddleware = require('./middleware/securityMiddleware');  // 🛡️ Rate limiting & validation
 
 // ============================================================================
-// APPLICATION SETUP - Express server configuration
+// 🚀 STEP 7: EXPRESS APPLICATION SETUP - Web server configuration
 // ============================================================================
-// Initialize memory lifecycle manager (this automatically cleans up old user memories)
-const memoryLifecycleManager = new MemoryLifecycleManager();
+// 📋 EXECUTION FLOW:
+// 1. Initialize background services (memory cleanup)
+// 2. Create Express app instance
+// 3. Configure server settings
+// 4. Set up middleware pipeline
+// 5. Register API routes
 
-// Create the web server application
-const app = express();
+// 🔧 STEP 7.1: Initialize background services
+const memoryLifecycleManager = new MemoryLifecycleManager(); // 🗑️ Auto-cleanup old memories every hour
 
-// Environment-based configuration
-const PORT = parseInt(process.env.PORT, 10) || 8080; // Use port from environment or default to 8080
+// 🔧 STEP 7.2: Create Express web server instance
+const app = express(); // 🌐 Main application object - handles all HTTP requests
+
+// 🔧 STEP 7.3: Server configuration
+const PORT = parseInt(process.env.PORT, 10) || 8080; // 🔌 Server port (Cloud Run uses dynamic ports)
 
 // ============================================================================
-// CORS CONFIGURATION - Cross-Origin Resource Sharing settings
+// 🔗 STEP 8: CORS CONFIGURATION - Cross-Origin Resource Sharing settings
 // ============================================================================
-// CORS controls which websites can use our API
-// CORS = Cross-Origin Resource Sharing (allows websites from different domains to call our API)
+// 🎯 PURPOSE: Control which websites can call our API (security measure)
+// 💡 WHY NEEDED: Browsers block requests between different domains by default
+// 🛡️ SECURITY: Only allow trusted frontend applications to use our API
+
 const corsOptions = {
-  // List of allowed websites that can use our API
+  // 📍 ALLOWED ORIGINS - Websites that can call our API
   origin: [
-    // Local development environments
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://localhost:3000',
-    'https://localhost:3001',
+    // 🏠 LOCAL DEVELOPMENT - For testing during development
+    'http://localhost:3000',   // React dev server (common port)
+    'http://localhost:3001',   // Alternative React port
+    'https://localhost:3000',  // HTTPS local development
+    'https://localhost:3001',  // HTTPS alternative port
 
-    // Production domains
-    'https://neurastack.ai',
-    'https://www.neurastack.ai',
+    // 🌐 PRODUCTION DOMAINS - Live website URLs
+    'https://neurastack.ai',     // Main production domain
+    'https://www.neurastack.ai', // WWW version of production
 
-    // Hosting platforms (using regex patterns for dynamic subdomains)
-    'https://neurastack-frontend.web.app', // Firebase hosting
-    /^https:\/\/.*\.vercel\.app$/, // Any Vercel deployment
-    /^https:\/\/.*\.netlify\.app$/, // Any Netlify deployment
-    /^https:\/\/.*\.firebase\.app$/, // Any Firebase deployment
-    /^https:\/\/.*\.web\.app$/ // Any Google web app
+    // ☁️ HOSTING PLATFORMS - Dynamic deployment URLs (using regex patterns)
+    'https://neurastack-frontend.web.app',  // Firebase hosting (specific)
+    /^https:\/\/.*\.vercel\.app$/,          // Any Vercel deployment
+    /^https:\/\/.*\.netlify\.app$/,         // Any Netlify deployment
+    /^https:\/\/.*\.firebase\.app$/,        // Any Firebase deployment
+    /^https:\/\/.*\.web\.app$/              // Any Google web app
   ],
-  credentials: true, // Allow cookies and authentication headers
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allowed HTTP methods
-  allowedHeaders: [ // Headers that frontend can send to our API
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'X-User-Id',
-    'X-Session-Id',
-    'X-Correlation-ID'
+
+  // 🔧 REQUEST SETTINGS
+  credentials: true, // 🍪 Allow cookies and authentication headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 📝 Allowed HTTP methods
+
+  // 📋 ALLOWED HEADERS - What frontend can send in requests
+  allowedHeaders: [
+    'Content-Type',      // 📄 Request body format (JSON, etc.)
+    'Authorization',     // 🔑 Authentication tokens
+    'X-Requested-With',  // 🌐 AJAX request identifier
+    'X-User-Id',         // 👤 User identification for personalization
+    'X-Session-Id',      // 🔗 Session tracking for conversations
+    'X-Correlation-ID',  // 🔍 Request tracking for debugging
+    'Cache-Control'      // 🗄️ Browser cache control headers
   ]
 };
 
 // ============================================================================
-// MIDDLEWARE SETUP - Request processing pipeline
+// 🔧 STEP 9: MIDDLEWARE PIPELINE - Request processing chain
 // ============================================================================
-// Security headers middleware (should be first)
-app.use(securityMiddleware.securityHeaders());
+// 📋 EXECUTION ORDER: Middleware runs in the order it's added (CRITICAL!)
+// 💡 THINK OF IT AS: Assembly line - each middleware processes the request before passing it on
 
-// Security middleware (basic rate limiting to prevent abuse)
-// Environment-based rate limiting configuration
+// 🛡️ STEP 9.1: Security headers (MUST BE FIRST)
+app.use(securityMiddleware.securityHeaders()); // 🔒 Add security headers to all responses
+
+// 🛡️ STEP 9.2: Rate limiting (prevent abuse and spam)
 const rateLimitConfig = {
-  max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || (15 * 60 * 1000), // 15 minutes default
+  max: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100,                    // 📊 Max requests per window
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || (15 * 60 * 1000), // ⏰ 15 minutes default
   message: {
     error: 'Too many requests',
     message: 'Rate limit exceeded. Please try again later.',
     retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || (15 * 60 * 1000)) / 1000)
   }
 };
-app.use(securityMiddleware.createRateLimit(rateLimitConfig));
+app.use(securityMiddleware.createRateLimit(rateLimitConfig)); // 🚦 Apply rate limiting
 
-// CORS and basic request parsing middleware
-app.use(cors(corsOptions)); // Enable cross-origin requests
+// 🔗 STEP 9.3: CORS (allow frontend websites to call our API)
+app.use(cors(corsOptions)); // 🌐 Enable cross-origin requests
 
-// Request body parsing with environment-based limits
-const bodyLimit = process.env.REQUEST_BODY_LIMIT || '10mb';
-app.use(express.json({ limit: bodyLimit })); // Parse JSON requests
-app.use(express.urlencoded({ extended: true, limit: bodyLimit })); // Parse form data
+// 📄 STEP 9.4: Request body parsing (convert JSON/form data to JavaScript objects)
+const bodyLimit = process.env.REQUEST_BODY_LIMIT || '10mb'; // 📏 Max request size
+app.use(express.json({ limit: bodyLimit }));                // 📋 Parse JSON requests
+app.use(express.urlencoded({ extended: true, limit: bodyLimit })); // 📝 Parse form data
 
-// Request monitoring and tracking middleware
-app.use(monitoringService.middleware());
+// 📊 STEP 9.5: Request monitoring (track performance and errors)
+app.use(monitoringService.middleware()); // 📈 Log all requests for analytics
 
 // ============================================================================
 // ERROR HANDLING - Global error catcher
@@ -287,11 +330,15 @@ app.use((err, req, res, _next) => { // _next prefix indicates intentionally unus
 });
 
 // ============================================================================
-// ROUTE REGISTRATION - API endpoint definitions
+// 🛣️ STEP 10: ROUTE REGISTRATION - API endpoint definitions
 // ============================================================================
-app.use('/', healthRoutes); // Health checks and AI ensemble endpoints
-app.use('/memory', memoryRoutes); // User memory management endpoints
-app.use('/workout', workoutRoutes); // Workout generation and tracking endpoints
+// 📋 EXECUTION ORDER: Routes are checked in registration order
+// 💡 URL STRUCTURE: /[route-prefix]/[specific-endpoint]
+
+app.use('/', healthRoutes);        // 🏥 Root routes: /health, /default-ensemble, /metrics, etc.
+app.use('/memory', memoryRoutes);  // 🧠 Memory routes: /memory/store, /memory/retrieve, etc.
+app.use('/workout', workoutRoutes); // 💪 Workout routes: /workout/generate-workout, /workout/history, etc.
+app.use('/admin', adminRoutes);     // 🎛️ Admin routes: /admin/dashboard, /admin/toggle-model, etc.
 
 // ============================================================================
 // SERVER STARTUP - Main application entry point

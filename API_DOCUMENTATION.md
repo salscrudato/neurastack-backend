@@ -56,7 +56,9 @@ X-Correlation-ID: string (optional)
         "level": "high",
         "factors": ["model_agreement", "response_quality"]
       },
-      "qualityScore": 0.92
+      "_confidenceDescription": "Overall confidence in the synthesized response, calculated from individual model confidence scores (70%) plus synthesis quality factors (30%). Higher scores indicate more reliable responses.",
+      "qualityScore": 0.92,
+      "_qualityScoreDescription": "Response quality assessment based on content structure, length optimization, and reasoning indicators. Scores range 0-1 with higher values indicating better structured, more comprehensive responses."
     },
     "roles": [
       {
@@ -66,23 +68,60 @@ X-Correlation-ID: string (optional)
         "provider": "openai",
         "status": "fulfilled",
         "wordCount": 145,
-        "confidence": { "score": 0.88, "level": "high" }
+        "confidence": { "score": 0.88, "level": "high" },
+        "_confidenceDescription": "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+        "_qualityDescription": "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+        "_metadataDescription": "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
       }
     ],
+    "voting": {
+      "winner": "gpt4o",
+      "_winnerDescription": "AI model selected as having the best response based on weighted voting algorithm considering confidence, response time, length optimization, and model reliability factors.",
+      "confidence": 0.42,
+      "_confidenceDescription": "Normalized weight (0-1) of the winning model's response. Higher values indicate stronger consensus that this model provided the best answer.",
+      "consensus": "moderate",
+      "_consensusDescription": "Strength of agreement in voting: 'strong' (winner >60% weight, >20% lead), 'moderate' (winner >45% weight), 'weak' (distributed weights). Strong consensus indicates high ensemble agreement.",
+      "weights": {"gpt4o": 0.42, "gemini": 0.31, "claude": 0.27},
+      "_weightsDescription": "Normalized voting weights for each model calculated from: base confidence × time performance × length optimization × model reliability. Shows relative contribution strength of each model."
+    },
     "metadata": {
       "totalRoles": 3,
       "successfulRoles": 3,
       "processingTimeMs": 8500,
+      "confidenceAnalysis": {
+        "overallConfidence": 0.85,
+        "_overallConfidenceDescription": "Final confidence score for the entire ensemble response, combining synthesis quality with voting consensus adjustments.",
+        "modelAgreement": 0.78,
+        "_modelAgreementDescription": "Measure of similarity between different AI model responses (0-1). Higher values indicate models provided consistent, aligned answers."
+      },
       "costEstimate": {
         "totalTokens": 1250,
         "estimatedCost": "$0.0045"
-      }
+      },
+      "_costEstimateDescription": "Estimated API costs for this ensemble request including input/output tokens and per-model pricing. Helps track usage and optimize cost efficiency."
     }
   },
   "timestamp": "2025-06-22T10:30:00Z",
   "correlationId": "req-12345"
 }
 ```
+
+#### Description Fields
+
+All ensemble response fields ending with `_*Description` provide human-readable explanations of the confidence/voting/scoring mechanisms:
+
+- **Purpose**: Explain how each calculated value is derived and what it means
+- **Impact**: Describe how the values influence ensemble performance and reliability
+- **Interpretation**: Provide guidance for understanding and using the metrics
+- **Backwards Compatibility**: These fields can be safely ignored by existing implementations
+
+Examples:
+- `_confidenceDescription`: Explains how confidence scores are calculated
+- `_winnerDescription`: Describes the voting algorithm for selecting the best model
+- `_consensusDescription`: Explains voting agreement levels and their significance
+- `_weightsDescription`: Details the weighted voting calculation methodology
+
+These descriptions help frontend developers and users understand the ensemble's decision-making process and interpret the reliability indicators.
 
 ### 2. Workout Generation
 

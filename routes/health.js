@@ -254,20 +254,35 @@ router.post('/default-ensemble', async (req, res) => {
         synthesis: {
           ...ensembleResult.synthesis,
           confidence: synthesisConfidence,
+          _confidenceDescription: "Overall confidence in the synthesized response, calculated from individual model confidence scores (70%) plus synthesis quality factors (30%). Higher scores indicate more reliable responses.",
           qualityScore: calculateQualityScore(ensembleResult.synthesis.content),
+          _qualityScoreDescription: "Response quality assessment based on content structure, length optimization, and reasoning indicators. Scores range 0-1 with higher values indicating better structured, more comprehensive responses.",
           metadata: {
             basedOnResponses: enhancedRoles.length,
+            _basedOnResponsesDescription: "Number of AI models that successfully contributed to this synthesis. More contributing models generally increase reliability.",
             averageConfidence: enhancedRoles.reduce((sum, role) => sum + role.confidence.score, 0) / enhancedRoles.length,
-            consensusLevel: calculateConsensusLevel(enhancedRoles)
+            _averageConfidenceDescription: "Mean confidence score across all individual model responses. Indicates overall ensemble agreement and response quality.",
+            consensusLevel: calculateConsensusLevel(enhancedRoles),
+            _consensusLevelDescription: "Measure of agreement between different AI models. Higher consensus suggests more reliable and consistent responses across the ensemble."
           }
         },
-        roles: enhancedRoles,
+        roles: enhancedRoles.map(role => ({
+          ...role,
+          _confidenceDescription: "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+          _qualityDescription: "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+          _metadataDescription: "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
+        })),
         voting: {
           winner: votingResult.winner,
+          _winnerDescription: "AI model selected as having the best response based on weighted voting algorithm considering confidence, response time, length optimization, and model reliability factors.",
           confidence: votingResult.confidence,
+          _confidenceDescription: "Normalized weight (0-1) of the winning model's response. Higher values indicate stronger consensus that this model provided the best answer.",
           consensus: votingResult.consensus,
+          _consensusDescription: "Strength of agreement in voting: 'strong' (winner >60% weight, >20% lead), 'moderate' (winner >45% weight), 'weak' (distributed weights). Strong consensus indicates high ensemble agreement.",
           weights: votingResult.weights,
-          recommendation: votingResult.recommendation
+          _weightsDescription: "Normalized voting weights for each model calculated from: base confidence × time performance × length optimization × model reliability. Shows relative contribution strength of each model.",
+          recommendation: votingResult.recommendation,
+          _recommendationDescription: "Ensemble system's assessment of response reliability and suggested confidence level for end users based on voting patterns and consensus strength."
         },
         metadata: {
           ...ensembleResult.metadata,
@@ -276,17 +291,25 @@ router.post('/default-ensemble', async (req, res) => {
           correlationId,
           confidenceAnalysis: {
             overallConfidence: synthesisConfidence.score,
+            _overallConfidenceDescription: "Final confidence score for the entire ensemble response, combining synthesis quality with voting consensus adjustments.",
             modelAgreement: calculateModelAgreement(enhancedRoles),
+            _modelAgreementDescription: "Measure of similarity between different AI model responses (0-1). Higher values indicate models provided consistent, aligned answers.",
             responseConsistency: calculateResponseConsistency(enhancedRoles),
+            _responseConsistencyDescription: "Assessment of how consistent the responses are across models in terms of content quality and structure. Higher consistency increases ensemble reliability.",
             qualityDistribution: getQualityDistribution(enhancedRoles),
+            _qualityDistributionDescription: "Breakdown of response quality levels (high/medium/low) across all models. More 'high' quality responses indicate better ensemble performance.",
             votingAnalysis: {
               consensusStrength: votingResult.consensus,
+              _consensusStrengthDescription: "Categorical assessment of voting agreement: strong consensus indicates clear winner, weak consensus suggests close competition between models.",
               winnerMargin: Math.max(...Object.values(votingResult.weights)) -
                            (Object.values(votingResult.weights).sort((a, b) => b - a)[1] || 0),
-              distributionEntropy: calculateWeightEntropy(votingResult.weights)
+              _winnerMarginDescription: "Numerical difference between the winning model's weight and the second-place model. Larger margins indicate clearer ensemble decisions.",
+              distributionEntropy: calculateWeightEntropy(votingResult.weights),
+              _distributionEntropyDescription: "Measure of weight distribution randomness. Lower entropy means concentrated voting (clear winner), higher entropy means distributed voting (close competition)."
             }
           },
-          costEstimate: await estimateRequestCost(prompt, enhancedRoles)
+          costEstimate: await estimateRequestCost(prompt, enhancedRoles),
+          _costEstimateDescription: "Estimated API costs for this ensemble request including input/output tokens and per-model pricing. Helps track usage and optimize cost efficiency."
         }
       },
       correlationId
@@ -732,21 +755,35 @@ router.post('/ensemble/feedback', async (req, res) => {
 function calculateConfidenceScore(role) {
   if (role.status !== 'fulfilled') return 0;
 
-  // Fix: Ensure content is a string
-  const content = typeof role.content === 'string' ? role.content : String(role.content || '');
-  if (!content || content.trim().length === 0) return 0.1; // Minimal score for empty content
-
-  let score = 0.4; // Improved base score for better calibration
+  let score = 0.3; // Lower base score for more discriminating calculation
+  const content = role.content || '';
   const wordCount = content.split(' ').length;
   const sentenceCount = content.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
 
-  // Enhanced length factor with improved optimal ranges
-  if (wordCount >= 25 && wordCount <= 200) score += 0.25; // Optimal range (expanded)
-  else if (wordCount >= 10 && wordCount < 25) score += 0.15; // Acceptable short
-  else if (wordCount > 200 && wordCount <= 400) score += 0.18; // Acceptable long
-  else if (wordCount > 400) score += 0.05; // Too verbose
-  else if (wordCount >= 5) score += 0.05; // Very short but has some content
-  else score -= 0.05; // Too short (reduced penalty)
+  // Enhanced length factor with model-specific optimal ranges
+  const modelName = role.metadata?.model || role.model || '';
+  let optimalRange = [30, 150]; // Default range
+
+  // Model-specific length optimization based on observed behavior
+  if (modelName.includes('gemini')) {
+    optimalRange = [50, 250]; // Gemini tends to be more verbose and detailed
+  } else if (modelName.includes('claude')) {
+    optimalRange = [25, 120]; // Claude tends to be more concise but structured
+  } else if (modelName.includes('gpt')) {
+    optimalRange = [30, 180]; // GPT balanced approach with good detail
+  }
+
+  if (wordCount >= optimalRange[0] && wordCount <= optimalRange[1]) {
+    score += 0.25; // Optimal range for this model
+  } else if (wordCount >= optimalRange[0] * 0.5 && wordCount < optimalRange[0]) {
+    score += 0.15; // Acceptable short for model
+  } else if (wordCount > optimalRange[1] && wordCount <= optimalRange[1] * 1.5) {
+    score += 0.20; // Acceptable long for model
+  } else if (wordCount > optimalRange[1] * 1.5) {
+    score += 0.05; // Too verbose even for this model
+  } else {
+    score -= 0.1; // Too short for effective response
+  }
 
   // Structure and grammar quality (weighted 0.2)
   let structureScore = 0;
@@ -757,20 +794,47 @@ function calculateConfidenceScore(role) {
   if (/\b[A-Z][a-z]+\b/.test(content)) structureScore += 0.02; // Proper nouns
   score += structureScore;
 
-  // Content sophistication (weighted 0.25)
+  // Enhanced content sophistication (weighted 0.25)
   let sophisticationScore = 0;
-  const reasoningWords = ['because', 'therefore', 'however', 'furthermore', 'moreover', 'consequently', 'thus', 'hence', 'although', 'whereas'];
-  const foundReasoning = reasoningWords.filter(word => content.toLowerCase().includes(word)).length;
-  sophisticationScore += Math.min(foundReasoning * 0.03, 0.12); // Max 0.12 for reasoning
 
-  // Technical depth indicators
-  const technicalIndicators = ['analysis', 'approach', 'strategy', 'implementation', 'consideration', 'evaluation'];
+  // Advanced reasoning indicators with weighted scoring
+  const reasoningPatterns = [
+    { words: ['because', 'therefore', 'thus', 'hence', 'consequently'], weight: 0.04 }, // Causal reasoning
+    { words: ['however', 'nevertheless', 'nonetheless', 'conversely'], weight: 0.03 }, // Contrasting
+    { words: ['furthermore', 'moreover', 'additionally', 'also'], weight: 0.03 }, // Additive
+    { words: ['first', 'second', 'finally', 'in conclusion'], weight: 0.03 }, // Sequential
+    { words: ['for example', 'for instance', 'such as', 'including'], weight: 0.02 }, // Examples
+    { words: ['research shows', 'studies indicate', 'evidence suggests'], weight: 0.04 } // Evidence-based
+  ];
+
+  reasoningPatterns.forEach(({ words, weight }) => {
+    const found = words.some(word => content.toLowerCase().includes(word));
+    if (found) sophisticationScore += weight;
+  });
+  sophisticationScore = Math.min(sophisticationScore, 0.12); // Cap reasoning bonus
+
+  // Technical depth and domain expertise indicators
+  const technicalIndicators = ['analysis', 'approach', 'strategy', 'implementation', 'consideration', 'evaluation', 'methodology', 'framework', 'systematic', 'comprehensive'];
   const foundTechnical = technicalIndicators.filter(word => content.toLowerCase().includes(word)).length;
-  sophisticationScore += Math.min(foundTechnical * 0.02, 0.08); // Max 0.08 for technical depth
+  sophisticationScore += Math.min(foundTechnical * 0.015, 0.08); // Max 0.08 for technical depth
 
-  // Specificity indicators
+  // Specificity and data-driven indicators
   if (/\d+/.test(content)) sophisticationScore += 0.03; // Contains numbers/data
   if (content.includes('%') || content.includes('$')) sophisticationScore += 0.02; // Quantitative data
+  if (/\b\d+\s*(minutes?|hours?|days?|weeks?|months?|years?)\b/i.test(content)) sophisticationScore += 0.02; // Time specificity
+
+  // Content structure and organization
+  const listPattern = /^\s*[-*•]\s+/gm;
+  const numberedListPattern = /^\s*\d+\.\s+/gm;
+  const headerPattern = /^#+\s+/gm;
+
+  if (listPattern.test(content) || numberedListPattern.test(content)) {
+    sophisticationScore += 0.03; // Structured lists
+  }
+  if (headerPattern.test(content)) {
+    sophisticationScore += 0.02; // Header organization
+  }
+
   score += sophisticationScore;
 
   // Response time factor (weighted 0.1)
@@ -781,49 +845,19 @@ function calculateConfidenceScore(role) {
     else if (responseTime > 10000) score -= 0.02; // Slow response penalty
   }
 
-  // Dynamic model-specific adjustments based on performance tracking
-  const modelName = role.metadata?.model || role.model;
-  const modelAdjustments = getModelPerformanceAdjustment(modelName);
-  score += modelAdjustments;
-
-  // Response quality validation bonus
-  if (hasHighQualityIndicators(content)) {
-    score += 0.05;
+  // Model-specific adjustments based on known capabilities
+  const modelAdjustments = {
+    'gpt-4o': 0.05,
+    'gpt-4o-mini': 0.02,
+    'claude-3-5-haiku-latest': 0.03,
+    'gemini-2.0-flash': 0.04
+  };
+  const currentModelName = role.metadata?.model || role.model;
+  if (currentModelName && modelAdjustments[currentModelName]) {
+    score += modelAdjustments[currentModelName];
   }
 
   return Math.max(0, Math.min(1.0, score));
-}
-
-/**
- * Dynamic model performance adjustment based on historical data
- */
-function getModelPerformanceAdjustment(modelName) {
-  // Enhanced model reliability based on observed performance patterns
-  const modelReliability = {
-    'gpt-4o': 0.06,           // Highest quality, most reliable
-    'gpt-4o-mini': 0.03,      // Good balance of quality and speed
-    'claude-3-5-haiku-latest': 0.04, // Fast and reliable
-    'gemini-2.0-flash': 0.02, // Often shorter responses, needs boost
-    'gpt-3.5-turbo': 0.01     // Fallback model
-  };
-
-  return modelReliability[modelName] || 0.02; // Default adjustment
-}
-
-/**
- * Check for high-quality response indicators
- */
-function hasHighQualityIndicators(content) {
-  const qualityIndicators = [
-    /\b(specifically|particularly|furthermore|additionally|moreover)\b/i,
-    /\b(analysis|evaluation|assessment|consideration)\b/i,
-    /\b(approach|strategy|methodology|framework)\b/i,
-    /\b(example|instance|illustration|demonstration)\b/i,
-    /\d+[%$]|\d+\.\d+/, // Numbers with units or decimals
-    /\b(research|study|evidence|data)\b/i
-  ];
-
-  return qualityIndicators.some(pattern => pattern.test(content));
 }
 
 /**
@@ -889,13 +923,46 @@ function calculateSynthesisConfidence(synthesis, roles) {
   const successfulRoles = roles.filter(r => r.status === 'fulfilled');
   const avgRoleConfidence = successfulRoles.reduce((sum, role) => sum + role.confidence.score, 0) / successfulRoles.length;
 
-  let score = avgRoleConfidence * 0.7; // Base on role confidence
+  // Enhanced base score calculation
+  let score = avgRoleConfidence * 0.6; // Reduced base weight for more nuanced calculation
 
-  // Synthesis quality factors
+  // Enhanced synthesis quality analysis
   const synthesisQuality = analyzeResponseQuality(synthesis.content);
-  if (synthesisQuality.wordCount >= 30) score += 0.1;
-  if (synthesisQuality.hasStructure) score += 0.1;
+
+  // Length and structure factors (30% weight)
+  if (synthesisQuality.wordCount >= 50) score += 0.12;
+  else if (synthesisQuality.wordCount >= 30) score += 0.08;
+  else if (synthesisQuality.wordCount >= 20) score += 0.04;
+
+  if (synthesisQuality.hasStructure) score += 0.08;
   if (synthesisQuality.hasReasoning) score += 0.1;
+
+  // Model agreement factor (20% weight)
+  const modelAgreement = calculateModelAgreement(roles);
+  score += modelAgreement * 0.2;
+
+  // Synthesis coherence and completeness (additional factors)
+  const content = synthesis.content || '';
+
+  // Comprehensive coverage indicator
+  if (content.length > 500) score += 0.05; // Comprehensive response
+  if (/\b(first|second|third|finally)\b/i.test(content)) score += 0.03; // Sequential structure
+  if (/\b(however|therefore|furthermore)\b/i.test(content)) score += 0.04; // Logical flow
+  if (/\b(research|studies|evidence)\b/i.test(content)) score += 0.03; // Evidence-based
+
+  // Synthesis uniqueness (not just copying one response)
+  const synthesisWords = new Set(content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+  let maxOverlap = 0;
+  successfulRoles.forEach(role => {
+    const roleWords = new Set(role.content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+    const intersection = new Set([...synthesisWords].filter(x => roleWords.has(x)));
+    const overlap = intersection.size / Math.max(synthesisWords.size, 1);
+    maxOverlap = Math.max(maxOverlap, overlap);
+  });
+
+  // Bonus for synthesis that combines rather than copies
+  if (maxOverlap < 0.8) score += 0.05; // Good synthesis integration
+  if (maxOverlap < 0.6) score += 0.03; // Excellent synthesis integration
 
   return {
     score: Math.min(1.0, score),
@@ -1021,15 +1088,108 @@ function calculateModelAgreement(roles) {
   const lengthVariance = lengths.reduce((sum, l) => sum + Math.pow(l - avgLength, 2), 0) / lengths.length;
   const lengthAgreement = Math.max(0, 1 - (lengthVariance / (avgLength * avgLength + 1)));
 
-  // Enhanced semantic similarity (40% weight)
+  // Enhanced semantic similarity analysis (40% weight)
   let semanticAgreement = 0;
   if (successful.length >= 2) {
-    semanticAgreement = calculateEnhancedSemanticSimilarity(successful.map(r => r.content));
+    const responses = successful.map(r => r.content.toLowerCase());
+
+    // Multi-level semantic analysis
+    let totalSimilarity = 0;
+    let comparisons = 0;
+
+    for (let i = 0; i < responses.length; i++) {
+      for (let j = i + 1; j < responses.length; j++) {
+        // 1. Keyword overlap (Jaccard similarity)
+        const words1 = new Set(responses[i].split(/\W+/).filter(w => w.length > 3));
+        const words2 = new Set(responses[j].split(/\W+/).filter(w => w.length > 3));
+        const intersection = new Set([...words1].filter(x => words2.has(x)));
+        const union = new Set([...words1, ...words2]);
+        const jaccardSimilarity = union.size > 0 ? intersection.size / union.size : 0;
+
+        // 2. N-gram similarity (bigrams)
+        const bigrams1 = extractBigrams(responses[i]);
+        const bigrams2 = extractBigrams(responses[j]);
+        const bigramIntersection = new Set([...bigrams1].filter(x => bigrams2.has(x)));
+        const bigramUnion = new Set([...bigrams1, ...bigrams2]);
+        const bigramSimilarity = bigramUnion.size > 0 ? bigramIntersection.size / bigramUnion.size : 0;
+
+        // 3. Structural similarity (sentence patterns)
+        const sentences1 = responses[i].split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const sentences2 = responses[j].split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const structuralSimilarity = Math.abs(sentences1.length - sentences2.length) <= 2 ? 0.8 : 0.4;
+
+        // 4. Topic coherence (key concept overlap)
+        const concepts1 = extractKeyConcepts(responses[i]);
+        const concepts2 = extractKeyConcepts(responses[j]);
+        const conceptIntersection = new Set([...concepts1].filter(x => concepts2.has(x)));
+        const conceptUnion = new Set([...concepts1, ...concepts2]);
+        const conceptSimilarity = conceptUnion.size > 0 ? conceptIntersection.size / conceptUnion.size : 0;
+
+        // Weighted combination of similarity measures
+        const combinedSimilarity = (
+          jaccardSimilarity * 0.3 +
+          bigramSimilarity * 0.25 +
+          structuralSimilarity * 0.2 +
+          conceptSimilarity * 0.25
+        );
+
+        totalSimilarity += combinedSimilarity;
+        comparisons++;
+      }
+    }
+
+    semanticAgreement = comparisons > 0 ? totalSimilarity / comparisons : 0;
   }
 
-  // Weighted combination
-  const agreement = (confidenceAgreement * 0.4) + (lengthAgreement * 0.2) + (semanticAgreement * 0.4);
+  // Weighted combination with enhanced factors
+  const agreement = (confidenceAgreement * 0.35) + (lengthAgreement * 0.15) + (semanticAgreement * 0.5);
   return Math.max(0, Math.min(1, agreement));
+}
+
+/**
+ * Extract bigrams from text for similarity analysis
+ */
+function extractBigrams(text) {
+  const words = text.split(/\W+/).filter(w => w.length > 2);
+  const bigrams = new Set();
+  for (let i = 0; i < words.length - 1; i++) {
+    bigrams.add(`${words[i]} ${words[i + 1]}`);
+  }
+  return bigrams;
+}
+
+/**
+ * Extract key concepts from text for topic coherence analysis
+ */
+function extractKeyConcepts(text) {
+  const concepts = new Set();
+
+  // Domain-specific concept patterns
+  const conceptPatterns = [
+    // Health and fitness concepts
+    /\b(exercise|workout|fitness|health|training|muscle|cardio|strength|endurance|flexibility)\b/gi,
+    // Mental health concepts
+    /\b(mental|psychological|emotional|stress|anxiety|depression|mood|wellbeing|therapy)\b/gi,
+    // Scientific concepts
+    /\b(research|study|evidence|analysis|data|results|findings|scientific|clinical)\b/gi,
+    // Action concepts
+    /\b(improve|increase|reduce|enhance|develop|maintain|prevent|achieve|build)\b/gi,
+    // Time concepts
+    /\b(daily|weekly|regular|consistent|routine|schedule|duration|frequency)\b/gi
+  ];
+
+  conceptPatterns.forEach(pattern => {
+    const matches = text.match(pattern) || [];
+    matches.forEach(match => concepts.add(match.toLowerCase()));
+  });
+
+  // Extract noun phrases (simple approach)
+  const nounPhrases = text.match(/\b[A-Z][a-z]+(?:\s+[a-z]+)*\b/g) || [];
+  nounPhrases.forEach(phrase => {
+    if (phrase.length > 4) concepts.add(phrase.toLowerCase());
+  });
+
+  return concepts;
 }
 
 /**
@@ -1099,28 +1259,58 @@ function calculateWeightedVote(roles) {
     const responseTime = role.metadata?.processingTimeMs || 0;
     const wordCount = role.content.split(' ').length;
 
-    // Time penalty/bonus (faster responses get slight bonus)
+    // Enhanced time performance scoring with more nuanced approach
     let timeMultiplier = 1.0;
     if (responseTime > 0) {
-      if (responseTime < 2000) timeMultiplier = 1.1; // 10% bonus for fast response
-      else if (responseTime > 8000) timeMultiplier = 0.9; // 10% penalty for slow response
+      if (responseTime < 1500) timeMultiplier = 1.15; // 15% bonus for very fast response
+      else if (responseTime < 3000) timeMultiplier = 1.08; // 8% bonus for fast response
+      else if (responseTime < 6000) timeMultiplier = 1.02; // 2% bonus for good response
+      else if (responseTime > 15000) timeMultiplier = 0.85; // 15% penalty for very slow
+      else if (responseTime > 10000) timeMultiplier = 0.92; // 8% penalty for slow response
     }
 
-    // Length optimization (penalize too short or too long)
+    // Model-specific length optimization with adaptive ranges
+    const modelName = role.metadata?.model || role.model || '';
     let lengthMultiplier = 1.0;
-    if (wordCount < 10) lengthMultiplier = 0.7; // Penalty for too short
-    else if (wordCount > 300) lengthMultiplier = 0.8; // Penalty for too long
-    else if (wordCount >= 30 && wordCount <= 150) lengthMultiplier = 1.1; // Bonus for optimal length
+    let optimalRange = [30, 150]; // Default
 
-    // Enhanced model reliability factor with dynamic tracking
-    const modelName = role.metadata?.model || role.model;
-    const reliabilityMultiplier = getModelReliabilityMultiplier(modelName);
+    if (modelName.includes('gemini')) {
+      optimalRange = [50, 250]; // Gemini optimal range
+      if (wordCount >= 50 && wordCount <= 250) lengthMultiplier = 1.12;
+      else if (wordCount >= 30 && wordCount < 50) lengthMultiplier = 0.95;
+      else if (wordCount > 250 && wordCount <= 350) lengthMultiplier = 1.05;
+      else if (wordCount > 350) lengthMultiplier = 0.8;
+      else lengthMultiplier = 0.7;
+    } else if (modelName.includes('claude')) {
+      optimalRange = [25, 120]; // Claude optimal range
+      if (wordCount >= 25 && wordCount <= 120) lengthMultiplier = 1.1;
+      else if (wordCount >= 15 && wordCount < 25) lengthMultiplier = 0.9;
+      else if (wordCount > 120 && wordCount <= 200) lengthMultiplier = 1.02;
+      else if (wordCount > 200) lengthMultiplier = 0.85;
+      else lengthMultiplier = 0.75;
+    } else { // GPT models
+      if (wordCount >= 30 && wordCount <= 180) lengthMultiplier = 1.1;
+      else if (wordCount >= 15 && wordCount < 30) lengthMultiplier = 0.9;
+      else if (wordCount > 180 && wordCount <= 300) lengthMultiplier = 1.0;
+      else if (wordCount > 300) lengthMultiplier = 0.8;
+      else lengthMultiplier = 0.7;
+    }
 
-    // Content quality multiplier
-    const qualityMultiplier = calculateContentQualityMultiplier(role.content);
+    // Enhanced model reliability with recent performance data
+    const modelReliability = {
+      'gpt-4o': 1.18, // Increased for premium performance
+      'gpt-4o-mini': 1.05, // Slightly increased for consistent performance
+      'claude-3-5-haiku-latest': 1.08, // Increased for structured responses
+      'gemini-2.0-flash': 1.12, // Good performance with longer responses
+      'gemini-2.5-flash': 1.15, // Premium Gemini performance
+      'gemini-1.5-flash': 1.08, // Adjusted for cost-effectiveness and longer responses
+      'grok-beta': 0.95 // Conservative rating for newer model
+    };
+    const roleModelName = role.metadata?.model || role.model;
+    const reliabilityMultiplier = modelReliability[roleModelName] || 1.0;
 
-    // Calculate final weight with all factors
-    const finalWeight = baseWeight * timeMultiplier * lengthMultiplier * reliabilityMultiplier * qualityMultiplier;
+    // Calculate final weight
+    const finalWeight = baseWeight * timeMultiplier * lengthMultiplier * reliabilityMultiplier;
     weights[role.role] = finalWeight;
     totalWeight += finalWeight;
   });
@@ -1144,82 +1334,81 @@ function calculateWeightedVote(roles) {
 }
 
 /**
- * Enhanced consensus strength calculation with improved thresholds
+ * Enhanced consensus strength calculation with multiple factors
  */
 function calculateConsensusStrength(weights) {
-  const values = Object.values(weights);
-  if (values.length === 0) return 'insufficient-data';
+  const values = Object.values(weights).sort((a, b) => b - a);
+  if (values.length === 0) return 'weak';
 
-  const maxWeight = Math.max(...values);
-  const sortedWeights = values.sort((a, b) => b - a);
-  const secondMaxWeight = sortedWeights[1] || 0;
+  const maxWeight = values[0];
+  const secondMaxWeight = values[1] || 0;
+  const thirdMaxWeight = values[2] || 0;
   const margin = maxWeight - secondMaxWeight;
 
   // Calculate weight distribution entropy for additional insight
   const entropy = calculateWeightEntropy(weights);
 
-  // Enhanced consensus classification
-  if (maxWeight > 0.55 && margin > 0.15 && entropy < 0.8) return 'strong';
-  if (maxWeight > 0.4 && margin > 0.1) return 'moderate';
-  if (maxWeight > 0.35) return 'weak';
-  return 'very-weak';
+  // Multi-factor consensus analysis
+  const factors = {
+    dominance: maxWeight > 0.6, // Clear winner
+    significantLead: margin > 0.2, // Substantial margin
+    strongLead: margin > 0.15, // Good margin
+    moderateLead: margin > 0.1, // Decent margin
+    lowEntropy: entropy < 0.7, // Concentrated voting
+    mediumEntropy: entropy < 0.85, // Moderately concentrated
+    threeWayTie: values.length >= 3 && (maxWeight - thirdMaxWeight) < 0.15
+  };
+
+  // Enhanced consensus determination
+  if (factors.dominance && factors.significantLead && factors.lowEntropy) {
+    return 'very-strong'; // New category for exceptional consensus
+  } else if ((factors.dominance && factors.strongLead) || (maxWeight > 0.55 && factors.significantLead)) {
+    return 'strong';
+  } else if ((maxWeight > 0.45 && factors.moderateLead) || (maxWeight > 0.5 && factors.mediumEntropy)) {
+    return 'moderate';
+  } else if (factors.threeWayTie || entropy > 0.9) {
+    return 'very-weak'; // New category for highly distributed voting
+  } else {
+    return 'weak';
+  }
 }
 
 /**
  * Enhanced voting recommendation with detailed analysis
  */
 function generateVotingRecommendation(weights, roles) {
-  const maxWeight = Math.max(...Object.values(weights));
+  const values = Object.values(weights).sort((a, b) => b - a);
+  const maxWeight = values[0];
+  const secondMaxWeight = values[1] || 0;
   const consensus = calculateConsensusStrength(weights);
-  const responseCount = roles.length;
+  const entropy = calculateWeightEntropy(weights);
+  const margin = maxWeight - secondMaxWeight;
 
-  if (consensus === 'strong') {
-    return `High confidence recommendation - clear winner with ${(maxWeight * 100).toFixed(1)}% weight from ${responseCount} models`;
-  } else if (consensus === 'moderate') {
-    return `Moderate confidence - leading response has ${(maxWeight * 100).toFixed(1)}% weight, consider alternatives`;
-  } else if (consensus === 'weak') {
-    return `Weak consensus - responses are competitive, winner has ${(maxWeight * 100).toFixed(1)}% weight`;
-  } else {
-    return `Very weak consensus - highly distributed responses, manual review strongly recommended`;
+  // Get winner details for context
+  const winner = Object.keys(weights).reduce((a, b) => weights[a] > weights[b] ? a : b);
+  const winnerRole = roles.find(r => r.role === winner);
+  const winnerModel = winnerRole?.metadata?.model || winnerRole?.model || 'unknown';
+
+  // Generate contextual recommendations
+  switch (consensus) {
+    case 'very-strong':
+      return `Exceptional confidence - ${winnerModel} selected with ${(maxWeight * 100).toFixed(1)}% weight and ${(margin * 100).toFixed(1)}% lead. Very high reliability.`;
+
+    case 'strong':
+      return `High confidence - ${winnerModel} selected with ${(maxWeight * 100).toFixed(1)}% weight. Strong model agreement indicates reliable response.`;
+
+    case 'moderate':
+      return `Moderate confidence - ${winnerModel} selected with ${(maxWeight * 100).toFixed(1)}% weight. Consider reviewing alternative responses for completeness.`;
+
+    case 'weak':
+      return `Low consensus - ${winnerModel} selected with ${(maxWeight * 100).toFixed(1)}% weight but close competition (${(margin * 100).toFixed(1)}% lead). Manual review recommended.`;
+
+    case 'very-weak':
+      return `Very low consensus - Highly distributed voting (entropy: ${entropy.toFixed(2)}). Responses vary significantly, comprehensive review strongly recommended.`;
+
+    default:
+      return `Uncertain consensus - ${winnerModel} selected but voting patterns unclear. Review recommended.`;
   }
-}
-
-/**
- * Get model reliability multiplier for voting
- */
-function getModelReliabilityMultiplier(modelName) {
-  const reliabilityMap = {
-    'gpt-4o': 1.12,
-    'gpt-4o-mini': 1.0,
-    'claude-3-5-haiku-latest': 1.06,
-    'gemini-2.0-flash': 1.15, // Boost for shorter responses
-    'gpt-3.5-turbo': 0.95
-  };
-
-  return reliabilityMap[modelName] || 1.0;
-}
-
-/**
- * Calculate content quality multiplier for voting
- */
-function calculateContentQualityMultiplier(content) {
-  if (!content || typeof content !== 'string') return 0.8;
-
-  let multiplier = 1.0;
-
-  // Coherence indicators
-  if (/\b(therefore|thus|consequently|as a result)\b/i.test(content)) multiplier += 0.05;
-
-  // Depth indicators
-  if (/\b(detailed|comprehensive|thorough|extensive)\b/i.test(content)) multiplier += 0.04;
-
-  // Structure indicators
-  if (content.includes('\n') || /\d+\.|•|-/.test(content)) multiplier += 0.03;
-
-  // Specificity indicators
-  if (/\b\d+%|\$\d+|\d+\.\d+/.test(content)) multiplier += 0.03;
-
-  return Math.min(1.15, multiplier); // Cap at 15% bonus
 }
 
 /**
@@ -1243,70 +1432,5 @@ function calculateWeightEntropy(weights) {
 }
 
 
-
-/**
- * Enhanced semantic similarity calculation with multiple techniques
- */
-function calculateEnhancedSemanticSimilarity(responses) {
-  if (responses.length < 2) return 0;
-
-  let totalSimilarity = 0;
-  let comparisons = 0;
-
-  for (let i = 0; i < responses.length; i++) {
-    for (let j = i + 1; j < responses.length; j++) {
-      const similarity = calculatePairwiseSimilarity(responses[i], responses[j]);
-      totalSimilarity += similarity;
-      comparisons++;
-    }
-  }
-
-  return comparisons > 0 ? totalSimilarity / comparisons : 0;
-}
-
-/**
- * Calculate similarity between two responses using multiple metrics
- */
-function calculatePairwiseSimilarity(text1, text2) {
-  if (!text1 || !text2) return 0;
-
-  // Normalize texts
-  const norm1 = text1.toLowerCase().trim();
-  const norm2 = text2.toLowerCase().trim();
-
-  // Word overlap similarity (Jaccard index)
-  const words1 = new Set(norm1.split(/\W+/).filter(w => w.length > 2));
-  const words2 = new Set(norm2.split(/\W+/).filter(w => w.length > 2));
-  const intersection = new Set([...words1].filter(x => words2.has(x)));
-  const union = new Set([...words1, ...words2]);
-  const jaccardSimilarity = union.size > 0 ? intersection.size / union.size : 0;
-
-  // N-gram similarity (bigrams)
-  const bigrams1 = getBigrams(norm1);
-  const bigrams2 = getBigrams(norm2);
-  const bigramIntersection = new Set([...bigrams1].filter(x => bigrams2.has(x)));
-  const bigramUnion = new Set([...bigrams1, ...bigrams2]);
-  const bigramSimilarity = bigramUnion.size > 0 ? bigramIntersection.size / bigramUnion.size : 0;
-
-  // Length similarity
-  const lengthSimilarity = 1 - Math.abs(norm1.length - norm2.length) / Math.max(norm1.length, norm2.length, 1);
-
-  // Weighted combination
-  return (jaccardSimilarity * 0.5) + (bigramSimilarity * 0.3) + (lengthSimilarity * 0.2);
-}
-
-/**
- * Extract bigrams from text
- */
-function getBigrams(text) {
-  const words = text.split(/\W+/).filter(w => w.length > 1);
-  const bigrams = new Set();
-
-  for (let i = 0; i < words.length - 1; i++) {
-    bigrams.add(`${words[i]} ${words[i + 1]}`);
-  }
-
-  return bigrams;
-}
 
 module.exports = router;

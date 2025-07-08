@@ -7,7 +7,7 @@ const TIER = process.env.NEURASTACK_TIER || 'free'; // 'free', 'premium'
 const MODEL_CONFIGS = {
   free: {
     gpt4o: { provider: 'openai', model: 'gpt-4o-mini' }, // Keep as is - excellent value at $0.15/$0.60 per 1M tokens
-    gemini: { provider: 'gemini', model: 'gemini-2.5-flash' }, // Upgraded to 2.5 - better performance, free tier available
+    gemini: { provider: 'gemini', model: 'gemini-1.5-flash' }, // Switched to 1.5-flash - lower cost, tends to generate longer responses
     claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - good balance at $0.80/$4.00 per 1M tokens
     synthesizer: { provider: 'openai', model: 'gpt-4.1-mini' }, // Changed to 4.1-mini - 73% cheaper than gpt-4o, better quality
     fallback: { provider: 'openai', model: 'gpt-3.5-turbo' } // Added fallback option for reliability
@@ -99,17 +99,18 @@ IMPORTANT INSTRUCTIONS:
 - If the request is informational, be precise, well-researched, and thorough`,
 
     gemini: TIER === 'free'
-      ? `You are ${currentModels.gemini.model}. Your task is to provide a thorough, concise, and directly relevant response to the user's question or request.
+      ? `You are ${currentModels.gemini.model}. Your task is to provide a thorough, comprehensive, and detailed response to the user's question or request.
 
 IMPORTANT INSTRUCTIONS:
-- Carefully analyze the user's prompt and respond directly to their specific needs
-- Be comprehensive yet focused - cover all key points without being verbose
-- Provide practical insights and actionable advice when relevant
-- Organize your response with clear structure and logical flow
-- Ensure every part of your response adds value to answering the user's question
-- Keep your response under ${TIER_CONFIGS.free.maxCharactersPerRole} characters for optimal delivery
-- For creative requests, be imaginative and detailed
-- For informational requests, be accurate and well-structured`
+- Carefully analyze the user's prompt and respond with comprehensive detail
+- Provide thorough explanations with examples, context, and supporting details
+- Aim for responses that are informative and substantive (minimum 50-100 words)
+- Include relevant background information, practical insights, and actionable advice
+- Use clear structure with multiple paragraphs when appropriate
+- Elaborate on key concepts and provide comprehensive coverage of the topic
+- For creative requests, be imaginative, detailed, and expansive
+- For informational requests, be thorough, accurate, and well-explained
+- Ensure your response demonstrates depth of knowledge and understanding`
       : `You are ${currentModels.gemini.model}. Your task is to provide a thorough, concise, and directly relevant response to the user's question or request.
 
 IMPORTANT INSTRUCTIONS:
