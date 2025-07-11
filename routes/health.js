@@ -248,27 +248,29 @@ router.post('/default-ensemble', async (req, res) => {
     // Execute enhanced ensemble with comprehensive error handling using sanitized prompt
     const ensembleResult = await enhancedEnsemble.runEnsemble(sanitizedPrompt, userId, sessionId);
 
-    // Calculate confidence scores for each response
-    const enhancedRoles = ensembleResult.roles.map(role => {
-      const confidence = calculateConfidenceScore(role);
-      const qualityMetrics = analyzeResponseQuality(role.content);
+    // Calculate confidence scores for each response (now async)
+    const enhancedRoles = await Promise.all(
+      ensembleResult.roles.map(async role => {
+        const confidence = await calculateConfidenceScore(role);
+        const qualityMetrics = analyzeResponseQuality(role.content);
 
-      return {
-        ...role,
-        confidence: {
-          score: confidence,
-          level: getConfidenceLevel(confidence),
-          factors: getConfidenceFactors(role, qualityMetrics)
-        },
-        quality: qualityMetrics,
-        metadata: {
-          ...role.metadata,
-          processingTime: role.responseTime || 0,
-          tokenCount: estimateTokenCount(role.content),
-          complexity: assessComplexity(role.content)
-        }
-      };
-    });
+        return {
+          ...role,
+          confidence: {
+            score: confidence,
+            level: getConfidenceLevel(confidence),
+            factors: getConfidenceFactors(role, qualityMetrics)
+          },
+          quality: qualityMetrics,
+          metadata: {
+            ...role.metadata,
+            processingTime: role.responseTime || 0,
+            tokenCount: estimateTokenCount(role.content),
+            complexity: assessComplexity(role.content)
+          }
+        };
+      })
+    );
 
     // Perform weighted voting analysis
     const votingResult = calculateWeightedVote(enhancedRoles);
@@ -294,8 +296,7 @@ router.post('/default-ensemble', async (req, res) => {
           ...ensembleResult.synthesis,
           confidence: synthesisConfidence,
           _confidenceDescription: "Overall confidence in the synthesized response, calculated from individual model confidence scores (70%) plus synthesis quality factors (30%). Higher scores indicate more reliable responses.",
-          qualityScore: calculateQualityScore(ensembleResult.synthesis.content),
-          _qualityScoreDescription: "Response quality assessment based on content structure, length optimization, and reasoning indicators. Scores range 0-1 with higher values indicating better structured, more comprehensive responses.",
+          // Note: qualityScore field removed as deprecated - now using calibrated_confidence
           metadata: {
             basedOnResponses: enhancedRoles.length,
             _basedOnResponsesDescription: "Number of AI models that successfully contributed to this synthesis. More contributing models generally increase reliability.",
@@ -347,6 +348,8 @@ router.post('/default-ensemble', async (req, res) => {
               _distributionEntropyDescription: "Measure of weight distribution randomness. Lower entropy means concentrated voting (clear winner), higher entropy means distributed voting (close competition)."
             }
           },
+          diagnostics: await generateAdvancedDiagnostics(enhancedRoles, ensembleResult.synthesis),
+          _diagnosticsDescription: "Advanced analytics including embedding similarity matrix, toxicity scores, readability metrics, and model calibration data for deep ensemble analysis.",
           costEstimate: await estimateRequestCost(prompt, enhancedRoles),
           _costEstimateDescription: "Estimated API costs for this ensemble request including input/output tokens and per-model pricing. Helps track usage and optimize cost efficiency."
         }
@@ -355,7 +358,7 @@ router.post('/default-ensemble', async (req, res) => {
     };
 
     monitoringService.log('info', 'Enhanced ensemble completed successfully', {
-      processingTime: ensembleResult.metadata.processingTimeMs,
+      // Note: processingTime now tracked via correlation headers instead of processingTimeMs field
       successfulRoles: ensembleResult.metadata.successfulRoles,
       synthesisStatus: ensembleResult.metadata.synthesisStatus
     }, correlationId);
@@ -789,9 +792,36 @@ router.post('/ensemble/feedback', async (req, res) => {
 // ===== ENHANCED ENSEMBLE CONFIDENCE AND QUALITY FUNCTIONS =====
 
 /**
- * Enhanced confidence score calculation with weighted factors
+ * Enhanced confidence score calculation with semantic analysis and weighted factors
  */
-function calculateConfidenceScore(role) {
+async function calculateConfidenceScore(role) {
+  if (role.status !== 'fulfilled') return 0;
+
+  try {
+    // Use semantic confidence service for advanced scoring
+    const semanticConfidenceService = require('../services/semanticConfidenceService');
+    const responseTime = role.responseTime || role.metadata?.processingTime || 0;
+
+    const semanticResult = await semanticConfidenceService.calculateSemanticConfidence(role.content, responseTime);
+
+    // Store semantic confidence components for diagnostics
+    role.semanticConfidence = semanticResult;
+
+    // Combine semantic confidence with traditional factors (70% semantic, 30% traditional)
+    const traditionalScore = calculateTraditionalConfidenceScore(role);
+    const finalScore = (semanticResult.score * 0.7) + (traditionalScore * 0.3);
+
+    return Math.max(0, Math.min(1.0, finalScore));
+  } catch (error) {
+    console.warn('Semantic confidence calculation failed, using traditional method:', error.message);
+    return calculateTraditionalConfidenceScore(role);
+  }
+}
+
+/**
+ * Traditional confidence score calculation (fallback method)
+ */
+function calculateTraditionalConfidenceScore(role) {
   if (role.status !== 'fulfilled') return 0;
 
   let score = 0.3; // Lower base score for more discriminating calculation
@@ -876,8 +906,8 @@ function calculateConfidenceScore(role) {
 
   score += sophisticationScore;
 
-  // Response time factor (weighted 0.1)
-  const responseTime = role.responseTime || role.metadata?.processingTimeMs || 0;
+  // Response time factor (weighted 0.1) - using responseTime field instead of deprecated processingTimeMs
+  const responseTime = role.responseTime || role.metadata?.responseTime || 0;
   if (responseTime > 0) {
     if (responseTime < 2000) score += 0.05; // Fast response
     else if (responseTime < 5000) score += 0.03; // Moderate response
@@ -1014,19 +1044,8 @@ function calculateSynthesisConfidence(synthesis, roles) {
   };
 }
 
-/**
- * Calculate quality score
- */
-function calculateQualityScore(content) {
-  const metrics = analyzeResponseQuality(content);
-  let score = 0.5;
-
-  if (metrics.wordCount >= 20) score += 0.2;
-  if (metrics.hasStructure) score += 0.15;
-  if (metrics.hasReasoning) score += 0.15;
-
-  return Math.min(1.0, score);
-}
+// Note: calculateQualityScore function removed as deprecated
+// Now using calibrated_confidence from semantic confidence service instead
 
 /**
  * Estimate token count
@@ -1284,19 +1303,36 @@ function getQualityDistribution(roles) {
 }
 
 /**
- * Advanced weighted voting system for ensemble responses
+ * Advanced weighted voting system with dynamic reliability weighting and tie-breaking
  */
 function calculateWeightedVote(roles) {
   const successful = roles.filter(r => r.status === 'fulfilled');
-  if (successful.length === 0) return { winner: null, confidence: 0, weights: {} };
+  if (successful.length === 0) return { winner: null, confidence: 0, weights: {}, tieBreaking: false };
+
+  // Import provider reliability service for dynamic weighting
+  const providerReliabilityService = require('../services/providerReliabilityService');
+  const brierCalibrationService = require('../services/brierCalibrationService');
 
   const weights = {};
+  const dynamicWeights = {};
   let totalWeight = 0;
+
+  // First pass: Calculate traditional weights and collect calibrated confidences
+  const providerConfidences = {};
 
   successful.forEach(role => {
     const baseWeight = role.confidence.score;
-    const responseTime = role.metadata?.processingTimeMs || 0;
+    const responseTime = role.responseTime || role.metadata?.responseTime || 0;
     const wordCount = role.content.split(' ').length;
+    const modelName = role.metadata?.model || role.model || '';
+
+    // Get calibrated confidence from Brier calibration service
+    const calibrationResult = brierCalibrationService.getCalibratedProbability(modelName, baseWeight);
+    const calibratedConfidence = calibrationResult.calibrated;
+
+    // Store calibrated confidence for dynamic weight calculation
+    const provider = getProviderFromModel(modelName);
+    providerConfidences[provider] = calibratedConfidence;
 
     // Enhanced time performance scoring with more nuanced approach
     let timeMultiplier = 1.0;
@@ -1309,19 +1345,15 @@ function calculateWeightedVote(roles) {
     }
 
     // Model-specific length optimization with adaptive ranges
-    const modelName = role.metadata?.model || role.model || '';
     let lengthMultiplier = 1.0;
-    let optimalRange = [30, 150]; // Default
 
     if (modelName.includes('gemini')) {
-      optimalRange = [50, 250]; // Gemini optimal range
       if (wordCount >= 50 && wordCount <= 250) lengthMultiplier = 1.12;
       else if (wordCount >= 30 && wordCount < 50) lengthMultiplier = 0.95;
       else if (wordCount > 250 && wordCount <= 350) lengthMultiplier = 1.05;
       else if (wordCount > 350) lengthMultiplier = 0.8;
       else lengthMultiplier = 0.7;
     } else if (modelName.includes('claude')) {
-      optimalRange = [25, 120]; // Claude optimal range
       if (wordCount >= 25 && wordCount <= 120) lengthMultiplier = 1.1;
       else if (wordCount >= 15 && wordCount < 25) lengthMultiplier = 0.9;
       else if (wordCount > 120 && wordCount <= 200) lengthMultiplier = 1.02;
@@ -1335,40 +1367,61 @@ function calculateWeightedVote(roles) {
       else lengthMultiplier = 0.7;
     }
 
-    // Enhanced model reliability with optimized weights for 25+ concurrent users
-    const modelReliability = {
-      'gpt-4o': 1.20, // Premium performance with excellent concurrency handling
-      'gpt-4o-mini': 1.12, // Increased for excellent cost/performance ratio under load
-      'claude-3-5-haiku-latest': 1.15, // Excellent structured responses and speed
-      'gemini-2.0-flash': 1.18, // Outstanding performance with longer, detailed responses
-      'gemini-2.5-flash': 1.22, // Premium Gemini with superior performance
-      'gemini-1.5-flash': 1.14, // Optimized for cost-effectiveness with good response length
-      'grok-beta': 0.98 // Improved rating based on recent performance data
-    };
-    const roleModelName = role.metadata?.model || role.model;
-    const reliabilityMultiplier = modelReliability[roleModelName] || 1.0;
-
-    // Calculate final weight
-    const finalWeight = baseWeight * timeMultiplier * lengthMultiplier * reliabilityMultiplier;
-    weights[role.role] = finalWeight;
-    totalWeight += finalWeight;
+    // Calculate traditional weight (without dynamic reliability)
+    const traditionalWeight = baseWeight * timeMultiplier * lengthMultiplier;
+    weights[role.role] = traditionalWeight;
+    totalWeight += traditionalWeight;
   });
 
-  // Normalize weights
-  Object.keys(weights).forEach(role => {
-    weights[role] = weights[role] / totalWeight;
+  // Second pass: Apply dynamic reliability weighting
+  const allDynamicWeights = providerReliabilityService.getAllDynamicWeights(providerConfidences);
+  let totalDynamicWeight = 0;
+
+  successful.forEach(role => {
+    const modelName = role.metadata?.model || role.model;
+    const provider = getProviderFromModel(modelName);
+    const dynamicReliabilityWeight = allDynamicWeights[provider] || 1.0;
+
+    // Apply dynamic reliability weight to traditional weight
+    const finalWeight = weights[role.role] * dynamicReliabilityWeight;
+    dynamicWeights[role.role] = finalWeight;
+    totalDynamicWeight += finalWeight;
   });
 
-  // Find the highest weighted response
-  const winner = Object.keys(weights).reduce((a, b) => weights[a] > weights[b] ? a : b);
-  const winnerConfidence = weights[winner];
+  // Normalize dynamic weights
+  Object.keys(dynamicWeights).forEach(role => {
+    dynamicWeights[role] = dynamicWeights[role] / totalDynamicWeight;
+  });
+
+  // Sort weights to find top contenders
+  const sortedWeights = Object.entries(dynamicWeights).sort((a, b) => b[1] - a[1]);
+  const topWeight = sortedWeights[0][1];
+  const secondWeight = sortedWeights.length > 1 ? sortedWeights[1][1] : 0;
+
+  // Tie-breaking logic: If |w1 - w2| < 0.05, trigger comparative synthesis
+  const weightDifference = Math.abs(topWeight - secondWeight);
+  const tieBreaking = weightDifference < 0.05 && sortedWeights.length > 1;
+
+  const winner = sortedWeights[0][0];
+  const winnerConfidence = topWeight;
+
+  // Calculate consensus grade based on weight distribution
+  const consensusGrade = calculateConsensusGrade(dynamicWeights, weightDifference);
 
   return {
     winner,
     confidence: winnerConfidence,
-    weights,
-    consensus: calculateConsensusStrength(weights),
-    recommendation: generateVotingRecommendation(weights, successful)
+    weights: dynamicWeights,
+    traditionalWeights: weights,
+    tieBreaking,
+    weightDifference,
+    consensusGrade,
+    consensus: calculateConsensusStrength(dynamicWeights),
+    recommendation: generateVotingRecommendation(dynamicWeights, successful),
+    reliabilityMetrics: {
+      providerWeights: allDynamicWeights,
+      calibratedConfidences: providerConfidences
+    }
   };
 }
 
@@ -1638,6 +1691,180 @@ function generateLoadRecommendations(loadStatus, loadPercentage) {
   }
 
   return recommendations;
+}
+
+/**
+ * Map model name to provider for dynamic weighting
+ */
+function getProviderFromModel(modelName) {
+  if (!modelName) return 'unknown';
+
+  const lowerModel = modelName.toLowerCase();
+
+  if (lowerModel.includes('gpt') || lowerModel.includes('openai')) {
+    return 'openai';
+  } else if (lowerModel.includes('claude')) {
+    return 'claude';
+  } else if (lowerModel.includes('gemini')) {
+    return 'gemini';
+  } else if (lowerModel.includes('grok')) {
+    return 'xai';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Calculate consensus grade based on weight distribution
+ */
+function calculateConsensusGrade(weights, weightDifference) {
+  const weightValues = Object.values(weights);
+  const maxWeight = Math.max(...weightValues);
+  const avgWeight = weightValues.reduce((sum, w) => sum + w, 0) / weightValues.length;
+
+  // Strong consensus: clear winner with significant margin
+  if (maxWeight > 0.6 && weightDifference > 0.15) {
+    return 'strong';
+  }
+
+  // Moderate consensus: reasonable winner with moderate margin
+  if (maxWeight > 0.45 && weightDifference > 0.08) {
+    return 'moderate';
+  }
+
+  // Weak consensus: close competition or no clear winner
+  return 'weak';
+}
+
+// ===== ADVANCED DIAGNOSTICS FUNCTIONS =====
+
+/**
+ * Generate advanced diagnostics including embedding similarity matrix, toxicity, and readability
+ */
+async function generateAdvancedDiagnostics(enhancedRoles, synthesis) {
+  try {
+    const semanticConfidenceService = require('../services/semanticConfidenceService');
+    const brierCalibrationService = require('../services/brierCalibrationService');
+
+    // Extract successful responses
+    const successfulRoles = enhancedRoles.filter(role => role.status === 'fulfilled');
+
+    // Generate embedding similarity matrix
+    const embeddingSimilarityMatrix = await semanticConfidenceService.generateEmbeddingSimilarityMatrix(successfulRoles);
+
+    // Calculate model calibrated probabilities
+    const modelCalibratedProb = {};
+    for (const role of successfulRoles) {
+      const modelName = role.metadata?.model || role.model;
+      if (modelName && role.confidence?.score) {
+        const calibrationResult = brierCalibrationService.getCalibratedProbability(modelName, role.confidence.score);
+        modelCalibratedProb[modelName] = Math.round(calibrationResult.calibrated * 1000) / 1000;
+      }
+    }
+
+    // Calculate toxicity scores
+    const toxicityScores = {};
+    for (const role of successfulRoles) {
+      const modelName = role.metadata?.model || role.model;
+      if (modelName) {
+        toxicityScores[modelName] = semanticConfidenceService.calculateToxicityScore(role.content);
+      }
+    }
+
+    // Calculate synthesis toxicity
+    const synthesisToxicity = synthesis?.content ?
+      semanticConfidenceService.calculateToxicityScore(synthesis.content) : 0;
+
+    // Calculate readability metrics
+    const readabilityMetrics = {};
+    for (const role of successfulRoles) {
+      const modelName = role.metadata?.model || role.model;
+      if (modelName) {
+        readabilityMetrics[modelName] = semanticConfidenceService.calculateReadability(role.content);
+      }
+    }
+
+    // Calculate synthesis readability
+    const synthesisReadability = synthesis?.content ?
+      semanticConfidenceService.calculateReadability(synthesis.content) : { gradeLevel: 0, complexity: 'unknown' };
+
+    return {
+      embeddingSimilarityMatrix,
+      _embeddingSimilarityMatrixDescription: "Cosine similarity matrix between model responses using text-embedding-3-small. Values closer to 1.0 indicate more similar responses, helping identify consensus patterns.",
+
+      modelCalibratedProb,
+      _modelCalibratedProbDescription: "Brier-calibrated confidence probabilities for each model based on historical accuracy. These adjusted scores provide more reliable confidence estimates than raw model outputs.",
+
+      toxicityScore: Math.max(...Object.values(toxicityScores), synthesisToxicity),
+      _toxicityScoreDescription: "Highest toxicity score across all responses (0-1 scale). Scores above 0.1 may indicate potentially harmful content requiring review.",
+
+      toxicityBreakdown: {
+        ...toxicityScores,
+        synthesis: synthesisToxicity
+      },
+      _toxicityBreakdownDescription: "Individual toxicity scores for each model response and the final synthesis, enabling identification of problematic model outputs.",
+
+      readability: synthesisReadability,
+      _readabilityDescription: "Readability analysis of the final synthesis using Flesch-Kincaid grade level and complexity assessment. Helps ensure appropriate content difficulty for target audience.",
+
+      readabilityBreakdown: readabilityMetrics,
+      _readabilityBreakdownDescription: "Individual readability metrics for each model response, showing writing complexity and grade level requirements across different AI models.",
+
+      semanticQuality: {
+        avgReferenceSimilarity: calculateAverageReferenceSimilarity(successfulRoles),
+        avgGrammarScore: calculateAverageGrammarScore(successfulRoles),
+        responseTimeVariance: calculateResponseTimeVariance(successfulRoles)
+      },
+      _semanticQualityDescription: "Advanced semantic quality metrics including reference answer similarity, grammar quality, and response time consistency across the ensemble."
+    };
+
+  } catch (error) {
+    console.error('Advanced diagnostics generation failed:', error.message);
+    return {
+      error: error.message,
+      _errorDescription: "Advanced diagnostics could not be generated due to service unavailability. Basic ensemble functionality remains operational."
+    };
+  }
+}
+
+/**
+ * Calculate average reference similarity across responses
+ */
+function calculateAverageReferenceSimilarity(roles) {
+  const similarities = roles
+    .map(role => role.semanticConfidence?.components?.referenceSimilarity)
+    .filter(sim => sim !== undefined);
+
+  return similarities.length > 0 ?
+    Math.round((similarities.reduce((sum, sim) => sum + sim, 0) / similarities.length) * 1000) / 1000 : 0;
+}
+
+/**
+ * Calculate average grammar score across responses
+ */
+function calculateAverageGrammarScore(roles) {
+  const grammarScores = roles
+    .map(role => role.semanticConfidence?.components?.grammarScore)
+    .filter(score => score !== undefined);
+
+  return grammarScores.length > 0 ?
+    Math.round((grammarScores.reduce((sum, score) => sum + score, 0) / grammarScores.length) * 1000) / 1000 : 0;
+}
+
+/**
+ * Calculate response time variance
+ */
+function calculateResponseTimeVariance(roles) {
+  const responseTimes = roles
+    .map(role => role.responseTime || role.metadata?.processingTime || 0)
+    .filter(time => time > 0);
+
+  if (responseTimes.length < 2) return 0;
+
+  const mean = responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length;
+  const variance = responseTimes.reduce((sum, time) => sum + Math.pow(time - mean, 2), 0) / responseTimes.length;
+
+  return Math.round(variance);
 }
 
 module.exports = router;

@@ -13,21 +13,21 @@ const mockResponses = {
       role: 'gpt4o',
       status: 'fulfilled',
       content: 'Microservices architecture breaks down applications into small, independent services that communicate via APIs. This approach offers better scalability, technology diversity, and fault isolation. However, it introduces complexity in service coordination, data consistency, and network communication. Monolithic architecture, conversely, packages all functionality into a single deployable unit, providing simplicity in development and deployment but limiting scalability and technology choices. The trade-offs involve complexity vs simplicity, scalability vs operational overhead, and development speed vs maintenance flexibility.',
-      metadata: { model: 'gpt-4o', processingTimeMs: 1200 },
+      metadata: { model: 'gpt-4o', responseTime: 1200 },
       responseTime: 1200
     },
     {
       role: 'claude',
       status: 'fulfilled',
       content: 'The fundamental difference between microservices and monolithic architectures lies in their structural approach. Microservices decompose applications into loosely coupled, independently deployable services, each responsible for specific business capabilities. This enables teams to work autonomously, choose appropriate technologies per service, and scale components independently. Monoliths consolidate all functionality within a single codebase and deployment unit. While monoliths offer simplicity in development, testing, and deployment, they can become unwieldy as applications grow. Microservices provide flexibility and scalability but require sophisticated infrastructure, monitoring, and coordination mechanisms.',
-      metadata: { model: 'claude-3-5-haiku-latest', processingTimeMs: 1400 },
+      metadata: { model: 'claude-3-5-haiku-latest', responseTime: 1400 },
       responseTime: 1400
     },
     {
       role: 'gemini',
       status: 'fulfilled',
       content: 'Microservices vs monoliths: key architectural differences. Microservices split apps into small services, each handling specific functions. Benefits include independent scaling, technology flexibility, and team autonomy. Drawbacks: increased complexity, network overhead, data consistency challenges. Monoliths keep everything in one unit - simpler to develop and deploy initially, but harder to scale and maintain as they grow. Choose microservices for complex, large-scale applications with multiple teams. Choose monoliths for simpler applications or when starting small.',
-      metadata: { model: 'gemini-2.0-flash', processingTimeMs: 800 },
+      metadata: { model: 'gemini-2.0-flash', responseTime: 800 },
       responseTime: 800
     }
   ],
@@ -37,21 +37,21 @@ const mockResponses = {
       role: 'gpt4o',
       status: 'fulfilled',
       content: 'The capital of France is Paris.',
-      metadata: { model: 'gpt-4o', processingTimeMs: 300 },
+      metadata: { model: 'gpt-4o', responseTime: 300 },
       responseTime: 300
     },
     {
       role: 'claude',
       status: 'fulfilled',
       content: 'Paris is the capital city of France.',
-      metadata: { model: 'claude-3-5-haiku-latest', processingTimeMs: 250 },
+      metadata: { model: 'claude-3-5-haiku-latest', responseTime: 250 },
       responseTime: 250
     },
     {
       role: 'gemini',
       status: 'fulfilled',
       content: 'Paris.',
-      metadata: { model: 'gemini-2.0-flash', processingTimeMs: 200 },
+      metadata: { model: 'gemini-2.0-flash', responseTime: 200 },
       responseTime: 200
     }
   ],
@@ -61,21 +61,21 @@ const mockResponses = {
       role: 'gpt4o',
       status: 'fulfilled',
       content: 'I need more context to provide a helpful answer. Could you specify what needs to be fixed?',
-      metadata: { model: 'gpt-4o', processingTimeMs: 400 },
+      metadata: { model: 'gpt-4o', responseTime: 400 },
       responseTime: 400
     },
     {
       role: 'claude',
       status: 'fulfilled',
       content: 'To fix something, I would need to know what specifically is broken or not working as expected. Could you provide more details about the issue?',
-      metadata: { model: 'claude-3-5-haiku-latest', processingTimeMs: 500 },
+      metadata: { model: 'claude-3-5-haiku-latest', responseTime: 500 },
       responseTime: 500
     },
     {
       role: 'gemini',
       status: 'fulfilled',
       content: 'What needs fixing?',
-      metadata: { model: 'gemini-2.0-flash', processingTimeMs: 150 },
+      metadata: { model: 'gemini-2.0-flash', responseTime: 150 },
       responseTime: 150
     }
   ],
@@ -85,21 +85,21 @@ const mockResponses = {
       role: 'gpt4o',
       status: 'fulfilled',
       content: 'Machine learning is a subset of artificial intelligence that enables computers to learn and make decisions from data without being explicitly programmed. It involves algorithms that can identify patterns, make predictions, and improve their performance over time through experience. Key types include supervised learning (learning from labeled data), unsupervised learning (finding patterns in unlabeled data), and reinforcement learning (learning through trial and error with rewards). Applications span from recommendation systems and image recognition to autonomous vehicles and medical diagnosis.',
-      metadata: { model: 'gpt-4o', processingTimeMs: 1100 },
+      metadata: { model: 'gpt-4o', responseTime: 1100 },
       responseTime: 1100
     },
     {
       role: 'claude',
       status: 'rejected',
       content: 'Error: Request timeout',
-      metadata: { model: 'claude-3-5-haiku-latest', processingTimeMs: 15000 },
+      metadata: { model: 'claude-3-5-haiku-latest', responseTime: 15000 },
       responseTime: 15000
     },
     {
       role: 'gemini',
       status: 'fulfilled',
       content: 'ML = computers learning from data.',
-      metadata: { model: 'gemini-2.0-flash', processingTimeMs: 180 },
+      metadata: { model: 'gemini-2.0-flash', responseTime: 180 },
       responseTime: 180
     }
   ]
@@ -187,7 +187,7 @@ class MockVotingTest {
 
     successful.forEach(role => {
       const baseWeight = role.confidence?.score || this.mockCalculateConfidenceScore(role);
-      const responseTime = role.metadata?.processingTimeMs || 0;
+      const responseTime = role.responseTime || role.metadata?.responseTime || 0;
       const wordCount = role.content.split(' ').length;
 
       // Time multiplier

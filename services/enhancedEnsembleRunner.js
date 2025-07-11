@@ -33,6 +33,7 @@ const { getMemoryManager } = require('./memoryManager'); // Manages conversation
 const { v4: generateUUID } = require('uuid'); // Creates unique IDs for tracking requests
 const cacheService = require('./cacheService'); // Stores responses for faster retrieval
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager'); // Organizes context for AI
+const providerReliabilityService = require('./providerReliabilityService'); // For dynamic reliability weighting
 /**
  * 🧠 Enhanced Ensemble Runner Class
  *
@@ -706,6 +707,7 @@ class EnhancedEnsembleRunner {
 
     let response;
     let actualResponseTokens = 0;
+    let success = false;
 
     switch (provider) {
       case 'openai':
@@ -720,6 +722,7 @@ class EnhancedEnsembleRunner {
         });
         response = openaiResponse.choices[0].message.content;
         actualResponseTokens = openaiResponse.usage?.completion_tokens || Math.ceil(response.length / 4);
+        success = true;
         break;
 
       case 'xai':
@@ -736,6 +739,7 @@ class EnhancedEnsembleRunner {
                    xaiResponse.choices[0].message.reasoning_content ||
                    'No response generated';
         actualResponseTokens = xaiResponse.usage?.completion_tokens || Math.ceil(response.length / 4);
+        success = true;
         break;
 
       case 'gemini':
@@ -759,6 +763,7 @@ class EnhancedEnsembleRunner {
         );
         response = geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
         actualResponseTokens = geminiResponse.data.usageMetadata?.candidatesTokenCount || Math.ceil(response.length / 4);
+        success = true;
         break;
 
       case 'claude':
@@ -771,6 +776,7 @@ class EnhancedEnsembleRunner {
         });
         response = claudeResponse.data.content[0].text;
         actualResponseTokens = claudeResponse.data.usage?.output_tokens || Math.ceil(response.length / 4);
+        success = true;
         break;
 
       default:
@@ -801,8 +807,22 @@ class EnhancedEnsembleRunner {
     const responseTime = Date.now() - startTime;
     const quality = this.calculateResponseQuality(response, responseTime, 0, false);
 
+    // Record provider event for dynamic reliability weighting
+    try {
+      providerReliabilityService.recordProviderEvent(
+        provider,
+        success,
+        responseTime,
+        model,
+        promptTokens,
+        actualResponseTokens
+      );
+    } catch (error) {
+      console.warn(`Failed to record provider event for ${provider}:`, error.message);
+    }
+
     // Log API call performance for monitoring
-    console.log(`🤖 API Call: ${model} - ${responseTime}ms, Quality: ${quality.toFixed(2)}, Tokens: ${actualResponseTokens}`);
+    console.log(`🤖 API Call: ${model} - ${responseTime}ms, Quality: ${quality.toFixed(2)}, Tokens: ${actualResponseTokens}, Success: ${success}`);
 
     return response;
   }
@@ -1063,7 +1083,6 @@ class EnhancedEnsembleRunner {
           successfulRoles,
           failedRoles: roleOutputs.length - successfulRoles,
           synthesisStatus: synthesisResult.status,
-          processingTimeMs: processingTime,
           sessionId,
           memoryContextUsed,
           responseQuality,
@@ -1112,13 +1131,16 @@ class EnhancedEnsembleRunner {
       // Filter and rank successful responses
       const successfulOutputs = roleOutputs.filter(r => r.status === 'fulfilled');
 
-      // Calculate response quality scores for intelligent synthesis
-      const rankedOutputs = successfulOutputs.map(output => ({
-        ...output,
-        qualityScore: this.calculateResponseQualityScore(output.content),
-        wordCount: output.content.split(' ').length,
-        uniqueness: this.calculateUniqueness(output.content, successfulOutputs)
-      })).sort((a, b) => b.qualityScore - a.qualityScore);
+      // Calculate enhanced metrics for intelligent synthesis (using calibrated_confidence instead of deprecated qualityScore)
+      const rankedOutputs = await Promise.all(
+        successfulOutputs.map(async output => ({
+          ...output,
+          calibrated_confidence: output.semanticConfidence?.calibratedConfidence || output.confidence?.score || 0.5,
+          wordCount: output.content.split(' ').length,
+          uniqueness: await this.calculateUniqueness(output.content, successfulOutputs)
+        }))
+      );
+      rankedOutputs.sort((a, b) => b.calibrated_confidence - a.calibrated_confidence);
 
       console.log(`📊 [${correlationId}] Processing ${successfulOutputs.length} responses with quality ranking`);
 
@@ -1129,11 +1151,35 @@ class EnhancedEnsembleRunner {
         xai: 'Grok Beta'
       };
 
-      // Optimized synthesis strategy based on response quality and count
+      // Enhanced synthesis strategy with tie-breaking detection
       let synthPayload;
       let synthesisStrategy;
 
-      if (rankedOutputs.length >= 3) {
+      // Check if tie-breaking is needed (passed from voting system)
+      const tieBreaking = votingResult?.tieBreaking || false;
+      const weightDifference = votingResult?.weightDifference || 1.0;
+
+      if (tieBreaking && rankedOutputs.length >= 2) {
+        // Force comparative synthesis for tie-breaking regardless of count
+        synthesisStrategy = 'comparative-tiebreaker';
+        const topTwoResponses = rankedOutputs.slice(0, 2);
+
+        synthPayload = `User Question: "${userPrompt}"
+
+🔄 TIE-BREAKING SYNTHESIS REQUIRED 🔄
+Weight difference: ${(weightDifference * 100).toFixed(1)}% (< 5% threshold)
+
+Two closely-matched AI responses requiring careful comparative analysis:
+
+### Response A: ${modelNames[topTwoResponses[0].role] || topTwoResponses[0].role} (Weight: ${(votingResult.weights[topTwoResponses[0].role] * 100).toFixed(1)}%)
+${topTwoResponses[0].content}
+
+### Response B: ${modelNames[topTwoResponses[1].role] || topTwoResponses[1].role} (Weight: ${(votingResult.weights[topTwoResponses[1].role] * 100).toFixed(1)}%)
+${topTwoResponses[1].content}
+
+CRITICAL: These responses have nearly equal reliability weights. Perform detailed comparative analysis to identify the most accurate, complete, and helpful elements from each. Synthesize a superior response that leverages the best aspects of both while resolving any contradictions or gaps.`;
+
+      } else if (rankedOutputs.length >= 3) {
         // Multi-response synthesis with quality weighting
         synthesisStrategy = 'comprehensive';
         const topResponses = rankedOutputs.slice(0, 3); // Use top 3 responses
@@ -1143,7 +1189,7 @@ class EnhancedEnsembleRunner {
 High-quality AI responses to synthesize (ranked by quality):
 
 ${topResponses
-  .map((output, index) => `### Response ${index + 1}: ${modelNames[output.role] || output.role} (Quality: ${output.qualityScore.toFixed(2)})
+  .map((output, index) => `### Response ${index + 1}: ${modelNames[output.role] || output.role} (Confidence: ${output.calibrated_confidence.toFixed(2)})
 ${output.content}`)
   .join('\n\n')}
 
@@ -1169,7 +1215,7 @@ Synthesize these responses by combining their strengths and resolving any differ
         synthesisStrategy = 'enhancement';
         const response = rankedOutputs[0];
 
-        if (response.qualityScore > 0.7) {
+        if (response.calibrated_confidence > 0.7) {
           // High quality - minimal processing
           synthPayload = `User Question: "${userPrompt}"
 
@@ -1194,9 +1240,13 @@ Please significantly improve this response by enhancing clarity, accuracy, and c
 No AI responses were available. Please provide a helpful, informative response to this question based on your knowledge, and include a note that our AI ensemble is temporarily experiencing issues.`;
       }
 
-      // Optimize token usage based on synthesis strategy
-      const maxTokens = this.calculateOptimalTokens(synthesisStrategy, rankedOutputs.length);
-      const temperature = this.calculateOptimalTemperature(synthesisStrategy, synthesizerConfig.isFineTuned);
+      // Optimize token usage and temperature based on synthesis strategy using new formulas
+      const maxTokens = this.calculateOptimalTokens(synthesisStrategy, rankedOutputs.length, votingResult);
+      const temperature = this.calculateOptimalTemperature(synthesisStrategy, synthesizerConfig.isFineTuned, {
+        ...votingResult,
+        responseCount: rankedOutputs.length,
+        fallbackUsed: rankedOutputs.some(r => r.isFallback)
+      });
 
       // Enhanced synthesis with optimized parameters
       const synthResponse = await Promise.race([
@@ -1287,112 +1337,103 @@ No AI responses were available. Please provide a helpful, informative response t
       ((this.metrics.averageProcessingTime * (totalSuccessful - 1)) + processingTime) / totalSuccessful;
   }
 
-  /**
-   * Calculate response quality score for synthesis optimization
-   */
-  calculateResponseQualityScore(content) {
-    if (!content || typeof content !== 'string') return 0;
-
-    let score = 0.3; // Base score
-    const wordCount = content.split(' ').length;
-    const sentenceCount = content.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
-    const paragraphCount = content.split('\n\n').filter(p => p.trim().length > 0).length;
-
-    // Length optimization (0-0.25 points)
-    if (wordCount >= 50 && wordCount <= 300) score += 0.25;
-    else if (wordCount >= 30 && wordCount < 50) score += 0.15;
-    else if (wordCount > 300 && wordCount <= 500) score += 0.20;
-    else if (wordCount > 500) score += 0.05;
-
-    // Structure quality (0-0.2 points)
-    if (sentenceCount >= 3) score += 0.1;
-    if (paragraphCount >= 2) score += 0.05;
-    if (/^[A-Z]/.test(content)) score += 0.02; // Proper capitalization
-    if (/[.!?]$/.test(content.trim())) score += 0.03; // Proper ending
-
-    // Content sophistication (0-0.25 points)
-    const sophisticationWords = ['because', 'therefore', 'however', 'furthermore', 'consequently', 'specifically', 'particularly', 'essentially', 'ultimately'];
-    const foundSophistication = sophisticationWords.filter(word => content.toLowerCase().includes(word)).length;
-    score += Math.min(foundSophistication * 0.03, 0.15);
-
-    // Technical depth (0-0.1 points)
-    const technicalWords = ['analysis', 'approach', 'method', 'process', 'system', 'implementation', 'solution'];
-    const foundTechnical = technicalWords.filter(word => content.toLowerCase().includes(word)).length;
-    score += Math.min(foundTechnical * 0.02, 0.1);
-
-    // Clarity indicators (0-0.1 points)
-    if (content.includes(':') || content.includes('•') || content.includes('-')) score += 0.05; // Lists/structure
-    if (/\d+/.test(content)) score += 0.03; // Contains numbers/data
-    if (content.includes('example') || content.includes('instance')) score += 0.02; // Examples
-
-    return Math.max(0, Math.min(1, score));
-  }
+  // Note: calculateResponseQualityScore function removed as deprecated
+  // Now using calibrated_confidence from semantic confidence service instead
 
   /**
-   * Calculate uniqueness of response compared to others
+   * Calculate uniqueness of response compared to others using embedding-based similarity
    */
-  calculateUniqueness(content, allOutputs) {
+  async calculateUniqueness(content, allOutputs) {
     if (allOutputs.length <= 1) return 1.0;
 
-    const words = new Set(content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
-    let totalOverlap = 0;
-    let comparisons = 0;
+    try {
+      // Use semantic confidence service for embedding-based uniqueness
+      const semanticConfidenceService = require('./semanticConfidenceService');
+      return await semanticConfidenceService.calculateEmbeddingUniqueness(content, allOutputs);
+    } catch (error) {
+      console.warn('Embedding-based uniqueness calculation failed, falling back to Jaccard:', error.message);
 
-    allOutputs.forEach(other => {
-      if (other.content !== content) {
-        const otherWords = new Set(other.content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
-        const intersection = new Set([...words].filter(x => otherWords.has(x)));
-        const union = new Set([...words, ...otherWords]);
+      // Fallback to original Jaccard similarity method
+      const words = new Set(content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+      let totalOverlap = 0;
+      let comparisons = 0;
 
-        if (union.size > 0) {
-          totalOverlap += intersection.size / union.size;
-          comparisons++;
+      allOutputs.forEach(other => {
+        if (other.content !== content) {
+          const otherWords = new Set(other.content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+          const intersection = new Set([...words].filter(x => otherWords.has(x)));
+          const union = new Set([...words, ...otherWords]);
+
+          if (union.size > 0) {
+            totalOverlap += intersection.size / union.size;
+            comparisons++;
+          }
         }
-      }
-    });
+      });
 
-    const averageOverlap = comparisons > 0 ? totalOverlap / comparisons : 0;
-    return Math.max(0, 1 - averageOverlap); // Higher uniqueness = lower overlap
-  }
-
-  /**
-   * Calculate optimal token count based on synthesis strategy
-   */
-  calculateOptimalTokens(strategy, responseCount) {
-    const baseTokens = this.config.synthesisMaxTokens || 400;
-
-    switch (strategy) {
-      case 'comprehensive':
-        return Math.min(600, baseTokens * 1.5); // More tokens for complex synthesis
-      case 'comparative':
-        return Math.min(500, baseTokens * 1.25); // Moderate increase for comparison
-      case 'enhancement':
-        return Math.min(450, baseTokens * 1.1); // Slight increase for enhancement
-      case 'fallback':
-        return Math.min(300, baseTokens * 0.75); // Fewer tokens for fallback
-      default:
-        return baseTokens;
+      const averageOverlap = comparisons > 0 ? totalOverlap / comparisons : 0;
+      return Math.max(0, 1 - averageOverlap); // Higher uniqueness = lower overlap
     }
   }
 
   /**
-   * Calculate optimal temperature based on synthesis strategy
+   * Calculate optimal token count based on synthesis strategy using new allocation formula
+   * Formula: alloc = min(700, 200 + 200 × successful_roles + 50 × comparative_pairs)
    */
-  calculateOptimalTemperature(strategy, isFineTuned) {
-    const baseTemp = isFineTuned ? 0.4 : 0.6;
+  calculateOptimalTokens(strategy, responseCount, votingResult = {}) {
+    const successful_roles = responseCount || 0;
+    const comparative_pairs = this.getComparativePairs(strategy, successful_roles);
 
+    // Apply the new token allocation formula
+    const calculatedAlloc = Math.min(700, 200 + 200 * successful_roles + 50 * comparative_pairs);
+
+    // Cap to user tier max (from config)
+    const tierMaxTokens = this.config.synthesisMaxTokens || 500;
+    const finalAllocation = Math.min(calculatedAlloc, tierMaxTokens);
+
+    console.log(`🎯 Token allocation: ${finalAllocation} (formula: ${calculatedAlloc}, tier cap: ${tierMaxTokens}, roles: ${successful_roles}, pairs: ${comparative_pairs})`);
+
+    return finalAllocation;
+  }
+
+  /**
+   * Calculate comparative pairs based on synthesis strategy
+   */
+  getComparativePairs(strategy, responseCount) {
     switch (strategy) {
-      case 'comprehensive':
-        return baseTemp + 0.1; // Slightly more creative for complex synthesis
       case 'comparative':
-        return baseTemp; // Standard temperature for comparison
-      case 'enhancement':
-        return baseTemp - 0.1; // More focused for enhancement
-      case 'fallback':
-        return baseTemp + 0.2; // More creative for fallback responses
+      case 'comparative-tiebreaker':
+        return Math.floor(responseCount / 2); // Pairs for comparison
+      case 'comprehensive':
+        return Math.max(1, responseCount - 1); // All responses compared to primary
       default:
-        return baseTemp;
+        return 0; // No comparative analysis
     }
+  }
+
+  /**
+   * Calculate optimal temperature using new temperature curve formula
+   * Formula: temp = base_temp + 0.15 × (comparative_pairs > 0) − 0.1 × (fallback_mode)
+   */
+  calculateOptimalTemperature(strategy, isFineTuned, votingResult = {}) {
+    const base_temp = isFineTuned ? 0.4 : 0.6;
+
+    // Determine if we have comparative pairs
+    const comparative_pairs = this.getComparativePairs(strategy, votingResult.responseCount || 0);
+    const has_comparative_pairs = comparative_pairs > 0 ? 1 : 0;
+
+    // Determine if we're in fallback mode
+    const fallback_mode = (strategy === 'fallback' || votingResult.fallbackUsed) ? 1 : 0;
+
+    // Apply the new temperature curve formula
+    const calculatedTemp = base_temp + 0.15 * has_comparative_pairs - 0.1 * fallback_mode;
+
+    // Ensure temperature stays within reasonable bounds [0.1, 1.0]
+    const finalTemp = Math.min(1.0, Math.max(0.1, calculatedTemp));
+
+    console.log(`🌡️ Temperature: ${finalTemp.toFixed(3)} (base: ${base_temp}, comparative: ${has_comparative_pairs}, fallback: ${fallback_mode})`);
+
+    return finalTemp;
   }
 
   /**
@@ -1403,6 +1444,8 @@ No AI responses were available. Please provide a helpful, informative response t
       comprehensive: `${basePrompt}\n\nFocus on creating a comprehensive synthesis that combines the best insights from multiple high-quality responses. Prioritize accuracy, completeness, and logical flow.`,
 
       comparative: `${basePrompt}\n\nYou are synthesizing two responses. Compare their strengths, resolve differences intelligently, and create a balanced, well-reasoned answer.`,
+
+      'comparative-tiebreaker': `${basePrompt}\n\nCRITICAL TIE-BREAKING SYNTHESIS: You are analyzing two responses with nearly identical reliability weights (< 5% difference). Perform meticulous comparative analysis to identify the most accurate, complete, and helpful elements. Your synthesis must leverage the superior aspects of both responses while resolving contradictions. This is a high-stakes decision requiring exceptional analytical precision.`,
 
       enhancement: `${basePrompt}\n\nYou are enhancing a single response. Improve clarity, add relevant details, and ensure the response fully addresses the user's question while maintaining the original insights.`,
 
@@ -1427,7 +1470,6 @@ No AI responses were available. Please provide a helpful, informative response t
         successfulRoles: 0,
         failedRoles: 3,
         synthesisStatus: 'failed',
-        processingTimeMs: processingTime,
         sessionId,
         memoryContextUsed: false,
         responseQuality: 0,
