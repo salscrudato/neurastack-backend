@@ -24,6 +24,7 @@
 
 const crypto = require('crypto');
 const zlib = require('zlib');
+const redisCacheService = require('./redisCacheService');
 
 class CacheService {
   constructor() {
@@ -318,19 +319,51 @@ class CacheService {
   }
 
   /**
-   * Get cache statistics
+   * Get comprehensive cache statistics including Redis
    */
-  getStats() {
+  async getStats() {
     const hitRate = this.cacheStats.hits + this.cacheStats.misses > 0
       ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses) * 100).toFixed(2)
       : 0;
 
+    // Get Redis stats
+    let redisStats = null;
+    try {
+      redisStats = redisCacheService.getStats();
+    } catch (error) {
+      console.warn('⚠️ Failed to get Redis stats:', error.message);
+    }
+
     return {
-      ...this.cacheStats,
-      hitRate: `${hitRate}%`,
-      memoryKeys: this.memoryCache.size,
-      type: 'memory-only'
+      local: {
+        ...this.cacheStats,
+        hitRate: `${hitRate}%`,
+        memoryKeys: this.memoryCache.size,
+        type: 'memory-only'
+      },
+      redis: redisStats,
+      combined: {
+        totalHits: this.cacheStats.hits + (redisStats?.redis?.hits || 0),
+        totalMisses: this.cacheStats.misses + (redisStats?.redis?.misses || 0),
+        distributedCaching: !!redisStats?.redis?.available,
+        overallHitRate: this.calculateOverallHitRate(redisStats)
+      }
     };
+  }
+
+  /**
+   * Calculate overall hit rate across local and Redis caches
+   */
+  calculateOverallHitRate(redisStats) {
+    const localHits = this.cacheStats.hits;
+    const localMisses = this.cacheStats.misses;
+    const redisHits = redisStats?.redis?.hits || 0;
+    const redisMisses = redisStats?.redis?.misses || 0;
+
+    const totalHits = localHits + redisHits;
+    const totalRequests = totalHits + localMisses + redisMisses;
+
+    return totalRequests > 0 ? `${((totalHits / totalRequests) * 100).toFixed(2)}%` : '0%';
   }
 
   /**
@@ -547,20 +580,48 @@ class CacheService {
   }
 
   /**
-   * Cache ensemble response
+   * Cache ensemble response with Redis integration
    */
   async cacheEnsembleResponse(prompt, userId, tier, response) {
+    try {
+      // Store in Redis for distributed caching
+      await redisCacheService.cacheEnsembleResponse(prompt, userId, tier, response, this.defaultTTL.ensemble);
+      console.log(`💾 Cached in Redis: ensemble:${prompt.substring(0, 20)}...`);
+    } catch (error) {
+      console.warn('⚠️ Redis cache storage failed:', error.message);
+    }
+
+    // Also store in local cache as fallback
     const cacheKey = this.generateKey('ensemble', { prompt, userId, tier });
     await this.set(cacheKey, response, this.defaultTTL.ensemble);
     return cacheKey;
   }
 
   /**
-   * Get cached ensemble response
+   * Get cached ensemble response with Redis integration
    */
   async getCachedEnsembleResponse(prompt, userId, tier) {
-    const cacheKey = this.generateKey('ensemble', { prompt, userId, tier });
-    return await this.get(cacheKey);
+    try {
+      // Try Redis cache first for distributed caching
+      const redisResult = await redisCacheService.getCachedEnsembleResponse(prompt, userId, tier);
+      if (redisResult) {
+        console.log(`🎯 Cache HIT (Redis): ensemble:${prompt.substring(0, 20)}...`);
+        return redisResult;
+      }
+
+      // Fallback to local cache
+      const cacheKey = this.generateKey('ensemble', { prompt, userId, tier });
+      const localResult = await this.get(cacheKey);
+      if (localResult) {
+        console.log(`🎯 Cache HIT (Local): ensemble:${prompt.substring(0, 20)}...`);
+      }
+      return localResult;
+    } catch (error) {
+      console.warn('⚠️ Cache retrieval error:', error.message);
+      // Fallback to local cache only
+      const cacheKey = this.generateKey('ensemble', { prompt, userId, tier });
+      return await this.get(cacheKey);
+    }
   }
 
   /**

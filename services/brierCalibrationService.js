@@ -139,6 +139,289 @@ class BrierCalibrationService {
   }
 
   /**
+   * Get comprehensive historical accuracy metrics for a model
+   */
+  getHistoricalAccuracyMetrics(modelName) {
+    const brierHistory = this.brierScores.get(modelName);
+    const calibrationData = this.calibrationData.get(modelName);
+
+    if (!brierHistory || !calibrationData || brierHistory.length < 5) {
+      return {
+        modelName,
+        hasData: false,
+        accuracy: 0.5,
+        reliability: 0.5,
+        calibration: 0.5,
+        trend: 'stable',
+        confidence: 'low'
+      };
+    }
+
+    // Calculate accuracy metrics
+    const recentBrier = brierHistory.slice(-20);
+    const historicalBrier = brierHistory.slice(-100, -20);
+
+    const recentAvg = recentBrier.reduce((sum, entry) => sum + entry.score, 0) / recentBrier.length;
+    const historicalAvg = historicalBrier.length > 0 ?
+      historicalBrier.reduce((sum, entry) => sum + entry.score, 0) / historicalBrier.length : recentAvg;
+
+    // Calculate trend
+    const trend = this.calculatePerformanceTrend(brierHistory);
+
+    // Calculate calibration quality
+    const calibrationQuality = this.calculateCalibrationQuality(modelName);
+
+    // Calculate confidence intervals
+    const confidenceMetrics = this.calculateConfidenceMetrics(brierHistory);
+
+    // Calculate long-term stability
+    const stabilityMetrics = this.calculateStabilityMetrics(brierHistory);
+
+    return {
+      modelName,
+      hasData: true,
+
+      // Core accuracy metrics
+      accuracy: Math.max(0, 1 - recentAvg), // Convert Brier to accuracy
+      reliability: Math.max(0, 1 - recentAvg),
+      calibration: calibrationQuality,
+
+      // Trend analysis
+      trend: trend.direction,
+      trendStrength: trend.strength,
+      trendConfidence: trend.confidence,
+
+      // Performance comparison
+      recentPerformance: recentAvg,
+      historicalPerformance: historicalAvg,
+      performanceImprovement: historicalAvg - recentAvg, // Positive = improvement
+
+      // Confidence and stability
+      confidence: confidenceMetrics.level,
+      confidenceInterval: confidenceMetrics.interval,
+      stability: stabilityMetrics.score,
+      volatility: stabilityMetrics.volatility,
+
+      // Data quality
+      dataPoints: brierHistory.length,
+      recentDataPoints: recentBrier.length,
+      dataQuality: this.assessDataQuality(brierHistory),
+
+      // Voting weight recommendation
+      votingWeight: this.calculateHistoricalVotingWeight(recentAvg, trend, stabilityMetrics),
+
+      // Timestamps
+      lastUpdated: new Date().toISOString(),
+      dataRange: {
+        oldest: brierHistory[0]?.timestamp,
+        newest: brierHistory[brierHistory.length - 1]?.timestamp
+      }
+    };
+  }
+
+  /**
+   * Calculate performance trend over time
+   */
+  calculatePerformanceTrend(brierHistory) {
+    if (brierHistory.length < 10) {
+      return { direction: 'stable', strength: 0, confidence: 'low' };
+    }
+
+    // Split into segments for trend analysis
+    const segmentSize = Math.max(5, Math.floor(brierHistory.length / 4));
+    const segments = [];
+
+    for (let i = 0; i < brierHistory.length; i += segmentSize) {
+      const segment = brierHistory.slice(i, i + segmentSize);
+      const avgScore = segment.reduce((sum, entry) => sum + entry.score, 0) / segment.length;
+      segments.push(avgScore);
+    }
+
+    if (segments.length < 2) {
+      return { direction: 'stable', strength: 0, confidence: 'low' };
+    }
+
+    // Calculate linear trend
+    const n = segments.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = segments;
+
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Calculate R-squared for trend confidence
+    const yMean = sumY / n;
+    const ssTotal = y.reduce((sum, yi) => sum + Math.pow(yi - yMean, 2), 0);
+    const ssRes = y.reduce((sum, yi, i) => {
+      const predicted = slope * x[i] + intercept;
+      return sum + Math.pow(yi - predicted, 2);
+    }, 0);
+    const rSquared = 1 - (ssRes / ssTotal);
+
+    // Interpret trend (remember: lower Brier score = better performance)
+    let direction = 'stable';
+    let strength = Math.abs(slope);
+
+    if (slope < -0.01) {
+      direction = 'improving'; // Brier score decreasing = performance improving
+    } else if (slope > 0.01) {
+      direction = 'declining'; // Brier score increasing = performance declining
+    }
+
+    let confidence = 'low';
+    if (rSquared > 0.7) confidence = 'high';
+    else if (rSquared > 0.4) confidence = 'medium';
+
+    return {
+      direction,
+      strength: Math.min(1, strength * 10), // Normalize strength
+      confidence,
+      rSquared,
+      slope
+    };
+  }
+
+  /**
+   * Calculate calibration quality for a model
+   */
+  calculateCalibrationQuality(modelName) {
+    const calibrationData = this.calibrationData.get(modelName);
+    if (!calibrationData || calibrationData.length < 10) {
+      return 0.5; // Default calibration
+    }
+
+    // Calculate calibration using reliability diagram approach
+    const bins = 10;
+    const binSize = 1.0 / bins;
+    const binData = Array.from({ length: bins }, () => ({ predicted: [], actual: [] }));
+
+    // Assign predictions to bins
+    calibrationData.forEach(point => {
+      const binIndex = Math.min(bins - 1, Math.floor(point.predicted / binSize));
+      binData[binIndex].predicted.push(point.predicted);
+      binData[binIndex].actual.push(point.actual);
+    });
+
+    // Calculate calibration error
+    let totalCalibrationError = 0;
+    let totalWeight = 0;
+
+    binData.forEach((bin, i) => {
+      if (bin.predicted.length > 0) {
+        const avgPredicted = bin.predicted.reduce((a, b) => a + b, 0) / bin.predicted.length;
+        const avgActual = bin.actual.reduce((a, b) => a + b, 0) / bin.actual.length;
+        const weight = bin.predicted.length / calibrationData.length;
+
+        totalCalibrationError += weight * Math.abs(avgPredicted - avgActual);
+        totalWeight += weight;
+      }
+    });
+
+    const calibrationError = totalWeight > 0 ? totalCalibrationError / totalWeight : 0.5;
+    return Math.max(0, 1 - calibrationError); // Convert error to quality score
+  }
+
+  /**
+   * Calculate confidence metrics for predictions
+   */
+  calculateConfidenceMetrics(brierHistory) {
+    if (brierHistory.length < 10) {
+      return { level: 'low', interval: [0, 1] };
+    }
+
+    const recentScores = brierHistory.slice(-20).map(entry => entry.score);
+    const mean = recentScores.reduce((a, b) => a + b, 0) / recentScores.length;
+    const variance = recentScores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / recentScores.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Calculate 95% confidence interval
+    const marginOfError = 1.96 * (stdDev / Math.sqrt(recentScores.length));
+    const interval = [
+      Math.max(0, mean - marginOfError),
+      Math.min(1, mean + marginOfError)
+    ];
+
+    // Determine confidence level based on interval width
+    const intervalWidth = interval[1] - interval[0];
+    let level = 'low';
+    if (intervalWidth < 0.1) level = 'high';
+    else if (intervalWidth < 0.2) level = 'medium';
+
+    return { level, interval, standardDeviation: stdDev };
+  }
+
+  /**
+   * Calculate stability metrics for model performance
+   */
+  calculateStabilityMetrics(brierHistory) {
+    if (brierHistory.length < 10) {
+      return { score: 0.5, volatility: 0.5 };
+    }
+
+    const scores = brierHistory.map(entry => entry.score);
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Calculate coefficient of variation (relative volatility)
+    const coefficientOfVariation = mean > 0 ? stdDev / mean : 1;
+
+    // Stability score (higher = more stable)
+    const stabilityScore = Math.max(0, 1 - coefficientOfVariation);
+
+    // Volatility score (higher = more volatile)
+    const volatilityScore = Math.min(1, coefficientOfVariation);
+
+    return {
+      score: stabilityScore,
+      volatility: volatilityScore,
+      standardDeviation: stdDev,
+      coefficientOfVariation
+    };
+  }
+
+  /**
+   * Assess data quality for historical analysis
+   */
+  assessDataQuality(brierHistory) {
+    if (brierHistory.length < 5) return 'insufficient';
+    if (brierHistory.length < 20) return 'limited';
+    if (brierHistory.length < 50) return 'adequate';
+    if (brierHistory.length < 100) return 'good';
+    return 'excellent';
+  }
+
+  /**
+   * Calculate historical voting weight based on performance metrics
+   */
+  calculateHistoricalVotingWeight(recentAvg, trend, stabilityMetrics) {
+    // Base weight from recent performance (lower Brier = higher weight)
+    const performanceWeight = Math.max(0.1, 1 - recentAvg);
+
+    // Trend adjustment
+    let trendMultiplier = 1.0;
+    if (trend.direction === 'improving' && trend.confidence !== 'low') {
+      trendMultiplier = 1.1 + (trend.strength * 0.1);
+    } else if (trend.direction === 'declining' && trend.confidence !== 'low') {
+      trendMultiplier = 0.9 - (trend.strength * 0.1);
+    }
+
+    // Stability adjustment
+    const stabilityMultiplier = 0.9 + (stabilityMetrics.score * 0.2);
+
+    // Combine factors
+    const finalWeight = performanceWeight * trendMultiplier * stabilityMultiplier;
+
+    // Clamp to reasonable range
+    return Math.max(0.1, Math.min(2.0, finalWeight));
+  }
+
+  /**
    * Update calibration map for a specific model
    */
   updateCalibrationMap(modelName) {
@@ -362,4 +645,4 @@ class BrierCalibrationService {
   }
 }
 
-module.exports = new BrierCalibrationService();
+module.exports = BrierCalibrationService;

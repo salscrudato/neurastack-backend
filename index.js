@@ -425,17 +425,30 @@ if (require.main === module) {
       );
     }
 
+    // Initialize intelligent forgetting mechanism
+    try {
+      const { getMemoryManager } = require('./services/memoryManager');
+      const memoryManager = getMemoryManager();
+
+      // Schedule intelligent forgetting every 24 hours
+      memoryManager.scheduleIntelligentForgetting(24);
+      logger.success('Intelligent forgetting mechanism initialized', { interval: '24 hours' });
+    } catch (error) {
+      logger.warn('Failed to initialize intelligent forgetting', { error: error.message });
+    }
+
     // Log system capabilities
     logger.info(
       'System capabilities initialized',
       {
         'AI Ensemble': 'Multi-vendor processing (OpenAI, Gemini, Claude)',
-        'Memory System': 'Intelligent context management',
+        'Memory System': 'Intelligent context management with semantic search',
         'Workout API': 'Professional-grade fitness generation',
         'Monitoring': 'Enhanced health monitoring and metrics',
-        'Caching': 'Response optimization',
+        'Caching': 'Redis-enhanced distributed caching',
         'Security': 'Rate limiting and validation',
-        'Load Capacity': '25+ concurrent users'
+        'Load Capacity': '25+ concurrent users',
+        'Forgetting': 'Intelligent memory pruning and archival'
       },
       'system'
     );

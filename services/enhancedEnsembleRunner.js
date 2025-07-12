@@ -33,6 +33,8 @@ const { getMemoryManager } = require('./memoryManager'); // Manages conversation
 const { v4: generateUUID } = require('uuid'); // Creates unique IDs for tracking requests
 const cacheService = require('./cacheService'); // Stores responses for faster retrieval
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager'); // Organizes context for AI
+const enhancedSynthesisService = require('./enhancedSynthesisService'); // Advanced synthesis with conflict resolution
+const monitoringService = require('./monitoringService'); // Enhanced monitoring with synthesis quality tracking
 const providerReliabilityService = require('./providerReliabilityService'); // For dynamic reliability weighting
 /**
  * 🧠 Enhanced Ensemble Runner Class
@@ -1040,7 +1042,25 @@ class EnhancedEnsembleRunner {
         }));
       });
 
-      const roleOutputs = await Promise.all(rolePromises);
+      // Use Promise.allSettled for better parallel processing and error resilience
+      const roleSettledResults = await Promise.allSettled(rolePromises);
+      const roleOutputs = roleSettledResults.map(result =>
+        result.status === 'fulfilled' ? result.value : {
+          role: 'unknown',
+          content: `**Error**: ${result.reason?.message || 'Unknown error'}`,
+          status: 'rejected',
+          model: 'unknown',
+          provider: 'unknown',
+          wordCount: 0,
+          responseTime: 0,
+          confidence: 0,
+          error: result.reason?.message || 'Unknown error',
+          metadata: {
+            confidenceLevel: 'error',
+            modelReliability: 0
+          }
+        }
+      );
       
       // Log results with fallback indicators
       roleOutputs.forEach(output => {
@@ -1052,20 +1072,37 @@ class EnhancedEnsembleRunner {
         console.log(`${status} [${correlationId}] ${output.role} (${providerInfo})${fallbackIndicator}: ${output.content.substring(0, 50)}...`);
       });
 
-      // Step 4: Synthesize response with fallback handling
-      const synthesisResult = await this.synthesizeResponse(roleOutputs, userPrompt, correlationId);
-
-      // Step 5: Calculate metrics
-      const processingTime = Date.now() - startTime;
-      const successfulRoles = roleOutputs.filter(r => r.status === 'fulfilled').length;
-      const responseQuality = this.calculateResponseQuality(
-        synthesisResult.content, 
-        processingTime, 
-        roleOutputs.length - successfulRoles, 
-        true
+      // Step 4: Enhanced synthesis with conflict resolution and validation
+      const synthesisResult = await enhancedSynthesisService.synthesizeWithEnhancements(
+        roleOutputs,
+        userPrompt,
+        correlationId,
+        {}, // Empty voting result - voting happens after ensemble in health route
+        userId,
+        sessionId
       );
 
-      // Step 6: Store memories asynchronously
+      // Step 5: Calculate metrics using enhanced synthesis validation
+      const processingTime = Date.now() - startTime;
+      const successfulRoles = roleOutputs.filter(r => r.status === 'fulfilled').length;
+
+      // Use enhanced synthesis validation quality score if available, otherwise fallback to legacy calculation
+      const responseQuality = synthesisResult.validation?.overallQuality ||
+        this.calculateResponseQuality(
+          synthesisResult.content,
+          processingTime,
+          roleOutputs.length - successfulRoles,
+          true
+        );
+
+      // Step 6: Track synthesis quality metrics
+      monitoringService.trackSynthesisQuality(
+        synthesisResult,
+        synthesisResult.validation,
+        synthesisResult.processingTime || 0
+      );
+
+      // Step 7: Store memories asynchronously
       this.storeMemoriesAsync(userId, sessionId, userPrompt, synthesisResult.content, responseQuality, correlationId);
 
       // Update success metrics
@@ -1074,7 +1111,10 @@ class EnhancedEnsembleRunner {
 
       console.log(`🎉 [${correlationId}] Ensemble completed in ${processingTime}ms`);
 
-      // Prepare final response
+      // Build decision trace for explainability
+      const decisionTrace = this.buildDecisionTrace(roleOutputs, synthesisResult, contextResult, correlationId);
+
+      // Prepare final response with enhanced synthesis metadata
       const finalResponse = {
         synthesis: synthesisResult,
         roles: roleOutputs,
@@ -1093,6 +1133,16 @@ class EnhancedEnsembleRunner {
             efficiency: contextResult.optimization?.efficiency || 0,
             sectionsIncluded: contextResult.optimization?.sectionsIncluded || 0,
             hierarchicalContext: !!contextResult.structure
+          },
+          decisionTrace,
+          // Enhanced synthesis metadata
+          enhancedSynthesis: {
+            conflictResolution: synthesisResult.conflictResolution || false,
+            contextIntegration: synthesisResult.contextIntegration || false,
+            validationPassed: synthesisResult.validation?.passesThreshold || false,
+            qualityLevel: synthesisResult.validation?.qualityLevel || 'unknown',
+            regenerated: synthesisResult.regenerated || false,
+            processingTime: synthesisResult.processingTime || 0
           }
         }
       };
@@ -1104,6 +1154,22 @@ class EnhancedEnsembleRunner {
           console.log(`💾 [${correlationId}] Response cached successfully`);
         } catch (cacheError) {
           console.warn(`⚠️ [${correlationId}] Failed to cache response:`, cacheError.message);
+        }
+      }
+
+      // Store ensemble result in hierarchical memory for future context
+      if (synthesisResult.status === 'success' && responseQuality > 0.5) {
+        try {
+          await getHierarchicalContextManager().storeEnsembleResult(
+            userId,
+            sessionId,
+            userPrompt,
+            synthesisResult,
+            roleOutputs
+          );
+          console.log(`🧠 [${correlationId}] Ensemble result stored in hierarchical memory`);
+        } catch (memoryError) {
+          console.warn(`⚠️ [${correlationId}] Failed to store in hierarchical memory:`, memoryError.message);
         }
       }
 
@@ -1119,7 +1185,7 @@ class EnhancedEnsembleRunner {
     }
   }
 
-  async synthesizeResponse(roleOutputs, userPrompt, correlationId) {
+  async synthesizeResponse(roleOutputs, userPrompt, correlationId, votingResult = {}) {
     const startTime = Date.now();
 
     try {
@@ -1453,6 +1519,163 @@ No AI responses were available. Please provide a helpful, informative response t
     };
 
     return strategyPrompts[strategy] || basePrompt;
+  }
+
+  /**
+   * Build comprehensive decision trace for explainability
+   */
+  buildDecisionTrace(roleOutputs, synthesisResult, contextResult, correlationId) {
+    const trace = {
+      timestamp: new Date().toISOString(),
+      correlationId,
+      steps: []
+    };
+
+    // Step 1: Context Building
+    trace.steps.push({
+      step: 'context_building',
+      description: 'Retrieved and optimized conversation context',
+      details: {
+        contextTokens: contextResult.totalTokens || 0,
+        contextSections: contextResult.optimization?.sectionsIncluded || 0,
+        hierarchicalContext: !!contextResult.structure,
+        efficiency: contextResult.optimization?.efficiency || 0
+      },
+      outcome: contextResult.context ? 'success' : 'no_context'
+    });
+
+    // Step 2: Model Selection and Execution
+    trace.steps.push({
+      step: 'model_execution',
+      description: 'Executed parallel queries to AI models',
+      details: {
+        modelsAttempted: ['gpt4o', 'gemini', 'claude'],
+        modelsSuccessful: roleOutputs.filter(r => r.status === 'fulfilled').map(r => r.role),
+        modelsFailed: roleOutputs.filter(r => r.status === 'rejected').map(r => r.role),
+        averageResponseTime: Math.round(roleOutputs.reduce((sum, r) => sum + (r.responseTime || 0), 0) / roleOutputs.length),
+        rawResponseSnippets: roleOutputs.map(r => ({
+          role: r.role,
+          snippet: r.content ? r.content.substring(0, 100) + '...' : 'Error',
+          wordCount: r.wordCount || 0,
+          confidence: r.confidence || 0
+        }))
+      },
+      outcome: roleOutputs.filter(r => r.status === 'fulfilled').length > 0 ? 'success' : 'failure'
+    });
+
+    // Step 3: Confidence Calculation
+    const confidenceDetails = this.buildConfidenceTrace(roleOutputs);
+    trace.steps.push({
+      step: 'confidence_calculation',
+      description: 'Calculated confidence scores for each response',
+      details: confidenceDetails,
+      outcome: 'completed'
+    });
+
+    // Step 4: Voting and Weight Assignment
+    const votingDetails = this.buildVotingTrace(roleOutputs);
+    trace.steps.push({
+      step: 'voting_weights',
+      description: 'Applied weighted voting algorithm',
+      details: votingDetails,
+      outcome: 'completed'
+    });
+
+    // Step 5: Synthesis Strategy Selection
+    trace.steps.push({
+      step: 'synthesis_strategy',
+      description: 'Selected synthesis approach based on response analysis',
+      details: {
+        strategy: synthesisResult.strategy || 'unknown',
+        rationale: this.getSynthesisRationale(synthesisResult.strategy, roleOutputs),
+        inputTokens: synthesisResult.metadata?.inputTokens || 0,
+        outputTokens: synthesisResult.metadata?.outputTokens || 0
+      },
+      outcome: synthesisResult.status || 'unknown'
+    });
+
+    return trace;
+  }
+
+  /**
+   * Build confidence calculation trace
+   */
+  buildConfidenceTrace(roleOutputs) {
+    return {
+      method: 'multi_factor_analysis',
+      factors: ['response_length', 'processing_time', 'model_reliability'],
+      scores: roleOutputs.map(output => ({
+        role: output.role,
+        confidence: output.confidence || 0,
+        factors: {
+          lengthScore: this.calculateLengthScore(output.wordCount || 0),
+          timeScore: this.calculateTimeScore(output.responseTime || 0),
+          reliabilityScore: output.metadata?.modelReliability || 0.8
+        }
+      }))
+    };
+  }
+
+  /**
+   * Build voting trace
+   */
+  buildVotingTrace(roleOutputs) {
+    const totalConfidence = roleOutputs.reduce((sum, r) => sum + (r.confidence || 0), 0);
+
+    return {
+      algorithm: 'confidence_weighted',
+      weights: roleOutputs.map(output => ({
+        role: output.role,
+        confidence: output.confidence || 0,
+        weight: totalConfidence > 0 ? ((output.confidence || 0) / totalConfidence) : 0,
+        normalizedWeight: totalConfidence > 0 ? `${(((output.confidence || 0) / totalConfidence) * 100).toFixed(1)}%` : '0%'
+      })),
+      winner: roleOutputs.reduce((best, current) =>
+        (current.confidence || 0) > (best.confidence || 0) ? current : best,
+        roleOutputs[0] || {}
+      ).role
+    };
+  }
+
+  /**
+   * Get synthesis rationale based on strategy
+   */
+  getSynthesisRationale(strategy, roleOutputs) {
+    const successfulRoles = roleOutputs.filter(r => r.status === 'fulfilled').length;
+
+    switch (strategy) {
+      case 'best_response':
+        return `Selected highest confidence response (${successfulRoles} successful responses)`;
+      case 'consensus':
+        return `Combined insights from ${successfulRoles} models for comprehensive answer`;
+      case 'comparative':
+        return `Analyzed differences between ${successfulRoles} responses for balanced synthesis`;
+      case 'fallback':
+        return `Used fallback strategy due to insufficient successful responses`;
+      default:
+        return `Applied ${strategy || 'default'} synthesis strategy`;
+    }
+  }
+
+  /**
+   * Calculate length-based confidence score
+   */
+  calculateLengthScore(wordCount) {
+    if (wordCount < 10) return 0.2;
+    if (wordCount < 50) return 0.6;
+    if (wordCount < 200) return 1.0;
+    if (wordCount < 500) return 0.9;
+    return 0.7; // Very long responses might be less focused
+  }
+
+  /**
+   * Calculate time-based confidence score
+   */
+  calculateTimeScore(responseTime) {
+    if (responseTime < 1000) return 0.7; // Too fast might be cached/simple
+    if (responseTime < 5000) return 1.0; // Optimal range
+    if (responseTime < 10000) return 0.8; // Acceptable
+    return 0.5; // Too slow might indicate issues
   }
 
   createErrorResponse(error, correlationId, sessionId, processingTime) {

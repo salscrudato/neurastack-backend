@@ -32,6 +32,51 @@ class MonitoringService {
         total: 0,
         byType: new Map(),
         recent: []
+      },
+      voting: {
+        totalVotes: 0,
+        consensusDistribution: {
+          'very-strong': 0,
+          'strong': 0,
+          'moderate': 0,
+          'weak': 0,
+          'very-weak': 0
+        },
+        sophisticatedFeaturesUsage: {
+          diversityAnalysis: 0,
+          historicalPerformance: 0,
+          tieBreaking: 0,
+          metaVoting: 0,
+          abstention: 0
+        },
+        modelPerformance: new Map(),
+        averageConfidence: 0,
+        votingProcessingTimes: [],
+        recentVotingDecisions: []
+      },
+      synthesis: {
+        totalSyntheses: 0,
+        successfulSyntheses: 0,
+        failedSyntheses: 0,
+        regenerations: 0,
+        averageQualityScore: 0,
+        qualityDistribution: {
+          excellent: 0,    // > 0.9
+          good: 0,         // 0.7-0.9
+          acceptable: 0,   // 0.5-0.7
+          poor: 0          // < 0.5
+        },
+        conflictResolutions: 0,
+        contextIntegrations: 0,
+        validationMetrics: {
+          readabilityScores: [],
+          factualConsistencyScores: [],
+          noveltyScores: [],
+          toxicityScores: [],
+          overallQualityScores: []
+        },
+        processingTimes: [],
+        recentSyntheses: []
       }
     };
     
@@ -412,6 +457,346 @@ class MonitoringService {
     // - Datadog
     // - ELK Stack
     // - etc.
+  }
+
+  /**
+   * Track voting decision metrics
+   */
+  trackVotingDecision(votingResult, processingTime = 0) {
+    try {
+      this.metrics.voting.totalVotes++;
+
+      // Track consensus distribution
+      if (votingResult.consensus && this.metrics.voting.consensusDistribution[votingResult.consensus] !== undefined) {
+        this.metrics.voting.consensusDistribution[votingResult.consensus]++;
+      }
+
+      // Track sophisticated features usage
+      if (votingResult.analytics && votingResult.analytics.sophisticatedFeaturesUsed) {
+        votingResult.analytics.sophisticatedFeaturesUsed.forEach(feature => {
+          if (this.metrics.voting.sophisticatedFeaturesUsage[feature] !== undefined) {
+            this.metrics.voting.sophisticatedFeaturesUsage[feature]++;
+          }
+        });
+      }
+
+      // Track model performance
+      if (votingResult.weights) {
+        Object.entries(votingResult.weights).forEach(([model, weight]) => {
+          if (!this.metrics.voting.modelPerformance.has(model)) {
+            this.metrics.voting.modelPerformance.set(model, {
+              totalVotes: 0,
+              totalWeight: 0,
+              wins: 0,
+              averageWeight: 0
+            });
+          }
+
+          const modelStats = this.metrics.voting.modelPerformance.get(model);
+          modelStats.totalVotes++;
+          modelStats.totalWeight += weight;
+          modelStats.averageWeight = modelStats.totalWeight / modelStats.totalVotes;
+
+          if (model === votingResult.winner) {
+            modelStats.wins++;
+          }
+        });
+      }
+
+      // Track average confidence
+      if (votingResult.confidence) {
+        const totalVotes = this.metrics.voting.totalVotes;
+        this.metrics.voting.averageConfidence =
+          ((this.metrics.voting.averageConfidence * (totalVotes - 1)) + votingResult.confidence) / totalVotes;
+      }
+
+      // Track processing times
+      if (processingTime > 0) {
+        this.metrics.voting.votingProcessingTimes.push(processingTime);
+
+        // Keep only recent processing times (last 100)
+        if (this.metrics.voting.votingProcessingTimes.length > 100) {
+          this.metrics.voting.votingProcessingTimes = this.metrics.voting.votingProcessingTimes.slice(-100);
+        }
+      }
+
+      // Track recent voting decisions
+      const recentDecision = {
+        timestamp: new Date().toISOString(),
+        winner: votingResult.winner,
+        confidence: votingResult.confidence,
+        consensus: votingResult.consensus,
+        featuresUsed: votingResult.analytics?.sophisticatedFeaturesUsed || [],
+        processingTime
+      };
+
+      this.metrics.voting.recentVotingDecisions.push(recentDecision);
+
+      // Keep only recent decisions (last 50)
+      if (this.metrics.voting.recentVotingDecisions.length > 50) {
+        this.metrics.voting.recentVotingDecisions = this.metrics.voting.recentVotingDecisions.slice(-50);
+      }
+
+    } catch (error) {
+      this.log('error', 'Failed to track voting decision', {
+        error: error.message,
+        votingResult: votingResult?.winner || 'unknown'
+      });
+    }
+  }
+
+  /**
+   * Track synthesis quality metrics
+   */
+  trackSynthesisQuality(synthesisResult, validationResult, processingTime = 0) {
+    try {
+      this.metrics.synthesis.totalSyntheses++;
+
+      // Track success/failure
+      if (synthesisResult.status === 'success') {
+        this.metrics.synthesis.successfulSyntheses++;
+      } else {
+        this.metrics.synthesis.failedSyntheses++;
+      }
+
+      // Track regenerations
+      if (synthesisResult.regenerated) {
+        this.metrics.synthesis.regenerations++;
+      }
+
+      // Track conflict resolution
+      if (synthesisResult.conflictResolution) {
+        this.metrics.synthesis.conflictResolutions++;
+      }
+
+      // Track context integration
+      if (synthesisResult.contextIntegration) {
+        this.metrics.synthesis.contextIntegrations++;
+      }
+
+      // Track quality metrics if validation available
+      if (validationResult) {
+        const qualityLevel = validationResult.qualityLevel || 'unknown';
+        if (this.metrics.synthesis.qualityDistribution[qualityLevel] !== undefined) {
+          this.metrics.synthesis.qualityDistribution[qualityLevel]++;
+        }
+
+        // Update average quality score
+        if (validationResult.overallQuality) {
+          const totalSyntheses = this.metrics.synthesis.totalSyntheses;
+          this.metrics.synthesis.averageQualityScore =
+            ((this.metrics.synthesis.averageQualityScore * (totalSyntheses - 1)) + validationResult.overallQuality) / totalSyntheses;
+        }
+
+        // Track individual validation metrics
+        if (validationResult.readability?.score) {
+          this.metrics.synthesis.validationMetrics.readabilityScores.push(validationResult.readability.score);
+          this.keepRecentMetrics(this.metrics.synthesis.validationMetrics.readabilityScores, 100);
+        }
+
+        if (validationResult.factualConsistency?.score) {
+          this.metrics.synthesis.validationMetrics.factualConsistencyScores.push(validationResult.factualConsistency.score);
+          this.keepRecentMetrics(this.metrics.synthesis.validationMetrics.factualConsistencyScores, 100);
+        }
+
+        if (validationResult.novelty?.score) {
+          this.metrics.synthesis.validationMetrics.noveltyScores.push(validationResult.novelty.score);
+          this.keepRecentMetrics(this.metrics.synthesis.validationMetrics.noveltyScores, 100);
+        }
+
+        if (validationResult.toxicity?.score) {
+          this.metrics.synthesis.validationMetrics.toxicityScores.push(validationResult.toxicity.score);
+          this.keepRecentMetrics(this.metrics.synthesis.validationMetrics.toxicityScores, 100);
+        }
+
+        if (validationResult.overallQuality) {
+          this.metrics.synthesis.validationMetrics.overallQualityScores.push(validationResult.overallQuality);
+          this.keepRecentMetrics(this.metrics.synthesis.validationMetrics.overallQualityScores, 100);
+        }
+      }
+
+      // Track processing times
+      if (processingTime > 0) {
+        this.metrics.synthesis.processingTimes.push(processingTime);
+        this.keepRecentMetrics(this.metrics.synthesis.processingTimes, 100);
+      }
+
+      // Track recent synthesis decisions
+      const recentSynthesis = {
+        timestamp: Date.now(),
+        status: synthesisResult.status,
+        qualityLevel: validationResult?.qualityLevel || 'unknown',
+        conflictResolution: synthesisResult.conflictResolution || false,
+        contextIntegration: synthesisResult.contextIntegration || false,
+        regenerated: synthesisResult.regenerated || false,
+        processingTime
+      };
+
+      this.metrics.synthesis.recentSyntheses.push(recentSynthesis);
+      this.keepRecentMetrics(this.metrics.synthesis.recentSyntheses, 50);
+
+    } catch (error) {
+      this.log('error', 'Failed to track synthesis quality', {
+        error: error.message,
+        synthesisStatus: synthesisResult?.status
+      });
+    }
+  }
+
+  /**
+   * Helper method to keep only recent metrics
+   */
+  keepRecentMetrics(array, maxLength) {
+    if (array.length > maxLength) {
+      array.splice(0, array.length - maxLength);
+    }
+  }
+
+  /**
+   * Get synthesis analytics summary
+   */
+  getSynthesisAnalytics() {
+    try {
+      const synthesis = this.metrics.synthesis;
+
+      // Calculate quality distribution percentages
+      const qualityPercentages = {};
+      Object.entries(synthesis.qualityDistribution).forEach(([level, count]) => {
+        qualityPercentages[level] = synthesis.totalSyntheses > 0 ?
+          ((count / synthesis.totalSyntheses) * 100).toFixed(1) + '%' : '0%';
+      });
+
+      // Calculate average validation scores
+      const avgValidationScores = {};
+      Object.entries(synthesis.validationMetrics).forEach(([metric, scores]) => {
+        if (scores.length > 0) {
+          avgValidationScores[metric] = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3);
+        } else {
+          avgValidationScores[metric] = 'N/A';
+        }
+      });
+
+      // Calculate processing time statistics
+      let processingTimeStats = { average: 'N/A', p95: 'N/A' };
+      if (synthesis.processingTimes.length > 0) {
+        const avgTime = synthesis.processingTimes.reduce((a, b) => a + b, 0) / synthesis.processingTimes.length;
+        const sortedTimes = [...synthesis.processingTimes].sort((a, b) => a - b);
+        const p95Index = Math.floor(sortedTimes.length * 0.95);
+
+        processingTimeStats = {
+          average: Math.round(avgTime) + 'ms',
+          p95: Math.round(sortedTimes[p95Index] || 0) + 'ms'
+        };
+      }
+
+      return {
+        totalSyntheses: synthesis.totalSyntheses,
+        successRate: synthesis.totalSyntheses > 0 ?
+          ((synthesis.successfulSyntheses / synthesis.totalSyntheses) * 100).toFixed(1) + '%' : '0%',
+        regenerationRate: synthesis.totalSyntheses > 0 ?
+          ((synthesis.regenerations / synthesis.totalSyntheses) * 100).toFixed(1) + '%' : '0%',
+        averageQualityScore: synthesis.averageQualityScore.toFixed(3),
+        qualityDistribution: qualityPercentages,
+        conflictResolutionRate: synthesis.totalSyntheses > 0 ?
+          ((synthesis.conflictResolutions / synthesis.totalSyntheses) * 100).toFixed(1) + '%' : '0%',
+        contextIntegrationRate: synthesis.totalSyntheses > 0 ?
+          ((synthesis.contextIntegrations / synthesis.totalSyntheses) * 100).toFixed(1) + '%' : '0%',
+        validationMetrics: avgValidationScores,
+        processingTime: processingTimeStats,
+        recentSyntheses: synthesis.recentSyntheses.slice(-10) // Last 10 syntheses
+      };
+
+    } catch (error) {
+      this.log('error', 'Failed to generate synthesis analytics', {
+        error: error.message
+      });
+
+      return {
+        error: 'Failed to generate synthesis analytics',
+        totalSyntheses: this.metrics.synthesis.totalSyntheses || 0
+      };
+    }
+  }
+
+  /**
+   * Get voting analytics summary
+   */
+  getVotingAnalytics() {
+    try {
+      const voting = this.metrics.voting;
+
+      // Calculate consensus distribution percentages
+      const consensusPercentages = {};
+      Object.entries(voting.consensusDistribution).forEach(([level, count]) => {
+        consensusPercentages[level] = voting.totalVotes > 0 ?
+          ((count / voting.totalVotes) * 100).toFixed(1) + '%' : '0%';
+      });
+
+      // Calculate feature usage percentages
+      const featureUsagePercentages = {};
+      Object.entries(voting.sophisticatedFeaturesUsage).forEach(([feature, count]) => {
+        featureUsagePercentages[feature] = voting.totalVotes > 0 ?
+          ((count / voting.totalVotes) * 100).toFixed(1) + '%' : '0%';
+      });
+
+      // Calculate model performance statistics
+      const modelStats = {};
+      voting.modelPerformance.forEach((stats, model) => {
+        modelStats[model] = {
+          totalVotes: stats.totalVotes,
+          winRate: stats.totalVotes > 0 ? ((stats.wins / stats.totalVotes) * 100).toFixed(1) + '%' : '0%',
+          averageWeight: stats.averageWeight.toFixed(3),
+          wins: stats.wins
+        };
+      });
+
+      // Calculate processing time statistics
+      const processingTimes = voting.votingProcessingTimes;
+      let processingStats = {
+        average: 0,
+        median: 0,
+        p95: 0,
+        min: 0,
+        max: 0
+      };
+
+      if (processingTimes.length > 0) {
+        const sorted = [...processingTimes].sort((a, b) => a - b);
+        processingStats = {
+          average: Math.round(processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length),
+          median: Math.round(sorted[Math.floor(sorted.length / 2)]),
+          p95: Math.round(sorted[Math.floor(sorted.length * 0.95)]),
+          min: Math.round(sorted[0]),
+          max: Math.round(sorted[sorted.length - 1])
+        };
+      }
+
+      return {
+        totalVotingDecisions: voting.totalVotes,
+        averageConfidence: voting.averageConfidence.toFixed(3),
+        consensusDistribution: {
+          counts: voting.consensusDistribution,
+          percentages: consensusPercentages
+        },
+        sophisticatedFeaturesUsage: {
+          counts: voting.sophisticatedFeaturesUsage,
+          percentages: featureUsagePercentages
+        },
+        modelPerformance: modelStats,
+        processingTimeStats: processingStats,
+        recentDecisions: voting.recentVotingDecisions.slice(-10), // Last 10 decisions
+        _description: "Comprehensive voting system analytics tracking consensus patterns, feature usage, model performance, and processing efficiency"
+      };
+    } catch (error) {
+      this.log('error', 'Failed to generate voting analytics', {
+        error: error.message
+      });
+
+      return {
+        error: 'Failed to generate voting analytics',
+        totalVotingDecisions: this.metrics.voting.totalVotes || 0
+      };
+    }
   }
 
   /**

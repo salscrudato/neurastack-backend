@@ -14,6 +14,148 @@ router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Neurastack backend healthy 🚀' });
 });
 
+// Voting analytics endpoint
+router.get('/voting-analytics', async (req, res) => {
+  try {
+    const SophisticatedVotingService = require('../services/sophisticatedVotingService');
+    const sophisticatedVotingService = new SophisticatedVotingService();
+
+    // Get comprehensive voting analytics
+    const serviceAnalytics = sophisticatedVotingService.getVotingStats();
+    const monitoringAnalytics = monitoringService.getVotingAnalytics();
+
+    res.json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      analytics: {
+        // Real-time monitoring data
+        monitoring: monitoringAnalytics,
+
+        // Service-specific analytics
+        services: serviceAnalytics,
+
+        // Combined insights
+        insights: {
+          systemHealth: monitoringAnalytics.totalVotingDecisions > 0 ? 'active' : 'inactive',
+          averageConfidence: monitoringAnalytics.averageConfidence,
+          mostUsedFeatures: this.getMostUsedFeatures(monitoringAnalytics),
+          topPerformingModels: this.getTopPerformingModels(monitoringAnalytics),
+          consensusTrends: this.getConsensusTrends(monitoringAnalytics)
+        }
+      },
+      _description: "Comprehensive voting system analytics combining real-time monitoring data with service-specific statistics for meta-voting, tie-breaking, and abstention patterns"
+    });
+  } catch (error) {
+    monitoringService.log('error', 'Failed to get voting analytics', {
+      error: error.message
+    });
+
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to retrieve voting analytics',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Synthesis quality analytics endpoint
+router.get('/synthesis-analytics', async (req, res) => {
+  try {
+    const analytics = monitoringService.getSynthesisAnalytics();
+
+    res.status(200).json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      analytics: {
+        ...analytics,
+        _description: "Comprehensive synthesis quality metrics including validation scores, conflict resolution rates, and processing performance"
+      }
+    });
+  } catch (error) {
+    console.error('❌ Failed to get synthesis analytics:', error.message);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve synthesis analytics',
+      error: error.message
+    });
+  }
+});
+
+// Enhanced synthesis service health check
+router.get('/synthesis-health', async (req, res) => {
+  try {
+    const enhancedSynthesisService = require('../services/enhancedSynthesisService');
+    const postSynthesisValidator = require('../services/postSynthesisValidator');
+
+    const [synthesisHealth, validatorHealth] = await Promise.all([
+      enhancedSynthesisService.healthCheck(),
+      postSynthesisValidator.healthCheck()
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      services: {
+        enhancedSynthesis: synthesisHealth,
+        postSynthesisValidator: validatorHealth
+      }
+    });
+  } catch (error) {
+    console.error('❌ Failed to get synthesis health:', error.message);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve synthesis health status',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to get most used features
+function getMostUsedFeatures(analytics) {
+  if (!analytics.sophisticatedFeaturesUsage) return [];
+
+  return Object.entries(analytics.sophisticatedFeaturesUsage.counts)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 3)
+    .map(([feature, count]) => ({
+      feature,
+      count,
+      percentage: analytics.sophisticatedFeaturesUsage.percentages[feature]
+    }));
+}
+
+// Helper function to get top performing models
+function getTopPerformingModels(analytics) {
+  if (!analytics.modelPerformance) return [];
+
+  return Object.entries(analytics.modelPerformance)
+    .sort(([,a], [,b]) => parseFloat(b.winRate) - parseFloat(a.winRate))
+    .slice(0, 3)
+    .map(([model, stats]) => ({
+      model,
+      winRate: stats.winRate,
+      averageWeight: stats.averageWeight,
+      totalVotes: stats.totalVotes
+    }));
+}
+
+// Helper function to get consensus trends
+function getConsensusTrends(analytics) {
+  if (!analytics.consensusDistribution) return {};
+
+  const total = Object.values(analytics.consensusDistribution.counts).reduce((a, b) => a + b, 0);
+  const strongConsensus = analytics.consensusDistribution.counts['strong'] +
+                         analytics.consensusDistribution.counts['very-strong'];
+  const weakConsensus = analytics.consensusDistribution.counts['weak'] +
+                       analytics.consensusDistribution.counts['very-weak'];
+
+  return {
+    strongConsensusRate: total > 0 ? ((strongConsensus / total) * 100).toFixed(1) + '%' : '0%',
+    weakConsensusRate: total > 0 ? ((weakConsensus / total) * 100).toFixed(1) + '%' : '0%',
+    overallTrend: strongConsensus > weakConsensus ? 'improving' : 'needs_attention'
+  };
+}
+
 router.get('/openai-test', async (req, res) => {
   try {
     const response = await openai.chat.completions.create({
@@ -162,6 +304,7 @@ router.post('/default-ensemble', async (req, res) => {
     const userId = req.headers['x-user-id'] || req.userId || 'anonymous';
     const userTier = req.userTier || 'free';
     const sessionId = req.body?.sessionId || req.headers['x-session-id'] || `session_${userId}_${Date.now()}`;
+    const explainMode = req.query?.explain === 'true' || req.body?.explain === true;
 
     // Enhanced input validation
     if (typeof prompt !== 'string') {
@@ -272,16 +415,39 @@ router.post('/default-ensemble', async (req, res) => {
       })
     );
 
-    // Perform weighted voting analysis
-    const votingResult = calculateWeightedVote(enhancedRoles);
+    // Perform sophisticated voting analysis with error handling
+    const SophisticatedVotingService = require('../services/sophisticatedVotingService');
+    const sophisticatedVotingService = new SophisticatedVotingService();
+
+    let votingResult;
+    try {
+      votingResult = await sophisticatedVotingService.executeSophisticatedVoting(
+        enhancedRoles,
+        prompt,
+        {
+          correlationId,
+          userId: req.headers['x-user-id'],
+          type: 'ensemble'
+        }
+      );
+
+      // Track voting decision in monitoring service
+      monitoringService.trackVotingDecision(votingResult, votingResult.analytics?.processingTime || 0);
+    } catch (votingError) {
+      console.error(`❌ [${correlationId}] Sophisticated voting failed:`, votingError.message);
+
+      // Create fallback voting result
+      votingResult = createFallbackVotingResult(enhancedRoles);
+      monitoringService.trackVotingDecision(votingResult, 0);
+    }
 
     // Enhanced synthesis confidence with voting results
     const synthesisConfidence = calculateSynthesisConfidence(ensembleResult.synthesis, enhancedRoles);
 
     // Adjust synthesis confidence based on voting consensus
-    if (votingResult.consensus === 'strong') {
+    if (votingResult && votingResult.consensus === 'strong') {
       synthesisConfidence.score = Math.min(1.0, synthesisConfidence.score * 1.1);
-    } else if (votingResult.consensus === 'weak') {
+    } else if (votingResult && votingResult.consensus === 'weak') {
       synthesisConfidence.score = Math.max(0.1, synthesisConfidence.score * 0.9);
     }
 
@@ -313,22 +479,34 @@ router.post('/default-ensemble', async (req, res) => {
           _metadataDescription: "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
         })),
         voting: {
-          winner: votingResult.winner,
-          _winnerDescription: "AI model selected as having the best response based on weighted voting algorithm considering confidence, response time, length optimization, and model reliability factors.",
-          confidence: votingResult.confidence,
-          _confidenceDescription: "Normalized weight (0-1) of the winning model's response. Higher values indicate stronger consensus that this model provided the best answer.",
-          consensus: votingResult.consensus,
-          _consensusDescription: "Strength of agreement in voting: 'strong' (winner >60% weight, >20% lead), 'moderate' (winner >45% weight), 'weak' (distributed weights). Strong consensus indicates high ensemble agreement.",
-          weights: votingResult.weights,
-          _weightsDescription: "Normalized voting weights for each model calculated from: base confidence × time performance × length optimization × model reliability. Shows relative contribution strength of each model.",
-          recommendation: votingResult.recommendation,
-          _recommendationDescription: "Ensemble system's assessment of response reliability and suggested confidence level for end users based on voting patterns and consensus strength."
+          winner: votingResult?.winner || 'unknown',
+          _winnerDescription: "AI model selected as having the best response using sophisticated voting algorithm combining traditional confidence, diversity analysis, historical performance, and advanced tie-breaking mechanisms.",
+          confidence: votingResult?.confidence || 0,
+          _confidenceDescription: "Final confidence score (0-1) from sophisticated voting system. Incorporates traditional voting, diversity weighting, historical accuracy, and meta-voting analysis for enhanced reliability.",
+          consensus: votingResult?.consensus || 'unknown',
+          _consensusDescription: "Sophisticated consensus strength: 'very-strong' (>80% confidence), 'strong' (>60%), 'moderate' (>45%), 'weak' (>35%), 'very-weak' (<35%). Enhanced with diversity and historical analysis.",
+          weights: votingResult?.weights || {},
+          _weightsDescription: "Hybrid voting weights combining traditional confidence (30%), diversity analysis (20%), historical performance (25%), semantic confidence (15%), and reliability factors (10%).",
+
+          // Sophisticated voting details
+          sophisticatedVoting: {
+            traditionalVoting: votingResult?.traditionalVoting || null,
+            hybridVoting: votingResult?.hybridVoting || null,
+            diversityAnalysis: votingResult?.diversityAnalysis || null,
+            historicalPerformance: votingResult?.historicalPerformance || null,
+            tieBreaking: votingResult?.tieBreaking || null,
+            metaVoting: votingResult?.metaVoting || null,
+            abstention: votingResult?.abstention || null,
+            analytics: votingResult?.analytics || null,
+            _description: "Comprehensive sophisticated voting analysis including diversity scoring, historical accuracy, meta-voting, tie-breaking, and abstention logic for enhanced decision-making quality."
+          }
         },
         metadata: {
           ...ensembleResult.metadata,
           timestamp: new Date().toISOString(),
-          version: '3.1', // Updated version for enhanced voting
+          version: '4.0', // Updated version for sophisticated voting system
           correlationId,
+          explainMode,
           confidenceAnalysis: {
             overallConfidence: synthesisConfidence.score,
             _overallConfidenceDescription: "Final confidence score for the entire ensemble response, combining synthesis quality with voting consensus adjustments.",
@@ -339,12 +517,13 @@ router.post('/default-ensemble', async (req, res) => {
             qualityDistribution: getQualityDistribution(enhancedRoles),
             _qualityDistributionDescription: "Breakdown of response quality levels (high/medium/low) across all models. More 'high' quality responses indicate better ensemble performance.",
             votingAnalysis: {
-              consensusStrength: votingResult.consensus,
+              consensusStrength: votingResult?.consensus || 'unknown',
               _consensusStrengthDescription: "Categorical assessment of voting agreement: strong consensus indicates clear winner, weak consensus suggests close competition between models.",
-              winnerMargin: Math.max(...Object.values(votingResult.weights)) -
-                           (Object.values(votingResult.weights).sort((a, b) => b - a)[1] || 0),
+              winnerMargin: votingResult?.weights ?
+                (Math.max(...Object.values(votingResult.weights)) -
+                (Object.values(votingResult.weights).sort((a, b) => b - a)[1] || 0)) : 0,
               _winnerMarginDescription: "Numerical difference between the winning model's weight and the second-place model. Larger margins indicate clearer ensemble decisions.",
-              distributionEntropy: calculateWeightEntropy(votingResult.weights),
+              distributionEntropy: votingResult?.weights ? calculateWeightEntropy(votingResult.weights) : 0,
               _distributionEntropyDescription: "Measure of weight distribution randomness. Lower entropy means concentrated voting (clear winner), higher entropy means distributed voting (close competition)."
             }
           },
@@ -357,10 +536,72 @@ router.post('/default-ensemble', async (req, res) => {
       correlationId
     };
 
+    // Add detailed explanation data if explain mode is enabled
+    if (explainMode) {
+      response.explanation = {
+        decisionTrace: ensembleResult.metadata.decisionTrace,
+        _decisionTraceDescription: "Step-by-step trace of the ensemble decision-making process including context building, model execution, confidence calculation, voting, and synthesis strategy selection.",
+
+        visualizationData: {
+          voteDistribution: votingResult?.weights ?
+            Object.entries(votingResult.weights).map(([model, weight]) => ({
+              model,
+              weight: Math.round(weight * 100) / 100,
+              percentage: `${Math.round(weight * 100)}%`
+            })) : [],
+          _voteDistributionDescription: "Data for creating bar charts showing how voting weights were distributed across AI models.",
+
+          confidenceHistogram: enhancedRoles.map(role => ({
+            model: role.role,
+            confidence: Math.round(role.confidence.score * 100) / 100,
+            factors: role.confidence.factors
+          })),
+          _confidenceHistogramDescription: "Data for creating confidence score visualizations showing individual model performance.",
+
+          processingTimeline: ensembleResult.metadata.decisionTrace?.steps?.map(step => ({
+            step: step.step,
+            description: step.description,
+            outcome: step.outcome,
+            duration: step.details?.processingTime || 0
+          })) || [],
+          _processingTimelineDescription: "Timeline data for visualizing the ensemble processing workflow and timing."
+        },
+
+        modelComparison: {
+          responses: enhancedRoles.map(role => ({
+            model: role.role,
+            provider: role.provider,
+            responseSnippet: role.content.substring(0, 200) + (role.content.length > 200 ? '...' : ''),
+            wordCount: role.wordCount || 0,
+            confidence: role.confidence.score,
+            processingTime: role.responseTime || 0,
+            qualityMetrics: role.quality
+          })),
+          _responsesDescription: "Detailed comparison of individual model responses for side-by-side analysis.",
+
+          consensusAnalysis: {
+            agreementLevel: calculateModelAgreement(enhancedRoles),
+            conflictPoints: identifyConflictPoints(enhancedRoles),
+            synthesisStrategy: ensembleResult.synthesis.strategy,
+            _analysisDescription: "Analysis of where models agreed or disagreed and how conflicts were resolved."
+          }
+        },
+
+        performanceMetrics: {
+          totalProcessingTime: ensembleResult.metadata.processingTime || 0,
+          parallelEfficiency: calculateParallelEfficiency(enhancedRoles),
+          cacheHitRate: ensembleResult.metadata.cached ? 100 : 0,
+          costEfficiency: await calculateCostEfficiency(prompt, enhancedRoles),
+          _metricsDescription: "Performance analytics for monitoring and optimization purposes."
+        }
+      };
+    }
+
     monitoringService.log('info', 'Enhanced ensemble completed successfully', {
       // Note: processingTime now tracked via correlation headers instead of processingTimeMs field
       successfulRoles: ensembleResult.metadata.successfulRoles,
-      synthesisStatus: ensembleResult.metadata.synthesisStatus
+      synthesisStatus: ensembleResult.metadata.synthesisStatus,
+      explainMode
     }, correlationId);
 
     res.status(200).json(response);
@@ -1046,6 +1287,56 @@ function calculateSynthesisConfidence(synthesis, roles) {
 
 // Note: calculateQualityScore function removed as deprecated
 // Now using calibrated_confidence from semantic confidence service instead
+
+/**
+ * Create fallback voting result when sophisticated voting fails
+ */
+function createFallbackVotingResult(roles) {
+  const successful = roles.filter(r => r.status === 'fulfilled');
+
+  if (successful.length === 0) {
+    return {
+      winner: 'none',
+      confidence: 0,
+      consensus: 'none',
+      weights: {},
+      fallbackUsed: true,
+      error: 'No successful responses available'
+    };
+  }
+
+  // Simple confidence-based voting as fallback
+  const weights = {};
+  let totalWeight = 0;
+
+  successful.forEach(role => {
+    const confidence = role.confidence?.score || 0.5;
+    weights[role.role] = confidence;
+    totalWeight += confidence;
+  });
+
+  // Normalize weights
+  Object.keys(weights).forEach(role => {
+    weights[role] = weights[role] / totalWeight;
+  });
+
+  // Find winner
+  const winner = Object.keys(weights).reduce((best, current) =>
+    weights[current] > weights[best] ? current : best
+  );
+
+  const winnerWeight = weights[winner];
+  const consensus = winnerWeight > 0.6 ? 'strong' : winnerWeight > 0.45 ? 'moderate' : 'weak';
+
+  return {
+    winner,
+    confidence: winnerWeight,
+    consensus,
+    weights,
+    fallbackUsed: true,
+    _description: "Fallback voting result due to sophisticated voting failure"
+  };
+}
 
 /**
  * Estimate token count
@@ -1865,6 +2156,90 @@ function calculateResponseTimeVariance(roles) {
   const variance = responseTimes.reduce((sum, time) => sum + Math.pow(time - mean, 2), 0) / responseTimes.length;
 
   return Math.round(variance);
+}
+
+/**
+ * Helper functions for explanation features
+ */
+
+/**
+ * Identify conflict points between model responses
+ */
+function identifyConflictPoints(roles) {
+  const conflicts = [];
+
+  // Simple conflict detection based on response length and content similarity
+  for (let i = 0; i < roles.length; i++) {
+    for (let j = i + 1; j < roles.length; j++) {
+      const role1 = roles[i];
+      const role2 = roles[j];
+
+      // Check for significant confidence differences
+      const confidenceDiff = Math.abs(role1.confidence.score - role2.confidence.score);
+      if (confidenceDiff > 0.3) {
+        conflicts.push({
+          type: 'confidence_mismatch',
+          models: [role1.role, role2.role],
+          difference: Math.round(confidenceDiff * 100) / 100,
+          description: `Significant confidence difference between ${role1.role} and ${role2.role}`
+        });
+      }
+
+      // Check for response length differences
+      const lengthDiff = Math.abs(role1.wordCount - role2.wordCount);
+      if (lengthDiff > 100) {
+        conflicts.push({
+          type: 'length_mismatch',
+          models: [role1.role, role2.role],
+          difference: lengthDiff,
+          description: `Significant response length difference between ${role1.role} and ${role2.role}`
+        });
+      }
+    }
+  }
+
+  return conflicts;
+}
+
+/**
+ * Calculate parallel processing efficiency
+ */
+function calculateParallelEfficiency(roles) {
+  const responseTimes = roles
+    .filter(role => role.responseTime && role.responseTime > 0)
+    .map(role => role.responseTime);
+
+  if (responseTimes.length === 0) return 0;
+
+  const maxTime = Math.max(...responseTimes);
+  const totalTime = responseTimes.reduce((sum, time) => sum + time, 0);
+  const theoreticalSequentialTime = totalTime;
+  const actualParallelTime = maxTime;
+
+  // Efficiency = (Sequential Time - Parallel Time) / Sequential Time
+  const efficiency = (theoreticalSequentialTime - actualParallelTime) / theoreticalSequentialTime;
+  return Math.max(0, Math.min(1, efficiency));
+}
+
+/**
+ * Calculate cost efficiency metrics
+ */
+async function calculateCostEfficiency(prompt, roles) {
+  const inputTokens = estimateTokenCount(prompt);
+  const outputTokens = roles.reduce((sum, role) => sum + estimateTokenCount(role.content), 0);
+
+  // Rough cost estimates (these would be more accurate with real pricing data)
+  const estimatedCost = (inputTokens * 0.00001) + (outputTokens * 0.00003); // Example pricing
+  const averageConfidence = roles.reduce((sum, role) => sum + role.confidence.score, 0) / roles.length;
+
+  return {
+    estimatedCost: Math.round(estimatedCost * 10000) / 10000, // Round to 4 decimal places
+    costPerConfidencePoint: Math.round((estimatedCost / averageConfidence) * 10000) / 10000,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    _description: "Cost efficiency analysis showing estimated API costs and cost-effectiveness metrics"
+  };
 }
 
 module.exports = router;

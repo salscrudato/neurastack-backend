@@ -65,6 +65,66 @@ class HierarchicalContextManager {
     // Precomputation tracking
     this.precomputeQueue = new Map();
     this.accessCounts = new Map();
+
+    console.log(`⏰ Hierarchical context manager initialized with enhanced memory integration`);
+  }
+
+  /**
+   * Store ensemble synthesis result in memory with high importance
+   * @param {string} userId - User ID
+   * @param {string} sessionId - Session ID
+   * @param {string} userPrompt - Original user prompt
+   * @param {Object} synthesisResult - Ensemble synthesis result
+   * @param {Array} roleOutputs - Individual model outputs
+   * @returns {Promise<void>}
+   */
+  async storeEnsembleResult(userId, sessionId, userPrompt, synthesisResult, roleOutputs) {
+    try {
+      console.log(`💾 Storing ensemble result in hierarchical memory for user ${userId}`);
+
+      // Store user prompt as episodic memory
+      await this.memoryManager.storeMemory(
+        userId,
+        sessionId,
+        userPrompt,
+        true, // isUserPrompt
+        0.8, // High response quality for user prompts
+        'user_input',
+        true // ensembleMode
+      );
+
+      // Store synthesis result as semantic memory with high importance
+      const synthesisContent = `${synthesisResult.content}\n\n[Context: Response to "${userPrompt.substring(0, 100)}..."]`;
+      await this.memoryManager.storeMemory(
+        userId,
+        sessionId,
+        synthesisContent,
+        false, // isUserPrompt
+        synthesisResult.confidence?.score || 0.7,
+        synthesisResult.model || 'ensemble_synthesis',
+        true // ensembleMode
+      );
+
+      // Store high-confidence individual responses as long-term memories
+      for (const roleOutput of roleOutputs) {
+        if (roleOutput.confidence && roleOutput.confidence > 0.7 && roleOutput.status === 'fulfilled') {
+          const roleContent = `${roleOutput.content}\n\n[Model: ${roleOutput.role}, Confidence: ${roleOutput.confidence}]`;
+          await this.memoryManager.storeMemory(
+            userId,
+            sessionId,
+            roleContent,
+            false,
+            roleOutput.confidence,
+            roleOutput.role,
+            true
+          );
+        }
+      }
+
+      console.log(`✅ Ensemble result stored in hierarchical memory system`);
+    } catch (error) {
+      console.warn('⚠️ Failed to store ensemble result in memory:', error.message);
+    }
   }
 
   /**
@@ -315,7 +375,7 @@ class HierarchicalContextManager {
   }
 
   /**
-   * Get relevant memories using smart retrieval strategies
+   * Get relevant memories using enhanced semantic retrieval strategies
    * @param {string} userId
    * @param {string} sessionId
    * @param {string} [currentPrompt]
@@ -323,19 +383,50 @@ class HierarchicalContextManager {
    */
   async getRelevantMemories(userId, sessionId, currentPrompt = null) {
     try {
-      console.log(`🔍 Retrieving relevant memories for user ${userId}`);
+      console.log(`🔍 Retrieving relevant memories for user ${userId} with enhanced context integration`);
 
-      // Use simplified memory retrieval - direct call to memory manager
-      console.log(`🔍 Using simplified memory retrieval for user ${userId}`);
-      const memories = await this.memoryManager.retrieveMemories({
+      // Use enhanced memory retrieval with semantic search
+      const memories = await this.memoryManager.getMemoryContext(userId, sessionId, 1500, currentPrompt);
+
+      // Parse the context back into memory objects for hierarchical processing
+      if (memories) {
+        // Convert context string back to structured memories for hierarchical processing
+        const contextLines = memories.split('\n').filter(line => line.trim());
+        const structuredMemories = [];
+
+        for (const line of contextLines) {
+          const typeMatch = line.match(/^\[([^\]]+)\]/);
+          if (typeMatch) {
+            const memoryType = typeMatch[1].split(' ')[0]; // Get base type, ignore semantic annotations
+            const content = line.replace(/^\[[^\]]+\]\s*/, '');
+
+            structuredMemories.push({
+              memoryType,
+              content: { compressed: content, original: content },
+              weights: { composite: 0.7 }, // Default weight for context memories
+              metadata: {
+                contextRetrieved: true,
+                semanticEnhanced: line.includes('semantic') || line.includes('fallback')
+              }
+            });
+          }
+        }
+
+        console.log(`✅ Retrieved ${structuredMemories.length} semantically enhanced memories`);
+        return structuredMemories;
+      }
+
+      // Fallback to traditional retrieval
+      console.log(`🔄 Using fallback memory retrieval for user ${userId}`);
+      const fallbackMemories = await this.memoryManager.retrieveMemories({
         userId,
         sessionId,
         maxResults: 10,
         minImportance: 0.3
       });
 
-      console.log(`✅ Retrieved ${memories.length} relevant memories`);
-      return memories;
+      console.log(`✅ Retrieved ${fallbackMemories.length} fallback memories`);
+      return fallbackMemories;
 
     } catch (error) {
       console.warn('⚠️ Failed to get relevant memories:', error.message);

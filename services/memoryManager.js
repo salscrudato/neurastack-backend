@@ -21,6 +21,7 @@ const admin = require('firebase-admin'); // Google's database service for storin
 const { v4: generateUUID } = require('uuid'); // Creates unique IDs for each memory
 const { MEMORY_TYPE_CONFIG } = require('../types/memory'); // Configuration for different memory types
 const logger = require('../utils/visualLogger'); // Enhanced visual logging system
+const semanticSimilarityService = require('./semanticSimilarityService'); // Semantic search capabilities
 
 /**
  * Memory Manager Class
@@ -247,7 +248,7 @@ class MemoryManager {
   }
 
   /**
-   * Get memory context for AI prompts with semantic search
+   * Get memory context for AI prompts with semantic search fallback
    * @param {string} userId
    * @param {string} sessionId
    * @param {number} maxTokens
@@ -257,20 +258,84 @@ class MemoryManager {
   async getMemoryContext(userId, sessionId, maxTokens = 2048, currentPrompt = null) {
     try {
       let memories = [];
+      let searchMethod = 'traditional';
 
-      // Use traditional memory retrieval (vector search removed for simplicity)
+      // First, try traditional memory retrieval
       memories = await this.retrieveMemories({
         userId,
         sessionId,
-        maxResults: 10,
-        minImportance: 0.3
+        maxResults: 15, // Get more candidates for semantic filtering
+        minImportance: 0.2 // Lower threshold for initial retrieval
       });
 
+      // If we have a current prompt and memories, use semantic search to improve relevance
+      if (currentPrompt && memories.length > 0) {
+        try {
+          const semanticResults = await semanticSimilarityService.findSimilarMemories(
+            currentPrompt,
+            memories,
+            10, // Max results after semantic filtering
+            0.3 // Minimum similarity threshold
+          );
+
+          if (semanticResults.length > 0) {
+            // Use semantically similar memories, sorted by relevance
+            memories = semanticResults.map(result => ({
+              ...result.memory,
+              _semanticScore: result.similarity,
+              _relevanceScore: result.relevanceScore,
+              _matchType: result.matchType
+            }));
+            searchMethod = 'semantic+traditional';
+            console.log(`🔍 Enhanced ${memories.length} memories with semantic search (avg similarity: ${this.calculateAverageSemanticScore(memories)})`);
+          }
+        } catch (semanticError) {
+          console.warn('⚠️ Semantic search failed, using traditional results:', semanticError.message);
+          // Continue with traditional results
+        }
+      }
+
+      // If traditional search yielded few results, try semantic search fallback on broader dataset
+      if (memories.length < 3 && currentPrompt) {
+        try {
+          console.log('🔄 Trying semantic search fallback with broader dataset...');
+          const broaderMemories = await this.retrieveMemories({
+            userId,
+            maxResults: 50, // Much broader search
+            minImportance: 0.1 // Very low threshold
+          });
+
+          if (broaderMemories.length > memories.length) {
+            const fallbackResults = await semanticSimilarityService.findSimilarMemories(
+              currentPrompt,
+              broaderMemories,
+              8,
+              0.25 // Lower similarity threshold for fallback
+            );
+
+            if (fallbackResults.length > memories.length) {
+              memories = fallbackResults.map(result => ({
+                ...result.memory,
+                _semanticScore: result.similarity,
+                _relevanceScore: result.relevanceScore,
+                _matchType: result.matchType + '_fallback'
+              }));
+              searchMethod = 'semantic_fallback';
+              console.log(`🎯 Semantic fallback found ${memories.length} additional relevant memories`);
+            }
+          }
+        } catch (fallbackError) {
+          console.warn('⚠️ Semantic fallback also failed:', fallbackError.message);
+        }
+      }
+
+      // Build context string with token limit
       let context = '';
       let totalTokens = 0;
 
       for (const memory of memories) {
-        const memoryText = `[${memory.memoryType}] ${memory.content.compressed}`;
+        const semanticInfo = memory._matchType ? ` (${memory._matchType})` : '';
+        const memoryText = `[${memory.memoryType}${semanticInfo}] ${memory.content.compressed}`;
         const tokenCount = this.estimateTokenCount(memoryText);
 
         if (totalTokens + tokenCount <= maxTokens) {
@@ -281,13 +346,25 @@ class MemoryManager {
         }
       }
 
-      const searchMethod = memories.length > 0 && currentPrompt ? 'semantic+traditional' : 'traditional';
       console.log(`🧠 Generated memory context: ${totalTokens} tokens for user ${userId} (${searchMethod})`);
       return context.trim();
     } catch (error) {
       console.error('❌ Failed to get memory context:', error);
       return '';
     }
+  }
+
+  /**
+   * Calculate average semantic score for logging
+   * @param {Array} memories - Memories with semantic scores
+   * @returns {number} Average score
+   */
+  calculateAverageSemanticScore(memories) {
+    const scoresWithSemantic = memories.filter(m => m._semanticScore !== undefined);
+    if (scoresWithSemantic.length === 0) return 0;
+
+    const sum = scoresWithSemantic.reduce((acc, m) => acc + m._semanticScore, 0);
+    return Math.round((sum / scoresWithSemantic.length) * 100) / 100;
   }
 
   /**
@@ -613,13 +690,66 @@ class MemoryManager {
   }
 
   /**
-   * Simple content compression replacement
+   * Aggressive content compression for storage efficiency
    */
   compressContentSimple(content) {
-    if (content.length <= 200) return content;
+    if (!content || content.length < 100) return content;
 
-    // Simple compression: take first 150 chars and last 50 chars
+    // Aggressive compression for memories >200 tokens
+    const estimatedTokens = this.estimateTokenCount(content);
+    if (estimatedTokens > 200) {
+      return this.aggressiveCompress(content);
+    }
+
+    // Standard compression for shorter content
+    if (content.length <= 200) return content;
     return content.substring(0, 150) + '...' + content.substring(content.length - 50);
+  }
+
+  /**
+   * Aggressive compression for large content (>200 tokens)
+   */
+  aggressiveCompress(content) {
+    // Extract key sentences and concepts
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+
+    // Keep only the most important sentences (first, last, and those with keywords)
+    const importantSentences = [];
+    const keywords = ['important', 'key', 'main', 'primary', 'essential', 'critical', 'significant'];
+
+    // Always keep first sentence
+    if (sentences.length > 0) {
+      importantSentences.push(sentences[0]);
+    }
+
+    // Keep sentences with keywords
+    sentences.slice(1, -1).forEach(sentence => {
+      if (keywords.some(keyword => sentence.toLowerCase().includes(keyword))) {
+        importantSentences.push(sentence);
+      }
+    });
+
+    // Always keep last sentence if different from first
+    if (sentences.length > 1 && sentences[sentences.length - 1] !== sentences[0]) {
+      importantSentences.push(sentences[sentences.length - 1]);
+    }
+
+    // Join and apply standard compression
+    const compressed = importantSentences.join('. ')
+      .replace(/\s+/g, ' ')
+      .replace(/\b(the|a|an|and|or|but|in|on|at|to|for|of|with|by|that|this|these|those)\b/gi, '')
+      .replace(/[,;:]+/g, ',')
+      .replace(/[.]{2,}/g, '...')
+      .trim();
+
+    // Ensure we've achieved significant compression
+    const originalTokens = this.estimateTokenCount(content);
+    const compressedTokens = this.estimateTokenCount(compressed);
+    const compressionRatio = compressedTokens / originalTokens;
+
+    console.log(`🗜️ Aggressive compression: ${originalTokens} → ${compressedTokens} tokens (${(compressionRatio * 100).toFixed(1)}%)`);
+
+    return compressed;
   }
 
   /**
@@ -652,6 +782,208 @@ class MemoryManager {
       context: 0.5, // Default context relevance
       composite: Math.min(0.99, composite)
     };
+  }
+
+  /**
+   * Intelligent forgetting mechanism - periodically prune low-importance memories
+   * @param {string} userId - Optional user ID to target specific user
+   * @returns {Promise<Object>} Pruning statistics
+   */
+  async intelligentForgetting(userId = null) {
+    try {
+      console.log(`🧹 Starting intelligent forgetting process${userId ? ` for user ${userId}` : ' (all users)'}`);
+
+      const stats = {
+        totalMemoriesScanned: 0,
+        memoriesRemoved: 0,
+        memoriesArchived: 0,
+        memoryTypesProcessed: {},
+        spaceSavedTokens: 0,
+        processingTime: Date.now()
+      };
+
+      // Get all memories for analysis
+      let memories = [];
+      if (userId) {
+        memories = await this.retrieveMemories({
+          userId,
+          maxResults: 1000,
+          minImportance: 0,
+          includeArchived: true
+        });
+      } else {
+        // Process all users (be careful with this in production)
+        if (this.isFirestoreAvailable) {
+          const snapshot = await this.firestore.collection('memories').limit(1000).get();
+          memories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } else {
+          memories = Array.from(this.localCache.values());
+        }
+      }
+
+      stats.totalMemoriesScanned = memories.length;
+
+      // Analyze each memory for forgetting criteria
+      const forgettingDecisions = await Promise.all(
+        memories.map(memory => this.analyzeForgettingCriteria(memory))
+      );
+
+      // Process forgetting decisions
+      for (let i = 0; i < memories.length; i++) {
+        const memory = memories[i];
+        const decision = forgettingDecisions[i];
+
+        stats.memoryTypesProcessed[memory.memoryType] =
+          (stats.memoryTypesProcessed[memory.memoryType] || 0) + 1;
+
+        if (decision.action === 'remove') {
+          await this.removeMemory(memory.id);
+          stats.memoriesRemoved++;
+          stats.spaceSavedTokens += memory.metadata?.tokenCount || 0;
+          console.log(`🗑️ Removed memory ${memory.id}: ${decision.reason}`);
+        } else if (decision.action === 'archive') {
+          await this.archiveMemory(memory.id);
+          stats.memoriesArchived++;
+          console.log(`📦 Archived memory ${memory.id}: ${decision.reason}`);
+        }
+      }
+
+      stats.processingTime = Date.now() - stats.processingTime;
+
+      console.log(`✅ Intelligent forgetting completed:`, {
+        scanned: stats.totalMemoriesScanned,
+        removed: stats.memoriesRemoved,
+        archived: stats.memoriesArchived,
+        spaceSaved: `${stats.spaceSavedTokens} tokens`,
+        duration: `${stats.processingTime}ms`
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('❌ Intelligent forgetting failed:', error.message);
+      return { error: error.message };
+    }
+  }
+
+  /**
+   * Analyze memory for forgetting criteria
+   * @param {Object} memory - Memory to analyze
+   * @returns {Promise<Object>} Forgetting decision
+   */
+  async analyzeForgettingCriteria(memory) {
+    const now = new Date();
+    const memoryAge = now - new Date(memory.createdAt);
+    const daysSinceCreated = memoryAge / (1000 * 60 * 60 * 24);
+    const daysSinceAccessed = (now - new Date(memory.retention?.lastAccessed || memory.createdAt)) / (1000 * 60 * 60 * 24);
+
+    // Get memory type configuration
+    const typeConfig = MEMORY_TYPE_CONFIG[memory.memoryType] || MEMORY_TYPE_CONFIG.working;
+    const maxAgeDays = typeConfig.ttl / (1000 * 60 * 60 * 24);
+
+    // Criteria for removal
+    if (memory.retention?.isArchived && daysSinceAccessed > 30) {
+      return { action: 'remove', reason: 'Archived memory not accessed for 30+ days' };
+    }
+
+    if (daysSinceCreated > maxAgeDays * 2) {
+      return { action: 'remove', reason: `Memory exceeded maximum age (${Math.round(daysSinceCreated)} > ${Math.round(maxAgeDays * 2)} days)` };
+    }
+
+    if (memory.weights?.composite < 0.1 && daysSinceAccessed > 7) {
+      return { action: 'remove', reason: 'Very low importance and not accessed recently' };
+    }
+
+    if (memory.metadata?.responseQuality < 0.3 && daysSinceAccessed > 14) {
+      return { action: 'remove', reason: 'Low quality response not accessed recently' };
+    }
+
+    // Criteria for archiving
+    if (daysSinceCreated > maxAgeDays && !memory.retention?.isArchived) {
+      return { action: 'archive', reason: `Memory exceeded standard age (${Math.round(daysSinceCreated)} > ${Math.round(maxAgeDays)} days)` };
+    }
+
+    if (memory.weights?.composite < 0.3 && daysSinceAccessed > 3) {
+      return { action: 'archive', reason: 'Low importance and not recently accessed' };
+    }
+
+    if ((memory.retention?.accessCount || 0) === 0 && daysSinceCreated > 1) {
+      return { action: 'archive', reason: 'Never accessed after creation' };
+    }
+
+    // Keep the memory
+    return { action: 'keep', reason: 'Memory meets retention criteria' };
+  }
+
+  /**
+   * Archive a memory (mark as archived but don't delete)
+   * @param {string} memoryId - Memory ID to archive
+   * @returns {Promise<boolean>} Success status
+   */
+  async archiveMemory(memoryId) {
+    try {
+      const updateData = {
+        'retention.isArchived': true,
+        'retention.archivedAt': new Date(),
+        updatedAt: new Date()
+      };
+
+      if (this.isFirestoreAvailable) {
+        await this.firestore.collection('memories').doc(memoryId).update(updateData);
+      }
+
+      // Update local cache
+      if (this.localCache.has(memoryId)) {
+        const memory = this.localCache.get(memoryId);
+        memory.retention.isArchived = true;
+        memory.retention.archivedAt = new Date();
+        memory.updatedAt = new Date();
+      }
+
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Failed to archive memory ${memoryId}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Remove a memory completely
+   * @param {string} memoryId - Memory ID to remove
+   * @returns {Promise<boolean>} Success status
+   */
+  async removeMemory(memoryId) {
+    try {
+      if (this.isFirestoreAvailable) {
+        await this.firestore.collection('memories').doc(memoryId).delete();
+      }
+
+      // Remove from local cache
+      this.localCache.delete(memoryId);
+
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Failed to remove memory ${memoryId}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Schedule periodic intelligent forgetting
+   * @param {number} intervalHours - Hours between forgetting cycles
+   */
+  scheduleIntelligentForgetting(intervalHours = 24) {
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+
+    setInterval(async () => {
+      try {
+        console.log('⏰ Starting scheduled intelligent forgetting...');
+        await this.intelligentForgetting();
+      } catch (error) {
+        console.error('❌ Scheduled forgetting failed:', error.message);
+      }
+    }, intervalMs);
+
+    console.log(`⏰ Intelligent forgetting scheduled every ${intervalHours} hours`);
   }
 }
 
