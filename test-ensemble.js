@@ -16,7 +16,7 @@ async function testEnsemble() {
     console.log(`\n🔍 Testing: ${testCase.name}`);
 
     try {
-      const response = await axios.post('http://localhost:8080/default-ensemble', {
+      const response = await axios.post('https://neurastack-backend-638289111765.us-central1.run.app/default-ensemble', {
         prompt: testCase.prompt,
         sessionId: testCase.sessionId
       }, {

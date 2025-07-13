@@ -445,7 +445,7 @@ if (require.main === module) {
         'Memory System': 'Intelligent context management with semantic search',
         'Workout API': 'Professional-grade fitness generation',
         'Monitoring': 'Enhanced health monitoring and metrics',
-        'Caching': 'Redis-enhanced distributed caching',
+        'Caching': 'High-performance memory-only caching',
         'Security': 'Rate limiting and validation',
         'Load Capacity': '25+ concurrent users',
         'Forgetting': 'Intelligent memory pruning and archival'
