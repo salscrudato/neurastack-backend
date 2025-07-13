@@ -36,6 +36,11 @@ const { getHierarchicalContextManager } = require('./hierarchicalContextManager'
 const enhancedSynthesisService = require('./enhancedSynthesisService'); // Advanced synthesis with conflict resolution
 const monitoringService = require('./monitoringService'); // Enhanced monitoring with synthesis quality tracking
 const providerReliabilityService = require('./providerReliabilityService'); // For dynamic reliability weighting
+
+// Performance optimization services
+const EnsemblePerformanceOptimizer = require('./ensemblePerformanceOptimizer');
+const EnhancedEnsembleCache = require('./enhancedEnsembleCache');
+const ParallelEnsembleProcessor = require('./parallelEnsembleProcessor');
 /**
  * 🧠 Enhanced Ensemble Runner Class
  *
@@ -133,10 +138,20 @@ class EnhancedEnsembleRunner {
     // Initialize vendor clients for AI providers
     this.vendorClients = require('./vendorClients');
 
+    // Initialize performance optimization services
+    this.performanceOptimizer = new EnsemblePerformanceOptimizer(cacheService, monitoringService);
+    this.enhancedCache = new EnhancedEnsembleCache(cacheService, monitoringService);
+    this.parallelProcessor = new ParallelEnsembleProcessor({
+      maxConcurrentModels: 3,
+      modelTimeout: 15000,
+      synthesisTimeout: 10000,
+      votingTimeout: 3000
+    });
+
     // Start metrics collection for production monitoring
     this.startMetricsCollection();
 
-    console.log('🚀 Enhanced Ensemble Runner initialized with production-grade monitoring');
+    console.log('🚀 Enhanced Ensemble Runner initialized with production-grade monitoring and performance optimization');
   }
 
   getMemoryManager() {
@@ -907,25 +922,26 @@ class EnhancedEnsembleRunner {
       throw new Error(`Prompt too long. Maximum ${this.config.maxPromptLength} characters allowed.`);
     }
 
-    // Check cache first for ensemble responses
+    // Check enhanced cache first for ensemble responses
     try {
-      const cachedResponse = await cacheService.getCachedEnsembleResponse(
+      const cachedResponse = await this.enhancedCache.getCachedEnsembleResponse(
         userPrompt,
         userId,
         meta.tier
       );
 
       if (cachedResponse) {
-        console.log(`🎯 Returning cached ensemble response for user ${userId}`);
+        console.log(`🎯 Returning enhanced cached ensemble response for user ${userId}`);
         this.updateMetrics('cache_hit', Date.now() - startTime);
         return {
           ...cachedResponse,
           cached: true,
+          enhanced: true,
           cacheTimestamp: new Date().toISOString()
         };
       }
     } catch (cacheError) {
-      console.warn('⚠️ Cache lookup failed, proceeding with fresh request:', cacheError.message);
+      console.warn('⚠️ Enhanced cache lookup failed, proceeding with fresh request:', cacheError.message);
     }
 
     // Check rate limits for free tier
@@ -988,12 +1004,43 @@ class EnhancedEnsembleRunner {
         }
       }
 
-      // Step 2: Enhance prompt with hierarchical context
+      // Step 2: Try performance optimization first
+      try {
+        console.log(`⚡ [${correlationId}] Attempting parallel processing optimization`);
+
+        const optimizedResult = await this.parallelProcessor.processEnsembleParallel(
+          userPrompt,
+          userId,
+          sessionId,
+          correlationId
+        );
+
+        if (optimizedResult && optimizedResult.synthesis) {
+          console.log(`🚀 [${correlationId}] Parallel processing successful in ${optimizedResult.processingTime}ms`);
+
+          // Cache the optimized result
+          await this.enhancedCache.cacheEnsembleResponse(
+            userPrompt,
+            userId,
+            meta.tier,
+            optimizedResult
+          );
+
+          return this.formatOptimizedResponse(optimizedResult, correlationId, startTime);
+        }
+      } catch (optimizationError) {
+        console.warn(`⚠️ [${correlationId}] Parallel processing failed, falling back to standard processing:`, optimizationError.message);
+      }
+
+      // Step 3: Fallback to standard processing
+      console.log(`🔄 [${correlationId}] Using standard ensemble processing`);
+
+      // Enhance prompt with hierarchical context
       const enhancedPrompt = contextResult.context ?
         `${contextResult.context}\n\n--- CURRENT REQUEST ---\n${userPrompt}` :
         userPrompt;
 
-      // Step 3: Execute all roles in parallel with timeout and error handling
+      // Execute all roles in parallel with timeout and error handling
       const rolePromises = ['gpt4o', 'gemini', 'claude'].map(role => {
         const startTime = Date.now();
 
@@ -1005,8 +1052,6 @@ class EnhancedEnsembleRunner {
         ])
         .then(content => {
           const responseTime = Date.now() - startTime;
-
-          // Calculate simple confidence score for this response
           const confidence = this.calculateSimpleConfidence(content, responseTime);
 
           return {
@@ -1021,7 +1066,7 @@ class EnhancedEnsembleRunner {
             confidence,
             metadata: {
               confidenceLevel: this.getSimpleConfidenceLevel(confidence),
-              modelReliability: 0.8 // Simple default reliability
+              modelReliability: 0.8
             }
           };
         })
@@ -1042,7 +1087,6 @@ class EnhancedEnsembleRunner {
         }));
       });
 
-      // Use Promise.allSettled for better parallel processing and error resilience
       const roleSettledResults = await Promise.allSettled(rolePromises);
       const roleOutputs = roleSettledResults.map(result =>
         result.status === 'fulfilled' ? result.value : {
@@ -1061,8 +1105,8 @@ class EnhancedEnsembleRunner {
           }
         }
       );
-      
-      // Log results with fallback indicators
+
+      // Log results
       roleOutputs.forEach(output => {
         const status = output.status === 'fulfilled' ? '✅' : '❌';
         const fallbackIndicator = output.isFallback ? ' (FALLBACK)' : '';
@@ -1077,7 +1121,7 @@ class EnhancedEnsembleRunner {
         roleOutputs,
         userPrompt,
         correlationId,
-        {}, // Empty voting result - voting happens after ensemble in health route
+        {},
         userId,
         sessionId
       );
@@ -1147,11 +1191,11 @@ class EnhancedEnsembleRunner {
         }
       };
 
-      // Cache successful responses for future use
+      // Cache successful responses using enhanced cache
       if (synthesisResult.status === 'success' && responseQuality > 0.6) {
         try {
-          await cacheService.cacheEnsembleResponse(userPrompt, userId, meta.tier, finalResponse);
-          console.log(`💾 [${correlationId}] Response cached successfully`);
+          await this.enhancedCache.cacheEnsembleResponse(userPrompt, userId, meta.tier, finalResponse);
+          console.log(`💾 [${correlationId}] Response cached successfully with enhanced cache`);
         } catch (cacheError) {
           console.warn(`⚠️ [${correlationId}] Failed to cache response:`, cacheError.message);
         }
@@ -1785,14 +1829,41 @@ No AI responses were available. Please provide a helpful, informative response t
     };
   }
 
+  /**
+   * Format optimized response from parallel processor
+   */
+  formatOptimizedResponse(optimizedResult, correlationId, startTime) {
+    const processingTime = Date.now() - startTime;
+
+    return {
+      synthesis: optimizedResult.synthesis,
+      roles: optimizedResult.roles || [],
+      voting: optimizedResult.voting,
+      metadata: {
+        ...optimizedResult.metadata,
+        processingTime,
+        optimized: true,
+        parallelProcessed: true,
+        correlationId,
+        timestamp: new Date().toISOString(),
+        version: '4.0-optimized'
+      }
+    };
+  }
+
   async healthCheck() {
     const vendorHealth = await clients.healthCheck();
     const memoryHealth = await this.getMemoryManager().testFirestoreConnection();
-    
+
     return {
       ensemble: {
         isHealthy: true,
-        metrics: this.getMetrics()
+        metrics: this.getMetrics(),
+        optimizations: {
+          performanceOptimizer: this.performanceOptimizer.getPerformanceStats(),
+          enhancedCache: this.enhancedCache.getStats(),
+          parallelProcessor: this.parallelProcessor.getStats()
+        }
       },
       vendors: vendorHealth,
       memory: {

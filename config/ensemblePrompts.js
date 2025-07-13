@@ -24,11 +24,11 @@ const MODEL_CONFIGS = {
 // Tier-specific configurations - Optimized for cost and performance
 const TIER_CONFIGS = {
   free: {
-    sharedWordLimit: 500,        // Optimized for cost while maintaining quality
-    maxTokensPerRole: 900,       // Increased slightly for better responses under load
-    maxSynthesisTokens: 1100,    // Increased for better synthesis quality
-    maxCharactersPerRole: 2400,  // Increased for better response quality
-    timeoutMs: 50000,            // Increased timeout for 25+ concurrent users (50 seconds)
+    sharedWordLimit: 1000,        // Optimized for cost while maintaining quality
+    maxTokensPerRole: 1200,       // Increased slightly for better responses under load
+    maxSynthesisTokens: 1600,    // Increased for better synthesis quality
+    maxCharactersPerRole: 4800,  // Increased for better response quality
+    timeoutMs: 75000,            // Increased timeout for 25+ concurrent users (50 seconds)
     requestsPerHour: 25,         // Optimized for 25+ concurrent users
     requestsPerDay: 150,         // Increased daily limits for higher usage
     maxPromptLength: 1500,       // Increased for more detailed prompts

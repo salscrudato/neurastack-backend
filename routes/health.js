@@ -978,6 +978,46 @@ router.get('/ensemble/stats', async (req, res) => {
   }
 });
 
+// Performance optimization statistics endpoint
+router.get('/ensemble/performance', async (req, res) => {
+  try {
+    const ensembleRunner = enhancedEnsemble;
+    const healthData = await ensembleRunner.healthCheck();
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        performance: {
+          optimizations: healthData.ensemble.optimizations,
+          metrics: healthData.ensemble.metrics,
+          speedup: {
+            averageProcessingTime: healthData.ensemble.metrics.averageProcessingTime,
+            parallelSpeedup: healthData.ensemble.optimizations.parallelProcessor.parallelSpeedup || 1,
+            cacheHitRate: healthData.ensemble.optimizations.enhancedCache.hitRate || 0
+          }
+        },
+        recommendations: [
+          healthData.ensemble.optimizations.enhancedCache.hitRate < 50 ?
+            'Consider increasing cache TTL for better hit rates' : null,
+          healthData.ensemble.metrics.averageProcessingTime > 20000 ?
+            'Processing time is high, consider enabling more parallel optimizations' : null,
+          healthData.ensemble.optimizations.parallelProcessor.timeoutCount > 10 ?
+            'High timeout count detected, consider adjusting timeout thresholds' : null
+        ].filter(Boolean)
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve performance statistics',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Model performance update endpoint (for feedback loops)
 router.post('/ensemble/feedback', async (req, res) => {
   try {

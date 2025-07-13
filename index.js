@@ -434,7 +434,7 @@ if (require.main === module) {
       memoryManager.scheduleIntelligentForgetting(24);
       logger.success('Intelligent forgetting mechanism initialized', { interval: '24 hours' });
     } catch (error) {
-      logger.warn('Failed to initialize intelligent forgetting', { error: error.message });
+      logger.warning('Failed to initialize intelligent forgetting', { error: error.message });
     }
 
     // Log system capabilities

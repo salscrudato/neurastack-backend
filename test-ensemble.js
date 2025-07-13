@@ -3,12 +3,12 @@ const axios = require('axios');
 async function testEnsemble() {
   console.log('🧪 Testing AI Ensemble API...');
 
-  // Final verification test
+  // Production deployment test
   const testCases = [
     {
-      name: "Final Test",
-      prompt: "What is artificial intelligence?",
-      sessionId: "test-session-final"
+      name: "Production Test",
+      prompt: "What is 2+2?",
+      sessionId: "test-production"
     }
   ];
 
@@ -16,7 +16,7 @@ async function testEnsemble() {
     console.log(`\n🔍 Testing: ${testCase.name}`);
 
     try {
-      const response = await axios.post('http://localhost:8080/default-ensemble', {
+      const response = await axios.post('https://neurastack-backend-638289111765.us-central1.run.app/default-ensemble', {
         prompt: testCase.prompt,
         sessionId: testCase.sessionId
       }, {

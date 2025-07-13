@@ -1,0 +1,520 @@
+{
+  "status": "success",
+  "data": {
+    "prompt": "What are the benefits of exercise?",
+    "userId": "test-user",
+    "sessionId": "test-session",
+    "synthesis": {
+      "content": "Exercise is a cornerstone of a healthy lifestyle, offering a multitude of benefits that enhance physical, mental, and emotional well-being. By integrating regular physical activity into your routine, you can experience improvements across various dimensions of health.\n\n### Physical Health Benefits\n\n1. **Cardiovascular and Muscular Health**: Engaging in regular exercise strengthens the heart and improves circulation, which helps lower blood pressure and reduces the risk of cardiovascular diseases such as heart disease and stroke. Strength training builds muscle mass and bone density, which is crucial for maintaining strength and preventing conditions like osteoporosis as you age.\n\n2. **Weight Management and Metabolism**: Exercise plays a vital role in weight management by burning calories and improving metabolic health. It helps regulate blood sugar levels, reducing the risk of type 2 diabetes and combating obesity—a major risk factor for numerous health issues.\n\n3. **Immune System Boost**: Moderate exercise enhances immune function, making your body more resilient to infections and illnesses.\n\n4. **Flexibility and Balance**: Activities like yoga and stretching increase flexibility and balance, reducing the risk of falls, especially important for older adults.\n\n### Mental Health Benefits\n\n1. **Stress Reduction and Mood Enhancement**: Physical activity triggers the release of endorphins, which are natural mood lifters that alleviate stress, anxiety, and symptoms of depression. This leads to an overall improvement in mental well-being.\n\n2. **Cognitive Function**: Regular exercise is associated with enhanced cognitive abilities, including improved memory, attention, and concentration. It supports brain health and may reduce the risk of cognitive decline with age.\n\n3. **Sleep Quality**: Engaging in physical activities can help regulate sleep patterns, leading to better quality sleep and more restful nights.\n\n### Long-Term Wellness Impacts\n\n1. **Chronic Disease Prevention**: Consistent exercise lowers the risk of developing chronic diseases such as certain cancers, metabolic syndrome, and type 2 diabetes. It also contributes to healthier aging by maintaining mobility and independence.\n\n2. **Longevity and Quality of Life**: Regular physical activity is linked to increased life expectancy and a higher quality of life. It reduces healthcare costs by focusing on preventive health measures.\n\n3. **Social and Emotional Benefits**: Exercise often involves social interaction, whether through team sports or group fitness classes, fostering a sense of community and support. It also builds discipline, goal-setting skills, and provides a sense of personal achievement.\n\n### Recommended Exercise Types\n\nTo reap these benefits, incorporate a variety of exercises into your routine:\n- **Cardiovascular Activities**: Walking, running, cycling\n- **Strength Training**: Weight lifting or resistance exercises\n- **Flexibility Exercises**: Yoga or stretching routines\n- **High-Intensity Interval Training (HIIT)**: Short bursts of intense activity\n- **Team Sports**: Soccer, basketball, or any group sport activity\n\n### Conclusion\n\nIncorporating exercise into your daily life is a powerful strategy for enhancing both physical and mental health. Aim for at least 150 minutes of moderate aerobic activity or 75 minutes of vigorous activity each week, complemented by strength training exercises on two or more days. Always consult with a healthcare professional before starting any new exercise program, particularly if you have existing health concerns. By finding activities you enjoy, you can make exercise a sustainable part of your lifestyle, leading to lasting health benefits.",
+      "model": "gpt-4o",
+      "provider": "openai",
+      "status": "success",
+      "synthesisStrategy": "enhanced_regenerated",
+      "regenerated": true,
+      "validation": {
+        "readabilityScore": 0.752372529293407,
+        "factualConsistency": 0.8019700320382247,
+        "noveltyScore": 0.42502482621648463,
+        "overallQuality": 0.6740072194682574,
+        "passesThreshold": false,
+        "readabilityMetrics": {
+          "gradeLevel": 12.47627470706593,
+          "complexity": "high-school",
+          "avgSentenceLength": 14.617647058823529,
+          "avgSyllablesPerWord": 1.8953722334004024
+        },
+        "thresholds": {
+          "readability": 0.6,
+          "factualConsistency": 0.7,
+          "novelty": 0.5,
+          "overall": 0.65
+        }
+      },
+      "contextIntegration": true,
+      "conflictResolution": false,
+      "processingTime": 39319,
+      "confidence": {
+        "score": 0.8690153507444445,
+        "level": "medium",
+        "factors": [
+          "Based on 3 successful responses",
+          "Average role confidence: 54.9%",
+          "Response generated successfully",
+          "Adequate response length",
+          "Well-structured response"
+        ]
+      },
+      "_confidenceDescription": "Overall confidence in the synthesized response, calculated from individual model confidence scores (70%) plus synthesis quality factors (30%). Higher scores indicate more reliable responses.",
+      "metadata": {
+        "basedOnResponses": 3,
+        "_basedOnResponsesDescription": "Number of AI models that successfully contributed to this synthesis. More contributing models generally increase reliability.",
+        "averageConfidence": 0.5491197916937477,
+        "_averageConfidenceDescription": "Mean confidence score across all individual model responses. Indicates overall ensemble agreement and response quality.",
+        "consensusLevel": "low",
+        "_consensusLevelDescription": "Measure of agreement between different AI models. Higher consensus suggests more reliable and consistent responses across the ensemble."
+      }
+    },
+    "roles": [
+      {
+        "role": "gpt4o",
+        "content": "Exercise offers numerous benefits for both physical and mental health. Here’s a comprehensive overview:\n\n### Physical Benefits\n\n1. **Improves Cardiovascular Health**: Regular exercise strengthens the heart, improves circulation, and lowers blood pressure, reducing the risk of heart disease.\n\n2. **Enhances Strength and Endurance**: Strength training builds muscle mass and improves overall strength, while aerobic exercises increase stamina and endurance.\n\n3. **Weight Management**: Exercise helps burn calories, making it easier to maintain a healthy weight or lose weight when combined with a balanced diet.\n\n4. **Bone Health**: Weight-bearing exercises increase bone density and reduce the risk of osteoporosis.\n\n5. **Boosts Immune System**: Moderate exercise can enhance immune function, helping the body fight off illnesses.\n\n6. **Improves Flexibility and Balance**: Activities like yoga and stretching enhance flexibility and balance, reducing the risk of falls, especially in older adults.\n\n### Mental Benefits\n\n1. **Reduces Stress and Anxiety**: Physical activity increases the production of endorphins, the body’s natural mood lifters, helping to alleviate stress and anxiety.\n\n2. **Enhances Mood**: Regular exercise is linked to improved mood and a decrease in feelings of depression.\n\n3. **Boosts Cognitive Function**: Exercise promotes brain health by improving memory, attention, and overall cognitive abilities.\n\n4. **Increases Sleep Quality**: Regular activity can help you fall asleep faster and deepen sleep, leading to better rest and recovery.\n\n5. **Promotes Social Interaction**: Group exercises or team sports can foster social connections and create a sense of community.\n\n### Long-term Health Benefits\n\n1. **Chronic Disease Prevention**: Regular exercise can lower the risk of developing chronic diseases like type 2 diabetes, certain cancers, and metabolic syndrome.\n\n2. **Improves Longevity**: Engaging in regular physical activity is associated with a longer lifespan.\n\n3. **Enhances Mobility as You Age**: Staying active helps maintain mobility, independence, and quality of life in older age.\n\n### Conclusion\n\nIncorporating exercise into your routine can lead to significant improvements in both physical and mental health. Aim for at least 150 minutes of moderate aerobic activity or 75 minutes of vigorous activity each week, along with strength training on two or more days. Always consult with a healthcare professional before starting a new exercise program, especially if you have existing health concerns.",
+        "status": "fulfilled",
+        "model": "gpt-4o-mini",
+        "provider": "openai",
+        "wordCount": 340,
+        "characterCount": 2541,
+        "responseTime": 5966,
+        "confidence": {
+          "score": 0.5219202537045728,
+          "level": "low",
+          "factors": [
+            "Response generated successfully",
+            "Adequate response length",
+            "Well-structured response"
+          ]
+        },
+        "metadata": {
+          "confidenceLevel": "medium",
+          "modelReliability": 0.8,
+          "processingTime": 5966,
+          "tokenCount": 636,
+          "complexity": "medium"
+        },
+        "semanticConfidence": {
+          "score": 0.45202893386367543,
+          "components": {
+            "referenceSimilarity": 0.19789086745109025,
+            "referenceScore": 0.07915634698043611,
+            "grammarScore": 0.3,
+            "latencyScore": 0.07287258688323935,
+            "category": "technical"
+          }
+        },
+        "quality": {
+          "wordCount": 340,
+          "sentenceCount": 32,
+          "averageWordsPerSentence": 10.625,
+          "hasStructure": true,
+          "hasReasoning": false,
+          "complexity": "medium"
+        },
+        "_confidenceDescription": "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+        "_qualityDescription": "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+        "_metadataDescription": "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
+      },
+      {
+        "role": "gemini",
+        "content": "The benefits of regular exercise are extensive and impact nearly every system in the body, contributing significantly to both physical and mental well-being.  These benefits span across various aspects of health, from preventing chronic diseases to improving mood and cognitive function.\n\nFirstly, exercise plays a crucial role in preventing and managing chronic diseases.  Regular physical activity significantly reduces the risk of developing cardiovascular diseases, including heart disease, stroke, and high blood pressure. This is achieved through improved cardiovascular health, lower blood pressure, and healthier cholesterol levels.  Furthermore, exercise helps control blood sugar levels, reducing the risk of type 2 diabetes.  It also aids in weight management, combating obesity which is a major risk factor for numerous health problems.  Studies have also linked regular exercise to a decreased risk of certain types of cancer.\n\nBeyond disease prevention, exercise offers a multitude of other physical benefits.  It strengthens bones and muscles, improving balance and reducing the risk of falls, particularly important as we age.  It enhances flexibility and improves joint mobility, leading to increased range of motion and reduced stiffness.  Regular physical activity also boosts the immune system, making the body more resilient to infections.  Improved sleep quality is another significant benefit; exercise can regulate sleep patterns and promote more restful sleep.\n\nThe psychological benefits of exercise are equally compelling.  Physical activity acts as a powerful stress reliever, releasing endorphins that have mood-boosting effects.  Regular exercise can alleviate symptoms of anxiety and depression, improving overall mental well-being.  It can also enhance cognitive function, improving memory, attention, and concentration.  Finally, exercise provides a sense of accomplishment and boosts self-esteem, contributing to a more positive self-image and improved overall quality of life.  The key is to find activities you enjoy and can realistically incorporate into your routine, whether it's brisk walking, swimming, cycling, or team sports.  Even short bursts of activity throughout the day can contribute to significant health improvements.\n",
+        "status": "fulfilled",
+        "model": "gemini-1.5-flash",
+        "provider": "gemini",
+        "wordCount": 328,
+        "characterCount": 2270,
+        "responseTime": 2937,
+        "confidence": {
+          "score": 0.6021027884300719,
+          "level": "medium",
+          "factors": [
+            "Response generated successfully",
+            "Adequate response length",
+            "Well-structured response"
+          ]
+        },
+        "metadata": {
+          "confidenceLevel": "high",
+          "modelReliability": 0.8,
+          "processingTime": 2937,
+          "tokenCount": 568,
+          "complexity": "medium"
+        },
+        "semanticConfidence": {
+          "score": 0.5001468406143885,
+          "components": {
+            "referenceSimilarity": 0.19038304532657752,
+            "referenceScore": 0.07615321813063101,
+            "grammarScore": 0.3,
+            "latencyScore": 0.12399362248375745,
+            "category": "technical"
+          }
+        },
+        "quality": {
+          "wordCount": 328,
+          "sentenceCount": 20,
+          "averageWordsPerSentence": 16.4,
+          "hasStructure": true,
+          "hasReasoning": false,
+          "complexity": "medium"
+        },
+        "_confidenceDescription": "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+        "_qualityDescription": "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+        "_metadataDescription": "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
+      },
+      {
+        "role": "claude",
+        "content": "Benefits of Exercise Across Multiple Dimensions:\n\nPhysical Health Benefits:\n- Strengthens cardiovascular system\n- Builds muscle and bone density\n- Boosts immune function\n- Helps maintain healthy body weight\n- Reduces risk of chronic diseases like diabetes, heart disease\n- Improves overall physical endurance and strength\n\nMental Health Benefits:\n- Reduces stress and anxiety\n- Releases endorphins (natural mood elevators)\n- Improves sleep quality\n- Enhances cognitive function\n- Increases self-confidence\n- Helps manage depression symptoms\n\nLong-Term Wellness Impacts:\n- Increases life expectancy\n- Improves metabolic health\n- Supports healthy aging\n- Enhances overall quality of life\n- Reduces healthcare costs through preventative health\n\nPsychological/Emotional Benefits:\n- Provides natural stress relief\n- Promotes better emotional regulation\n- Creates opportunities for social interaction\n- Builds discipline and goal-setting skills\n- Offers sense of personal achievement\n\nRecommended Exercise Types:\n- Cardiovascular activities (walking, running, cycling)\n- Strength training\n- Flexibility exercises (yoga, stretching)\n- High-intensity interval training\n- Team sports\n\nKey Takeaway: Regular exercise is a powerful, holistic approach to improving physical, mental, and emotional well-being.",
+        "status": "fulfilled",
+        "model": "claude-3-5-haiku-latest",
+        "provider": "claude",
+        "wordCount": 141,
+        "characterCount": 1296,
+        "responseTime": 5771,
+        "confidence": {
+          "score": 0.5233363329465983,
+          "level": "low",
+          "factors": [
+            "Response generated successfully",
+            "Adequate response length",
+            "Well-structured response"
+          ]
+        },
+        "metadata": {
+          "confidenceLevel": "high",
+          "modelReliability": 0.8,
+          "processingTime": 5771,
+          "tokenCount": 324,
+          "complexity": "high"
+        },
+        "semanticConfidence": {
+          "score": 0.4369090470665691,
+          "components": {
+            "referenceSimilarity": 0.22909831962532526,
+            "referenceScore": 0.09163932785013011,
+            "grammarScore": 0.27,
+            "latencyScore": 0.07526971921643896,
+            "category": "technical"
+          }
+        },
+        "quality": {
+          "wordCount": 141,
+          "sentenceCount": 1,
+          "averageWordsPerSentence": 141,
+          "hasStructure": true,
+          "hasReasoning": false,
+          "complexity": "high"
+        },
+        "_confidenceDescription": "Individual model confidence calculated from response quality (length, structure, reasoning) and performance factors. Scores 0-1 where higher values indicate more reliable responses.",
+        "_qualityDescription": "Response quality metrics including word count, sentence structure, reasoning indicators, and complexity assessment used for ensemble weighting.",
+        "_metadataDescription": "Processing metrics including response time, token usage, and complexity scores that influence the model's weight in ensemble voting."
+      }
+    ],
+    "voting": {
+      "winner": "claude",
+      "_winnerDescription": "AI model selected as having the best response using sophisticated voting algorithm combining traditional confidence, diversity analysis, historical performance, and advanced tie-breaking mechanisms.",
+      "confidence": 0.85,
+      "_confidenceDescription": "Final confidence score (0-1) from sophisticated voting system. Incorporates traditional voting, diversity weighting, historical accuracy, and meta-voting analysis for enhanced reliability.",
+      "consensus": "strong",
+      "_consensusDescription": "Sophisticated consensus strength: 'very-strong' (>80% confidence), 'strong' (>60%), 'moderate' (>45%), 'weak' (>35%), 'very-weak' (<35%). Enhanced with diversity and historical analysis.",
+      "weights": {
+        "gpt4o": 0.3325581360515584,
+        "gemini": 0.3359493277567239,
+        "claude": 0.33149253619171765
+      },
+      "_weightsDescription": "Hybrid voting weights combining traditional confidence (30%), diversity analysis (20%), historical performance (25%), semantic confidence (15%), and reliability factors (10%).",
+      "sophisticatedVoting": {
+        "traditionalVoting": {
+          "winner": "claude",
+          "confidence": null,
+          "weights": {
+            "gpt4o": null,
+            "gemini": null,
+            "claude": null
+          },
+          "_description": "Traditional confidence-based voting without sophisticated enhancements"
+        },
+        "hybridVoting": {
+          "winner": "gemini",
+          "confidence": 0.3359493277567239,
+          "weights": {
+            "gpt4o": 0.3325581360515584,
+            "gemini": 0.3359493277567239,
+            "claude": 0.33149253619171765
+          },
+          "_description": "Hybrid voting combining traditional, diversity, historical, and semantic factors"
+        },
+        "diversityAnalysis": {
+          "overallDiversity": 0.18563675559801254,
+          "diversityWeights": {
+            "gpt4o": 0.8,
+            "gemini": 0.8,
+            "claude": 0.8
+          },
+          "clusterAnalysis": {
+            "clusters": [
+              {
+                "id": 0,
+                "responses": [
+                  "gpt4o",
+                  "gemini",
+                  "claude"
+                ],
+                "averageSimilarity": 0.8151813231647114,
+                "size": 3
+              }
+            ],
+            "totalClusters": 1,
+            "largestCluster": 3,
+            "averageClusterSize": 3
+          },
+          "_description": "Semantic diversity analysis showing how different responses are from each other"
+        },
+        "historicalPerformance": {
+          "weights": {
+            "gpt-4o-mini": 1,
+            "gemini-1.5-flash": 1,
+            "claude-3-5-haiku-latest": 1
+          },
+          "_description": "Model weights based on historical voting performance and accuracy"
+        },
+        "tieBreaking": {
+          "used": true,
+          "strategy": "response_time_adjusted",
+          "originalWinner": "gemini",
+          "finalWinner": "gemini",
+          "confidence": 0.6706300000000001,
+          "reasoning": "Selected based on response time efficiency: gemini: 2937ms, gpt4o: 5966ms, claude: 5771ms",
+          "_description": "Tie-breaking mechanism used when traditional voting was inconclusive"
+        },
+        "metaVoting": {
+          "used": true,
+          "winner": "claude",
+          "confidence": 0.85,
+          "reasoning": "Response_C provides a comprehensive overview of the benefits of exercise across multiple dimensions, including physical health, mental health, long-term wellness impacts, and psychological/emotional benefits. It covers a wide range of benefits and also includes recommended exercise types, making it highly relevant and valuable to the user's question about the benefits of exercise.",
+          "ranking": [
+            "gpt4o",
+            "gemini",
+            "claude"
+          ],
+          "_description": "AI-powered meta-voting analysis for quality assessment and ranking"
+        },
+        "abstention": {
+          "triggered": false,
+          "_description": "No abstention was needed - response quality was acceptable"
+        },
+        "analytics": {
+          "processingTime": 3981,
+          "votingDecisionId": "voting_1752410371021_vixyw0rcb",
+          "sophisticatedFeaturesUsed": [
+            "diversity_analysis",
+            "historical_performance",
+            "tie_breaking",
+            "meta_voting"
+          ],
+          "qualityScore": 0.7803455133397019,
+          "_description": "Comprehensive analytics showing which sophisticated voting features were utilized"
+        },
+        "_description": "Comprehensive sophisticated voting analysis including diversity scoring, historical accuracy, meta-voting, tie-breaking, and abstention logic for enhanced decision-making quality."
+      }
+    },
+    "metadata": {
+      "totalRoles": 3,
+      "successfulRoles": 3,
+      "failedRoles": 0,
+      "synthesisStatus": "success",
+      "sessionId": "test-session",
+      "memoryContextUsed": true,
+      "responseQuality": 0.6740072194682574,
+      "correlationId": "test-correlation",
+      "contextOptimization": {
+        "tokensUsed": 25,
+        "tokensAvailable": 840,
+        "efficiency": 0.03720238095238095,
+        "sectionsIncluded": 1,
+        "hierarchicalContext": true
+      },
+      "decisionTrace": {
+        "timestamp": "2025-07-13T12:39:26.930Z",
+        "correlationId": "14b1d8a7",
+        "steps": [
+          {
+            "step": "context_building",
+            "description": "Retrieved and optimized conversation context",
+            "details": {
+              "contextTokens": 25,
+              "contextSections": 1,
+              "hierarchicalContext": true,
+              "efficiency": 0.03720238095238095
+            },
+            "outcome": "success"
+          },
+          {
+            "step": "model_execution",
+            "description": "Executed parallel queries to AI models",
+            "details": {
+              "modelsAttempted": [
+                "gpt4o",
+                "gemini",
+                "claude"
+              ],
+              "modelsSuccessful": [
+                "gpt4o",
+                "gemini",
+                "claude"
+              ],
+              "modelsFailed": [],
+              "averageResponseTime": 4891,
+              "rawResponseSnippets": [
+                {
+                  "role": "gpt4o",
+                  "snippet": "Exercise offers numerous benefits for both physical and mental health. Here’s a comprehensive overvi...",
+                  "wordCount": 340,
+                  "confidence": 0.7999999999999999
+                },
+                {
+                  "role": "gemini",
+                  "snippet": "The benefits of regular exercise are extensive and impact nearly every system in the body, contribut...",
+                  "wordCount": 328,
+                  "confidence": 0.8999999999999999
+                },
+                {
+                  "role": "claude",
+                  "snippet": "Benefits of Exercise Across Multiple Dimensions:\n\nPhysical Health Benefits:\n- Strengthens cardiovasc...",
+                  "wordCount": 141,
+                  "confidence": 0.8999999999999999
+                }
+              ]
+            },
+            "outcome": "success"
+          },
+          {
+            "step": "confidence_calculation",
+            "description": "Calculated confidence scores for each response",
+            "details": {
+              "method": "multi_factor_analysis",
+              "factors": [
+                "response_length",
+                "processing_time",
+                "model_reliability"
+              ],
+              "scores": [
+                {
+                  "role": "gpt4o",
+                  "confidence": 0.7999999999999999,
+                  "factors": {
+                    "lengthScore": 0.9,
+                    "timeScore": 0.8,
+                    "reliabilityScore": 0.8
+                  }
+                },
+                {
+                  "role": "gemini",
+                  "confidence": 0.8999999999999999,
+                  "factors": {
+                    "lengthScore": 0.9,
+                    "timeScore": 1,
+                    "reliabilityScore": 0.8
+                  }
+                },
+                {
+                  "role": "claude",
+                  "confidence": 0.8999999999999999,
+                  "factors": {
+                    "lengthScore": 1,
+                    "timeScore": 0.8,
+                    "reliabilityScore": 0.8
+                  }
+                }
+              ]
+            },
+            "outcome": "completed"
+          },
+          {
+            "step": "voting_weights",
+            "description": "Applied weighted voting algorithm",
+            "details": {
+              "algorithm": "confidence_weighted",
+              "weights": [
+                {
+                  "role": "gpt4o",
+                  "confidence": 0.7999999999999999,
+                  "weight": 0.3076923076923077,
+                  "normalizedWeight": "30.8%"
+                },
+                {
+                  "role": "gemini",
+                  "confidence": 0.8999999999999999,
+                  "weight": 0.34615384615384615,
+                  "normalizedWeight": "34.6%"
+                },
+                {
+                  "role": "claude",
+                  "confidence": 0.8999999999999999,
+                  "weight": 0.34615384615384615,
+                  "normalizedWeight": "34.6%"
+                }
+              ],
+              "winner": "gemini"
+            },
+            "outcome": "completed"
+          },
+          {
+            "step": "synthesis_strategy",
+            "description": "Selected synthesis approach based on response analysis",
+            "details": {
+              "strategy": "unknown",
+              "rationale": "Applied default synthesis strategy",
+              "inputTokens": 0,
+              "outputTokens": 0
+            },
+            "outcome": "success"
+          }
+        ]
+      },
+      "enhancedSynthesis": {
+        "conflictResolution": false,
+        "contextIntegration": true,
+        "validationPassed": false,
+        "qualityLevel": "unknown",
+        "regenerated": true,
+        "processingTime": 39319
+      },
+      "timestamp": "2025-07-13T12:39:31.717Z",
+      "version": "4.0",
+      "explainMode": false,
+      "confidenceAnalysis": {
+        "overallConfidence": 0.8690153507444445,
+        "_overallConfidenceDescription": "Final confidence score for the entire ensemble response, combining synthesis quality with voting consensus adjustments.",
+        "modelAgreement": 0.6527104010298671,
+        "_modelAgreementDescription": "Measure of similarity between different AI model responses (0-1). Higher values indicate models provided consistent, aligned answers.",
+        "responseConsistency": 0.9310333547666901,
+        "_responseConsistencyDescription": "Assessment of how consistent the responses are across models in terms of content quality and structure. Higher consistency increases ensemble reliability.",
+        "qualityDistribution": {
+          "high": 0,
+          "medium": 1,
+          "low": 2,
+          "veryLow": 0,
+          "averageScore": 0.5491197916937477,
+          "scoreRange": {
+            "min": 0.5219202537045728,
+            "max": 0.6021027884300719
+          },
+          "totalResponses": 3
+        },
+        "_qualityDistributionDescription": "Breakdown of response quality levels (high/medium/low) across all models. More 'high' quality responses indicate better ensemble performance.",
+        "votingAnalysis": {
+          "consensusStrength": "strong",
+          "_consensusStrengthDescription": "Categorical assessment of voting agreement: strong consensus indicates clear winner, weak consensus suggests close competition between models.",
+          "winnerMargin": 0.0033911917051655527,
+          "_winnerMarginDescription": "Numerical difference between the winning model's weight and the second-place model. Larger margins indicate clearer ensemble decisions.",
+          "distributionEntropy": 0.9999852243862138,
+          "_distributionEntropyDescription": "Measure of weight distribution randomness. Lower entropy means concentrated voting (clear winner), higher entropy means distributed voting (close competition)."
+        }
+      },
+      "diagnostics": {
+        "error": "brierCalibrationService.getCalibratedProbability is not a function",
+        "_errorDescription": "Advanced diagnostics could not be generated due to service unavailability. Basic ensemble functionality remains operational."
+      },
+      "_diagnosticsDescription": "Advanced analytics including embedding similarity matrix, toxicity scores, readability metrics, and model calibration data for deep ensemble analysis.",
+      "costEstimate": {
+        "totalCost": 0.001224,
+        "breakdown": {
+          "inputTokens": 9,
+          "outputTokens": 1528,
+          "inputCost": 0.000002,
+          "outputCost": 0.001222
+        }
+      },
+      "_costEstimateDescription": "Estimated API costs for this ensemble request including input/output tokens and per-model pricing. Helps track usage and optimize cost efficiency."
+    }
+  },
+  "correlationId": "test-correlation"
+}
