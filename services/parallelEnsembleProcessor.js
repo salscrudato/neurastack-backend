@@ -247,18 +247,21 @@ class ParallelEnsembleProcessor extends EventEmitter {
           break;
           
         case 'gemini':
-          response = await clients.gemini.generateContent({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 800,
-              temperature: 0.3,
-              topP: 0.9
+          response = await clients.gemini.post(
+            `/models/gemini-1.5-flash:generateContent`,
+            {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: 800,
+                temperature: 0.3,
+                topP: 0.9
+              }
             }
-          });
+          );
           break;
           
         case 'claude':
-          response = await clients.claude.messages.create({
+          response = await clients.claude.post('/messages', {
             model: 'claude-3-5-haiku-latest',
             max_tokens: 800,
             temperature: 0.3,
@@ -475,9 +478,9 @@ class ParallelEnsembleProcessor extends EventEmitter {
       case 'gpt4o':
         return response.choices[0].message.content;
       case 'gemini':
-        return response.candidates[0].content.parts[0].text;
+        return response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
       case 'claude':
-        return response.content[0].text;
+        return response.data.content[0].text;
       default:
         return '';
     }
