@@ -403,7 +403,6 @@ class PostSynthesisValidator {
       return { score: 0.5, error: error.message };
     }
   }
-}
 
   /**
    * Calculate overall quality score from individual metrics

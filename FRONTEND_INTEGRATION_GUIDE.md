@@ -13,17 +13,16 @@ POST /default-ensemble
 ### Request Parameters
 
 #### Headers
-- `x-user-id` (optional): User identifier for personalization
-- `x-session-id` (optional): Session identifier for context management
+- `x-user-id` (required): User identifier for personalization
+- `x-session-id` (required): Session identifier for context management
 - `x-correlation-id` (optional): Request tracking identifier
 
 #### Body Parameters
 ```json
 {
   "prompt": "string (required) - The user's question or request",
-  "sessionId": "string (optional) - Session identifier",
-  "tier": "string (optional) - 'free' or 'premium', defaults to 'free'",
-  "explain": "boolean (optional) - Enable detailed explanation mode"
+  "sessionId": "string (required) - Session identifier",
+  "explain": "boolean (required, set to true) - Enable detailed explanation mode"
 }
 ```
 
