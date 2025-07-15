@@ -1249,6 +1249,18 @@ function getConfidenceFactors(role, qualityMetrics) {
  * Analyze response quality
  */
 function analyzeResponseQuality(content) {
+  // Safety check for undefined/null content
+  if (!content || typeof content !== 'string') {
+    return {
+      wordCount: 0,
+      sentenceCount: 0,
+      averageWordsPerSentence: 0,
+      hasStructure: false,
+      hasReasoning: false,
+      complexity: 0
+    };
+  }
+
   const wordCount = content.split(' ').length;
   const sentenceCount = content.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
 
@@ -1301,9 +1313,20 @@ function calculateSynthesisConfidence(synthesis, roles) {
   if (/\b(research|studies|evidence)\b/i.test(content)) score += 0.03; // Evidence-based
 
   // Synthesis uniqueness (not just copying one response)
+  // Safety check for undefined/null content
+  if (!content || typeof content !== 'string') {
+    return { score: 0, level: 'very-low', factors: ['Invalid content'] };
+  }
+
   const synthesisWords = new Set(content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
   let maxOverlap = 0;
+
   successfulRoles.forEach(role => {
+    // Safety check for role content
+    if (!role.content || typeof role.content !== 'string') {
+      return;
+    }
+
     const roleWords = new Set(role.content.toLowerCase().split(/\W+/).filter(w => w.length > 3));
     const intersection = new Set([...synthesisWords].filter(x => roleWords.has(x)));
     const overlap = intersection.size / Math.max(synthesisWords.size, 1);

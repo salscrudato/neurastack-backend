@@ -275,13 +275,13 @@ class ParallelEnsembleProcessor extends EventEmitter {
       
       const processingTime = Date.now() - startTime;
       const content = this.extractContent(response, model);
-      
+
       return {
         content,
         model: this.getModelName(model),
         provider: this.getProviderName(model),
         responseTime: processingTime,
-        wordCount: content.split(/\s+/).length,
+        wordCount: (content && typeof content === 'string') ? content.split(/\s+/).length : 0,
         confidence: this.calculateQuickConfidence(content, processingTime)
       };
       
@@ -476,13 +476,13 @@ class ParallelEnsembleProcessor extends EventEmitter {
   extractContent(response, model) {
     switch (model) {
       case 'gpt4o':
-        return response.choices[0].message.content;
+        return response.choices?.[0]?.message?.content || 'No response generated';
       case 'gemini':
         return response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
       case 'claude':
-        return response.data.content[0].text;
+        return response.data.content?.[0]?.text || 'No response generated';
       default:
-        return '';
+        return 'No response generated';
     }
   }
 
