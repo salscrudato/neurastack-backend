@@ -16,6 +16,7 @@
  *    and requests it be redone with better specifications
  */
 
+const dynamicConfig = require('../config/dynamicConfig');
 const monitoringService = require('./monitoringService');
 const logger = require('../utils/visualLogger');
 
@@ -24,21 +25,29 @@ class AbstentionService {
     this.abstentionHistory = new Map();
     this.reQueryAttempts = new Map();
     
-    // Configuration
+    // Configuration - using dynamic config
     this.abstentionThresholds = {
       veryWeakConsensus: true,        // Always consider abstention for very weak consensus
-      lowConfidence: 0.3,             // Abstain if confidence < 30%
-      highFailureRate: 0.5,           // Abstain if >50% of models failed
-      lowQualityScore: 0.4,           // Abstain if overall quality < 40%
-      highDiversityWithLowConsensus: { diversity: 0.8, consensus: 0.4 }
+      lowConfidence: dynamicConfig.abstention.thresholds.lowConfidence,
+      highFailureRate: dynamicConfig.abstention.thresholds.highFailureRate,
+      lowQualityScore: dynamicConfig.abstention.thresholds.lowQualityScore,
+      highDiversityWithLowConsensus: {
+        diversity: dynamicConfig.abstention.thresholds.highDiversityThreshold,
+        consensus: dynamicConfig.abstention.thresholds.lowConsensusThreshold
+      }
     };
 
     this.reQueryLimits = {
-      maxAttempts: 2,                 // Maximum re-query attempts per request
-      cooldownPeriod: 5000,           // 5 second cooldown between attempts
-      timeoutIncrease: 1.5,           // Increase timeout by 50% for re-queries
-      temperatureAdjustment: 0.1      // Adjust temperature for variation
+      maxAttempts: dynamicConfig.abstention.reQueryLimits.maxAttempts,
+      cooldownPeriod: dynamicConfig.abstention.reQueryLimits.cooldownPeriod,
+      timeoutIncrease: dynamicConfig.abstention.reQueryLimits.timeoutIncrease,
+      temperatureAdjustment: dynamicConfig.abstention.reQueryLimits.temperatureAdjustment
     };
+
+    console.log('🚀 Abstention Service initialized with dynamic configuration');
+    console.log(`   Low Confidence Threshold: ${this.abstentionThresholds.lowConfidence}`);
+    console.log(`   High Failure Rate Threshold: ${this.abstentionThresholds.highFailureRate}`);
+    console.log(`   Max Re-query Attempts: ${this.reQueryLimits.maxAttempts}`);
 
     // Alternative model configurations for re-queries
     this.alternativeConfigs = [

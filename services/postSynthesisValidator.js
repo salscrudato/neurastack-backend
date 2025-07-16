@@ -16,8 +16,14 @@
  *    quality assessors review every synthesized response before publication
  */
 
+const dynamicConfig = require('../config/dynamicConfig');
 const semanticConfidenceService = require('./semanticConfidenceService');
 const monitoringService = require('./monitoringService');
+const {
+  ValidationError,
+  errorHandler,
+  retryWithBackoff
+} = require('../utils/errorHandler');
 
 class PostSynthesisValidator {
   constructor() {
@@ -26,6 +32,10 @@ class PostSynthesisValidator {
       passedValidations: 0,
       failedValidations: 0,
       regenerationTriggers: 0,
+      regenerationSuccesses: 0,
+      regenerationFailures: 0,
+      fallbackValidationsUsed: 0,
+      retriesPerformed: 0,
       averageQualityScore: 0,
       qualityDistribution: {
         excellent: 0,    // > 0.9
@@ -35,33 +45,147 @@ class PostSynthesisValidator {
       }
     };
 
-    // Configurable quality thresholds
+    // Configurable quality thresholds - using dynamic config
     this.thresholds = {
       readability: {
-        minimum: 0.6,
-        optimal: 0.8
+        minimum: dynamicConfig.validation.thresholds.readability.minimum,
+        optimal: dynamicConfig.validation.thresholds.readability.optimal
       },
       factualConsistency: {
-        minimum: 0.7,
-        optimal: 0.85
+        minimum: dynamicConfig.validation.thresholds.factualConsistency.minimum,
+        optimal: dynamicConfig.validation.thresholds.factualConsistency.optimal
       },
       novelty: {
-        minimum: 0.5,
-        optimal: 0.75
+        minimum: dynamicConfig.validation.thresholds.novelty.minimum,
+        optimal: dynamicConfig.validation.thresholds.novelty.optimal
       },
       toxicity: {
-        maximum: 0.3,
-        optimal: 0.1
+        maximum: dynamicConfig.validation.thresholds.toxicity.maximum,
+        optimal: dynamicConfig.validation.thresholds.toxicity.optimal
       },
       overall: {
-        minimum: 0.65,
-        optimal: 0.8
+        minimum: dynamicConfig.validation.thresholds.overall.minimum,
+        optimal: dynamicConfig.validation.thresholds.overall.optimal
       }
     };
+
+    console.log('🚀 Post-Synthesis Validator initialized with dynamic configuration');
+    console.log(`   Readability Min/Optimal: ${this.thresholds.readability.minimum}/${this.thresholds.readability.optimal}`);
+    console.log(`   Factual Consistency Min/Optimal: ${this.thresholds.factualConsistency.minimum}/${this.thresholds.factualConsistency.optimal}`);
+    console.log(`   Overall Quality Min/Optimal: ${this.thresholds.overall.minimum}/${this.thresholds.overall.optimal}`);
   }
 
   /**
-   * Comprehensive validation of synthesis quality
+   * Comprehensive validation with regeneration capabilities
+   * @param {Object} synthesisResult - The synthesis to validate
+   * @param {Array} originalOutputs - Original AI responses
+   * @param {string} userPrompt - Original user prompt
+   * @param {string} correlationId - Request correlation ID
+   * @param {Object} options - Validation options including regeneration callback
+   * @returns {Promise<Object>} Detailed validation results
+   */
+  async validateWithRegeneration(synthesisResult, originalOutputs, userPrompt, correlationId, options = {}) {
+    const {
+      regenerationCallback = null,
+      maxRegenerationAttempts = 2,
+      enableFallbackValidation = true
+    } = options;
+
+    let currentSynthesis = synthesisResult;
+    let regenerationAttempt = 0;
+    let regenerationHistory = [];
+
+    while (regenerationAttempt <= maxRegenerationAttempts) {
+      try {
+        // Perform validation
+        const validationResult = await this.validateComprehensively(
+          currentSynthesis,
+          originalOutputs,
+          userPrompt,
+          correlationId
+        );
+
+        // If validation passes or no regeneration callback, return result
+        if (validationResult.passesThreshold || !regenerationCallback || regenerationAttempt >= maxRegenerationAttempts) {
+          if (regenerationAttempt > 0) {
+            validationResult.regenerationUsed = true;
+            validationResult.regenerationAttempts = regenerationAttempt;
+            validationResult.regenerationHistory = regenerationHistory;
+          }
+          return validationResult;
+        }
+
+        // Validation failed, attempt regeneration
+        regenerationAttempt++;
+        this.validationMetrics.regenerationTriggers++;
+
+        monitoringService.log('warn', `Validation failed, attempting regeneration ${regenerationAttempt}`, {
+          correlationId,
+          qualityScore: validationResult.overallQuality,
+          failedMetrics: this.getFailedMetrics(validationResult),
+          attempt: regenerationAttempt
+        }, correlationId);
+
+        // Store regeneration attempt info
+        regenerationHistory.push({
+          attempt: regenerationAttempt,
+          previousQuality: validationResult.overallQuality,
+          failedMetrics: this.getFailedMetrics(validationResult),
+          timestamp: new Date().toISOString()
+        });
+
+        // Attempt regeneration
+        const regeneratedSynthesis = await this.attemptRegeneration(
+          currentSynthesis,
+          validationResult,
+          originalOutputs,
+          userPrompt,
+          correlationId,
+          regenerationCallback
+        );
+
+        if (regeneratedSynthesis) {
+          currentSynthesis = regeneratedSynthesis;
+          this.validationMetrics.regenerationSuccesses++;
+        } else {
+          this.validationMetrics.regenerationFailures++;
+          break;
+        }
+
+      } catch (error) {
+        monitoringService.log('error', 'Validation with regeneration failed', {
+          error: error.message,
+          regenerationAttempt,
+          correlationId
+        }, correlationId);
+
+        // Use fallback validation if enabled
+        if (enableFallbackValidation) {
+          return this.performFallbackValidation(currentSynthesis, correlationId, error);
+        }
+
+        throw error;
+      }
+    }
+
+    // If we get here, regeneration failed
+    const finalValidation = await this.validateComprehensively(
+      currentSynthesis,
+      originalOutputs,
+      userPrompt,
+      correlationId
+    );
+
+    finalValidation.regenerationUsed = true;
+    finalValidation.regenerationAttempts = regenerationAttempt;
+    finalValidation.regenerationHistory = regenerationHistory;
+    finalValidation.regenerationExhausted = true;
+
+    return finalValidation;
+  }
+
+  /**
+   * Original comprehensive validation method (enhanced with error handling)
    * @param {Object} synthesisResult - The synthesis to validate
    * @param {Array} originalOutputs - Original AI responses
    * @param {string} userPrompt - Original user prompt
@@ -80,20 +204,23 @@ class PostSynthesisValidator {
         return this.createFailedValidation('Content too short or empty', correlationId);
       }
 
-      // Run all validation checks in parallel for efficiency
-      const [
-        readabilityResult,
-        factualConsistencyResult,
-        noveltyResult,
-        toxicityResult,
-        structuralResult
-      ] = await Promise.all([
-        this.validateReadability(content),
-        this.validateFactualConsistency(content, originalOutputs),
-        this.validateNovelty(content, originalOutputs),
-        this.validateToxicity(content),
-        this.validateStructure(content, userPrompt)
-      ]);
+      // Run all validation checks in parallel with error handling
+      const validationPromises = [
+        this.executeValidationWithRetry('readability', () => this.validateReadability(content), correlationId),
+        this.executeValidationWithRetry('factualConsistency', () => this.validateFactualConsistency(content, originalOutputs), correlationId),
+        this.executeValidationWithRetry('novelty', () => this.validateNovelty(content, originalOutputs), correlationId),
+        this.executeValidationWithRetry('toxicity', () => this.validateToxicity(content), correlationId),
+        this.executeValidationWithRetry('structure', () => this.validateStructure(content, userPrompt), correlationId)
+      ];
+
+      const results = await Promise.allSettled(validationPromises);
+
+      // Process results with fallbacks for failed validations
+      const readabilityResult = this.processValidationResult(results[0], 'readability', correlationId);
+      const factualConsistencyResult = this.processValidationResult(results[1], 'factualConsistency', correlationId);
+      const noveltyResult = this.processValidationResult(results[2], 'novelty', correlationId);
+      const toxicityResult = this.processValidationResult(results[3], 'toxicity', correlationId);
+      const structuralResult = this.processValidationResult(results[4], 'structure', correlationId);
 
       // Calculate overall quality score
       const overallQuality = this.calculateOverallQuality({
@@ -405,15 +532,15 @@ class PostSynthesisValidator {
   }
 
   /**
-   * Calculate overall quality score from individual metrics
+   * Calculate overall quality score from individual metrics - using dynamic config weights
    */
   calculateOverallQuality(metrics) {
     const weights = {
-      readability: 0.2,
-      factualConsistency: 0.3,
-      novelty: 0.25,
-      toxicity: 0.15,
-      structure: 0.1
+      readability: dynamicConfig.validation.qualityWeights.readability,
+      factualConsistency: dynamicConfig.validation.qualityWeights.factualConsistency,
+      novelty: dynamicConfig.validation.qualityWeights.novelty,
+      toxicity: dynamicConfig.validation.qualityWeights.toxicity,
+      structure: dynamicConfig.validation.qualityWeights.structure
     };
 
     return Object.keys(weights).reduce((total, metric) => {
@@ -498,6 +625,165 @@ class PostSynthesisValidator {
     const totalValidations = this.validationMetrics.totalValidations;
     this.validationMetrics.averageQualityScore =
       ((this.validationMetrics.averageQualityScore * (totalValidations - 1)) + validationResult.overallQuality) / totalValidations;
+  }
+
+  /**
+   * Execute validation with retry logic
+   */
+  async executeValidationWithRetry(validationType, validationFunction, correlationId) {
+    return await retryWithBackoff(validationFunction, {
+      maxAttempts: 2,
+      baseDelayMs: 500,
+      maxDelayMs: 2000,
+      onRetry: (error, attempt, delay) => {
+        this.validationMetrics.retriesPerformed++;
+        monitoringService.log('warn', `Validation retry: ${validationType}`, {
+          attempt,
+          error: error.message,
+          delay: `${delay}ms`,
+          correlationId
+        }, correlationId);
+      }
+    });
+  }
+
+  /**
+   * Process validation result with fallback
+   */
+  processValidationResult(result, validationType, correlationId) {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    } else {
+      monitoringService.log('warn', `Validation failed, using fallback: ${validationType}`, {
+        error: result.reason?.message || 'Unknown error',
+        correlationId
+      }, correlationId);
+
+      this.validationMetrics.fallbackValidationsUsed++;
+      return this.createFallbackValidationResult(validationType);
+    }
+  }
+
+  /**
+   * Create fallback validation result
+   */
+  createFallbackValidationResult(validationType) {
+    const fallbackResults = {
+      readability: { score: 0.6, gradeLevel: 10, fallbackUsed: true },
+      factualConsistency: { score: 0.5, fallbackUsed: true },
+      novelty: { score: 0.5, fallbackUsed: true },
+      toxicity: { score: 0.1, level: 'very-low', fallbackUsed: true },
+      structure: { score: 0.5, fallbackUsed: true }
+    };
+
+    return fallbackResults[validationType] || { score: 0.5, fallbackUsed: true };
+  }
+
+  /**
+   * Attempt regeneration of synthesis
+   */
+  async attemptRegeneration(currentSynthesis, validationResult, originalOutputs, userPrompt, correlationId, regenerationCallback) {
+    try {
+      if (!regenerationCallback) {
+        return null;
+      }
+
+      const regenerationContext = {
+        currentSynthesis,
+        validationResult,
+        originalOutputs,
+        userPrompt,
+        correlationId,
+        improvementSuggestions: validationResult.improvementSuggestions || []
+      };
+
+      monitoringService.log('info', 'Attempting synthesis regeneration', {
+        qualityScore: validationResult.overallQuality,
+        failedMetrics: this.getFailedMetrics(validationResult),
+        correlationId
+      }, correlationId);
+
+      const regeneratedSynthesis = await regenerationCallback(regenerationContext);
+
+      if (regeneratedSynthesis && regeneratedSynthesis.content) {
+        monitoringService.log('info', 'Synthesis regeneration successful', {
+          originalLength: currentSynthesis.content?.length || 0,
+          regeneratedLength: regeneratedSynthesis.content.length,
+          correlationId
+        }, correlationId);
+
+        return regeneratedSynthesis;
+      }
+
+      return null;
+
+    } catch (error) {
+      monitoringService.log('error', 'Synthesis regeneration failed', {
+        error: error.message,
+        correlationId
+      }, correlationId);
+
+      return null;
+    }
+  }
+
+  /**
+   * Get failed validation metrics
+   */
+  getFailedMetrics(validationResult) {
+    const failed = [];
+
+    if (validationResult.readability?.score < this.thresholds.readability.minimum) {
+      failed.push('readability');
+    }
+    if (validationResult.factualConsistency?.score < this.thresholds.factualConsistency.minimum) {
+      failed.push('factualConsistency');
+    }
+    if (validationResult.novelty?.score < this.thresholds.novelty.minimum) {
+      failed.push('novelty');
+    }
+    if (validationResult.toxicity?.score > this.thresholds.toxicity.maximum) {
+      failed.push('toxicity');
+    }
+    if (validationResult.overallQuality < this.thresholds.overall.minimum) {
+      failed.push('overallQuality');
+    }
+
+    return failed;
+  }
+
+  /**
+   * Perform fallback validation when main validation fails
+   */
+  performFallbackValidation(synthesisResult, correlationId, error) {
+    this.validationMetrics.fallbackValidationsUsed++;
+
+    monitoringService.log('warn', 'Using fallback validation', {
+      error: error.message,
+      correlationId
+    }, correlationId);
+
+    // Basic content validation
+    const content = synthesisResult.content || '';
+    const hasContent = content.length > 10;
+    const hasStructure = content.includes('.') && content.includes(' ');
+
+    const fallbackQuality = hasContent && hasStructure ? 0.6 : 0.3;
+
+    return {
+      passesThreshold: fallbackQuality >= 0.5,
+      overallQuality: fallbackQuality,
+      qualityLevel: fallbackQuality >= 0.7 ? 'good' : fallbackQuality >= 0.5 ? 'acceptable' : 'poor',
+      fallbackValidation: true,
+      error: error.message,
+      correlationId,
+      readability: { score: fallbackQuality, fallbackUsed: true },
+      factualConsistency: { score: fallbackQuality, fallbackUsed: true },
+      novelty: { score: fallbackQuality, fallbackUsed: true },
+      toxicity: { score: 0.1, level: 'very-low', fallbackUsed: true },
+      structure: { score: fallbackQuality, fallbackUsed: true },
+      improvementSuggestions: ['Validation system temporarily unavailable - basic content check performed']
+    };
   }
 
   /**

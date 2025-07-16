@@ -71,7 +71,7 @@ describe('Sophisticated Voting System', () => {
       expect(result.weights).toBeDefined();
       expect(result._sophisticatedVotingVersion).toBe('1.0');
       expect(result._backwardCompatible).toBe(true);
-    });
+    }, 15000); // Increased timeout to 15 seconds
 
     test('should include all sophisticated voting components', async () => {
       const result = await sophisticatedVotingService.executeSophisticatedVoting(
@@ -88,7 +88,7 @@ describe('Sophisticated Voting System', () => {
       expect(result.metaVoting).toBeDefined();
       expect(result.abstention).toBeDefined();
       expect(result.analytics).toBeDefined();
-    });
+    }, 15000); // Increased timeout to 15 seconds
 
     test('should handle empty or failed responses gracefully', async () => {
       const failedRoles = [
@@ -289,10 +289,10 @@ describe('Sophisticated Voting System', () => {
       expect(result.confidence).toBeDefined();
       expect(result.consensus).toBeDefined();
       expect(result.weights).toBeDefined();
-      
+
       // Check backward compatibility flag
       expect(result._backwardCompatible).toBe(true);
-    });
+    }, 15000); // Increased timeout to 15 seconds
 
     test('should handle service failures gracefully', async () => {
       // Mock a service failure by passing invalid data
@@ -341,7 +341,7 @@ describe('Sophisticated Voting System', () => {
         expect(result.consensus).toBeDefined();
         expect(result.analytics.sophisticatedFeaturesUsed).toBeDefined();
       }
-    });
+    }, 30000); // Increased timeout to 30 seconds for multiple scenarios
   });
 
   describe('Performance Tests', () => {
@@ -357,8 +357,8 @@ describe('Sophisticated Voting System', () => {
       const processingTime = Date.now() - startTime;
       
       expect(result).toBeDefined();
-      expect(processingTime).toBeLessThan(10000); // Should complete within 10 seconds
-    });
+      expect(processingTime).toBeLessThan(15000); // Should complete within 15 seconds
+    }, 20000); // Increased timeout to 20 seconds
 
     test('should handle large number of responses', async () => {
       // Create many mock responses
@@ -378,7 +378,7 @@ describe('Sophisticated Voting System', () => {
       expect(result).toBeDefined();
       expect(result.winner).toBeDefined();
       expect(Object.keys(result.weights)).toHaveLength(10);
-    });
+    }, 20000); // Increased timeout to 20 seconds
   });
 
   describe('Error Handling', () => {

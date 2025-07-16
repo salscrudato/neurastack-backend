@@ -204,7 +204,7 @@ describe('Health Router', () => {
 
       expect(response.body).toEqual({
         status: 'ok',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-1.5-flash',
         response: 'AI works by processing data through neural networks to learn patterns and make predictions.'
       });
 
@@ -244,7 +244,7 @@ describe('Health Router', () => {
 
       expect(response.body).toEqual({
         status: 'ok',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-flash',
         response: 'No response'
       });
     });
@@ -264,7 +264,7 @@ describe('Health Router', () => {
 
       expect(response.body).toEqual({
         status: 'error',
-        message: 'Failed to fetch response from Gemini API.',
+        message: 'Failed to fetch from Gemini.',
         error: { error: 'API Error' }
       });
     });
@@ -279,7 +279,7 @@ describe('Health Router', () => {
 
       expect(response.body).toEqual({
         status: 'error',
-        message: 'Failed to fetch response from Gemini API.',
+        message: 'Failed to fetch from Gemini.',
         error: 'Network Error'
       });
     });

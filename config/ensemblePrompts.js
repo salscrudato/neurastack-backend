@@ -3,6 +3,8 @@
 // Determine tier based on environment or user settings
 const TIER = process.env.NEURASTACK_TIER || 'free'; // 'free', 'premium'
 
+const dynamicConfig = require('./dynamicConfig');
+
 // Cost-optimized models for different tiers
 const MODEL_CONFIGS = {
   free: {
@@ -21,35 +23,18 @@ const MODEL_CONFIGS = {
   }
 };
 
-// Tier-specific configurations - Optimized for cost and performance
+// Tier-specific configurations - Using dynamic configuration
 const TIER_CONFIGS = {
-  free: {
-    sharedWordLimit: 1000,        // Optimized for cost while maintaining quality
-    maxTokensPerRole: 1200,       // Increased slightly for better responses under load
-    maxSynthesisTokens: 1600,    // Increased for better synthesis quality
-    maxCharactersPerRole: 4800,  // Increased for better response quality
-    timeoutMs: 75000,            // Increased timeout for 25+ concurrent users (50 seconds)
-    requestsPerHour: 25,         // Optimized for 25+ concurrent users
-    requestsPerDay: 150,         // Increased daily limits for higher usage
-    maxPromptLength: 1500,       // Increased for more detailed prompts
-    enableCaching: true,         // Enable response caching for cost reduction
-    cacheTTL: 600,              // Increased cache TTL for better performance (10 minutes)
-    concurrencyLimit: 25        // Added explicit concurrency limit
-  },
-  premium: {
-    sharedWordLimit: 800,        // Higher quality responses for premium
-    maxTokensPerRole: 1600,      // Increased for premium quality under load
-    maxSynthesisTokens: 2000,    // Higher synthesis quality
-    maxCharactersPerRole: 3800,  // More comprehensive responses
-    timeoutMs: 75000,            // Extended timeout for complex requests under load (75 seconds)
-    requestsPerHour: 150,        // Increased limits for premium users
-    requestsPerDay: 1500,        // Higher premium daily limits
-    maxPromptLength: 4000,       // Longer prompts allowed for premium
-    enableCaching: true,         // Enable caching for premium too
-    cacheTTL: 300,              // Balanced cache for premium (5 minutes)
-    concurrencyLimit: 50        // Higher concurrency limit for premium
-  }
+  free: dynamicConfig.tiers.free,
+  premium: dynamicConfig.tiers.premium
 };
+
+console.log('🚀 Ensemble Prompts initialized with dynamic tier configurations');
+console.log(`   Current Tier: ${TIER}`);
+console.log(`   Shared Word Limit: ${TIER_CONFIGS[TIER].sharedWordLimit}`);
+console.log(`   Max Tokens Per Role: ${TIER_CONFIGS[TIER].maxTokensPerRole}`);
+console.log(`   Timeout: ${TIER_CONFIGS[TIER].timeoutMs}ms`);
+console.log(`   Cache TTL: ${TIER_CONFIGS[TIER].cacheTTL}s`);
 
 const currentTierConfig = TIER_CONFIGS[TIER];
 const currentModels = MODEL_CONFIGS[TIER];

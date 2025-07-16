@@ -14,7 +14,6 @@
 const request = require('supertest');
 const app = require('../index');
 const { getModelConfigService } = require('../services/modelConfigService');
-const { getPerformanceOptimizer } = require('../services/performanceOptimizer');
 
 describe('🚀 NeuraStack Optimization Suite', () => {
   
@@ -66,52 +65,7 @@ describe('🚀 NeuraStack Optimization Suite', () => {
     });
   });
 
-  describe('⚡ Performance Optimization Service', () => {
-    let optimizer;
-
-    beforeAll(() => {
-      optimizer = getPerformanceOptimizer();
-    });
-
-    test('📊 should collect performance metrics', () => {
-      optimizer.collectMetrics();
-      
-      const summary = optimizer.getPerformanceSummary();
-      expect(summary).toBeDefined();
-      expect(summary.memoryUsage).toBeDefined();
-      expect(summary.memoryUsage.current).toBeGreaterThan(0);
-    });
-
-    test('⏱️ should record response times', () => {
-      const responseTime = 1234;
-      optimizer.recordResponseTime(responseTime);
-      
-      const summary = optimizer.getPerformanceSummary();
-      expect(summary.responseTime.current).toBe(responseTime);
-    });
-
-    test('📈 should update cache metrics', () => {
-      const cacheStats = { hits: 80, misses: 20 };
-      optimizer.updateCacheMetrics(cacheStats);
-      
-      const summary = optimizer.getPerformanceSummary();
-      expect(summary.cachePerformance.hitRate).toBe(80);
-    });
-
-    test('🤖 should track AI model performance', () => {
-      const modelId = 'test-ai-model';
-      const performance = {
-        responseTime: 2000,
-        successRate: 0.95,
-        costEfficiency: 0.8
-      };
-
-      optimizer.updateModelPerformance(modelId, performance);
-      
-      expect(optimizer.metrics.aiModelPerformance.averageResponseTime.get(modelId)).toBe(2000);
-      expect(optimizer.metrics.aiModelPerformance.successRate.get(modelId)).toBe(0.95);
-    });
-  });
+  // Performance optimization tests removed - service no longer exists
 
   describe('🎛️ Admin Interface', () => {
     test('🏠 should serve admin dashboard', async () => {
@@ -281,39 +235,11 @@ describe('🚀 NeuraStack Optimization Suite', () => {
     });
   });
 
-  describe('🧹 Cleanup and Resource Management', () => {
-    test('🗑️ should handle graceful shutdown', () => {
-      const optimizer = getPerformanceOptimizer();
-      
-      // 🛑 Test stopping the optimizer
-      optimizer.stop();
-      
-      // 🔍 Verify it stopped gracefully
-      expect(optimizer.monitoringInterval).toBeUndefined();
-    });
-
-    test('💾 should manage memory efficiently', () => {
-      const initialMemory = process.memoryUsage().heapUsed;
-      
-      // 🔄 Perform some operations
-      const largeArray = new Array(1000).fill('test-data');
-      
-      // 🗑️ Clean up
-      largeArray.length = 0;
-      
-      // 📊 Memory should be manageable
-      const finalMemory = process.memoryUsage().heapUsed;
-      expect(finalMemory).toBeDefined();
-    });
-  });
+  // Cleanup tests removed - performance optimizer service no longer exists
 });
 
 // 🧹 Global test cleanup
 afterAll(async () => {
-  // 🛑 Stop any running services
-  const optimizer = getPerformanceOptimizer();
-  optimizer.stop();
-  
   // ⏱️ Give services time to clean up
   await new Promise(resolve => setTimeout(resolve, 1000));
 });

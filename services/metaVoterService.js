@@ -17,6 +17,7 @@
  */
 
 const OpenAI = require('openai');
+const dynamicConfig = require('../config/dynamicConfig');
 const monitoringService = require('./monitoringService');
 const logger = require('../utils/visualLogger');
 
@@ -26,18 +27,24 @@ class MetaVoterService {
     this.metaVotingHistory = new Map();
     this.biasDetectionMetrics = new Map();
     
-    // Configuration
-    this.metaVoterModel = 'gpt-3.5-turbo';
-    this.maxTokens = 800;
-    this.temperature = 0.3; // Lower temperature for more consistent judgments
-    this.timeout = 15000; // 15 second timeout
-    
-    // Thresholds for triggering meta-voting
+    // Configuration - using dynamic config
+    this.metaVoterModel = dynamicConfig.metaVoter.model;
+    this.maxTokens = dynamicConfig.metaVoter.maxTokens;
+    this.temperature = dynamicConfig.metaVoter.temperature;
+    this.timeout = dynamicConfig.metaVoter.timeout;
+
+    // Thresholds for triggering meta-voting - using dynamic config
     this.triggerThresholds = {
-      maxWeightDifference: 0.05,  // Trigger if top weights are within 5%
-      minConsensusStrength: 0.4,  // Trigger if consensus is weak
+      maxWeightDifference: dynamicConfig.metaVoter.triggerThresholds.maxWeightDifference,
+      minConsensusStrength: dynamicConfig.metaVoter.triggerThresholds.minConsensusStrength,
       tieBreakingRequired: true   // Always available for tie-breaking
     };
+
+    console.log('🚀 Meta Voter Service initialized with dynamic configuration');
+    console.log(`   Model: ${this.metaVoterModel}`);
+    console.log(`   Max Tokens: ${this.maxTokens}`);
+    console.log(`   Temperature: ${this.temperature}`);
+    console.log(`   Timeout: ${this.timeout}ms`);
 
     this.initializeOpenAI();
   }

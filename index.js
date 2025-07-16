@@ -88,7 +88,6 @@ initializeFirebase();
 // ============================================================================
 const healthRoutes = require('./routes/health');
 const memoryRoutes = require('./routes/memory');
-const workoutRoutes = require('./routes/workout');
 const adminRoutes = require('./routes/admin');
 
 const MemoryLifecycleManager = require('./services/memoryLifecycle');
@@ -144,7 +143,6 @@ app.use((err, req, res, next) => {
 // ============================================================================
 app.use('/', healthRoutes);
 app.use('/memory', memoryRoutes);
-app.use('/workout', workoutRoutes);
 app.use('/admin', adminRoutes);
 
 // ============================================================================
@@ -179,7 +177,7 @@ if (require.main === module) {
     logger.success('Intelligent forgetting active (24h)', {}, 'memory');
 
     // System capabilities log (simplified)
-    logger.info('System ready: AI Ensemble (low-cost models), Memory, Workout API, Monitoring, Caching, Security', {}, 'system');
+    logger.info('System ready: AI Ensemble (low-cost models), Memory, Monitoring, Caching, Security', {}, 'system');
 
     // Graceful shutdown (unchanged but simplified function calls)
     setupGracefulShutdown(server);

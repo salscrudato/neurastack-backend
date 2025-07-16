@@ -20,6 +20,8 @@ const { promisify } = require('util');
 const compress = promisify(zlib.gzip);
 const decompress = promisify(zlib.gunzip);
 
+const dynamicConfig = require('../config/dynamicConfig');
+
 class EnhancedEnsembleCache {
   constructor(cacheService, monitoringService) {
     this.cacheService = cacheService;
@@ -42,20 +44,26 @@ class EnhancedEnsembleCache {
       predictiveHits: 0
     };
     
-    // Configuration
+    // Configuration - using dynamic config
     this.config = {
-      maxCacheSize: 10000,
-      similarityThreshold: 0.8,
-      qualityThreshold: 0.7,
-      compressionThreshold: 1024,
-      userPatternWindow: 100,
-      predictiveCacheSize: 500,
+      maxCacheSize: dynamicConfig.cache.maxCacheSize,
+      similarityThreshold: dynamicConfig.cache.similarityThreshold,
+      qualityThreshold: dynamicConfig.cache.qualityThreshold,
+      compressionThreshold: dynamicConfig.cache.compressionThreshold,
+      userPatternWindow: dynamicConfig.cache.userPatternWindow,
+      predictiveCacheSize: dynamicConfig.cache.predictiveCacheSize,
       ttl: {
-        highQuality: 7200,    // 2 hours for high quality responses
-        mediumQuality: 3600,  // 1 hour for medium quality
-        lowQuality: 1800      // 30 minutes for low quality
+        highQuality: dynamicConfig.cache.ttl.highQuality,
+        mediumQuality: dynamicConfig.cache.ttl.mediumQuality,
+        lowQuality: dynamicConfig.cache.ttl.lowQuality
       }
     };
+
+    console.log('🚀 Enhanced Ensemble Cache initialized with dynamic configuration');
+    console.log(`   Max Cache Size: ${this.config.maxCacheSize}`);
+    console.log(`   Similarity Threshold: ${this.config.similarityThreshold}`);
+    console.log(`   Quality Threshold: ${this.config.qualityThreshold}`);
+    console.log(`   TTL High/Medium/Low: ${this.config.ttl.highQuality}s/${this.config.ttl.mediumQuality}s/${this.config.ttl.lowQuality}s`);
     
     this.startCleanupInterval();
     console.log('🚀 Enhanced Ensemble Cache initialized');

@@ -19,6 +19,7 @@
 
 const admin = require('firebase-admin');
 const { v4: generateUUID } = require('uuid');
+const dynamicConfig = require('../config/dynamicConfig');
 
 /**
  * 🤖 Model Configuration Manager Class
@@ -36,7 +37,7 @@ class ModelConfigService {
     // ⚡ STEP 3: Initialize cache for fast access
     this.configCache = new Map();
     this.cacheExpiry = new Map();
-    this.CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+    this.CACHE_TTL = dynamicConfig.modelConfig.cacheTTL; // Dynamic cache TTL
     
     // 🔧 STEP 4: Initialize service
     this.initializeService();

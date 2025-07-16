@@ -17,6 +17,7 @@
  */
 
 const admin = require('firebase-admin');
+const dynamicConfig = require('../config/dynamicConfig');
 const monitoringService = require('./monitoringService');
 const logger = require('../utils/visualLogger');
 
@@ -29,17 +30,22 @@ class VotingHistoryService {
     this.modelPerformanceHistory = new Map();
     this.consensusPatterns = new Map();
     
-    // Configuration
-    this.maxHistorySize = 1000; // Maximum voting records to keep per model
-    this.adaptationWindow = 100; // Number of recent votes to consider for adaptation
-    this.performanceDecayFactor = 0.95; // Decay factor for historical performance
+    // Configuration - using dynamic config
+    this.maxHistorySize = dynamicConfig.votingHistory.maxHistorySize;
+    this.adaptationWindow = dynamicConfig.votingHistory.adaptationWindow;
+    this.performanceDecayFactor = dynamicConfig.votingHistory.performanceDecayFactor;
     this.consensusThresholds = {
-      veryWeak: 0.3,
-      weak: 0.45,
-      moderate: 0.6,
-      strong: 0.75,
-      veryStrong: 0.9
+      veryWeak: dynamicConfig.votingHistory.consensusThresholds.veryWeak,
+      weak: dynamicConfig.votingHistory.consensusThresholds.weak,
+      moderate: dynamicConfig.votingHistory.consensusThresholds.moderate,
+      strong: dynamicConfig.votingHistory.consensusThresholds.strong,
+      veryStrong: dynamicConfig.votingHistory.consensusThresholds.veryStrong
     };
+
+    console.log('🚀 Voting History Service initialized with dynamic configuration');
+    console.log(`   Max History Size: ${this.maxHistorySize}`);
+    console.log(`   Adaptation Window: ${this.adaptationWindow}`);
+    console.log(`   Performance Decay Factor: ${this.performanceDecayFactor}`);
 
     this.initializeFirestore();
   }

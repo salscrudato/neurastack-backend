@@ -15,22 +15,28 @@
 
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const { EventEmitter } = require('events');
+const dynamicConfig = require('../config/dynamicConfig');
 
 class ParallelEnsembleProcessor extends EventEmitter {
   constructor(config = {}) {
     super();
     
     this.config = {
-      maxConcurrentModels: 3,
-      maxConcurrentSynthesis: 2,
-      modelTimeout: 15000,        // Reduced from default
-      synthesisTimeout: 10000,    // Reduced from 39s
-      votingTimeout: 3000,        // Reduced from 4s
-      retryAttempts: 2,
-      connectionPoolSize: 5,
+      maxConcurrentModels: dynamicConfig.parallel.maxConcurrentModels,
+      maxConcurrentSynthesis: dynamicConfig.parallel.maxConcurrentSynthesis,
+      modelTimeout: dynamicConfig.parallel.modelTimeout,
+      synthesisTimeout: dynamicConfig.parallel.synthesisTimeout,
+      votingTimeout: dynamicConfig.parallel.votingTimeout,
+      retryAttempts: dynamicConfig.parallel.retryAttempts,
+      connectionPoolSize: dynamicConfig.parallel.connectionPoolSize,
       enableWorkerThreads: false, // Disabled for now due to complexity
-      ...config
+      ...config // Allow override of dynamic config
     };
+
+    console.log('🚀 Parallel Ensemble Processor initialized with dynamic configuration');
+    console.log(`   Max Concurrent Models: ${this.config.maxConcurrentModels}`);
+    console.log(`   Model Timeout: ${this.config.modelTimeout}ms`);
+    console.log(`   Synthesis Timeout: ${this.config.synthesisTimeout}ms`);
     
     // Performance tracking
     this.metrics = {
@@ -111,33 +117,55 @@ class ParallelEnsembleProcessor extends EventEmitter {
   async executeModelsInParallel(userPrompt, context, modelConfigs, correlationId) {
     const models = ['gpt4o', 'gemini', 'claude'];
     const enhancedPrompt = context ? `${context}\n\n${userPrompt}` : userPrompt;
-    
+
     console.log(`🤖 [${correlationId}] Executing ${models.length} models in parallel`);
-    
+
     // Create parallel model execution promises
     const modelPromises = models.map(async (model) => {
       const operationId = `${correlationId}-${model}`;
       this.activeOperations.add(operationId);
-      
+
       try {
         const result = await this.executeModelWithRetry(
-          model, 
-          enhancedPrompt, 
+          model,
+          enhancedPrompt,
           modelConfigs?.[model],
           correlationId
         );
-        
+
         this.activeOperations.delete(operationId);
         return {
           role: model,
           ...result,
           status: 'fulfilled'
         };
-        
+
       } catch (error) {
         this.activeOperations.delete(operationId);
         console.warn(`⚠️ [${correlationId}] Model ${model} failed:`, error.message);
-        
+
+        // Try xAI Grok as fallback for Gemini
+        if (model === 'gemini') {
+          console.log(`🔄 [${correlationId}] Trying xAI Grok as fallback for Gemini`);
+          try {
+            const fallbackResult = await this.executeModelWithRetry(
+              'xai',
+              enhancedPrompt,
+              modelConfigs?.xai || { model: 'grok-2-1212', timeout: 15000 },
+              correlationId
+            );
+
+            return {
+              role: model, // Keep original role for voting consistency
+              ...fallbackResult,
+              status: 'fulfilled',
+              fallbackUsed: 'xai-grok'
+            };
+          } catch (fallbackError) {
+            console.warn(`⚠️ [${correlationId}] xAI fallback also failed:`, fallbackError.message);
+          }
+        }
+
         return {
           role: model,
           status: 'rejected',
@@ -147,17 +175,17 @@ class ParallelEnsembleProcessor extends EventEmitter {
         };
       }
     });
-    
+
     // Execute with concurrency control
     const results = await this.executeConcurrently(
-      modelPromises, 
+      modelPromises,
       this.config.maxConcurrentModels,
       this.config.modelTimeout
     );
-    
+
     const successful = results.filter(r => r.status === 'fulfilled');
     console.log(`✅ [${correlationId}] Models completed: ${successful.length}/${models.length} successful`);
-    
+
     return results;
   }
 
@@ -268,7 +296,20 @@ class ParallelEnsembleProcessor extends EventEmitter {
             messages: [{ role: 'user', content: prompt }]
           });
           break;
-          
+
+        case 'xai':
+          response = await clients.xai.post('/chat/completions', {
+            model: 'grok-2-1212',
+            messages: [
+              { role: 'system', content: 'You are Grok, a helpful AI assistant. Provide concise, accurate responses.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 800,
+            temperature: 0.3,
+            top_p: 0.9
+          });
+          break;
+
         default:
           throw new Error(`Unknown model: ${model}`);
       }
@@ -441,7 +482,8 @@ class ParallelEnsembleProcessor extends EventEmitter {
     return {
       gpt4o: { model: 'gpt-4o-mini', timeout: 15000 },
       gemini: { model: 'gemini-1.5-flash', timeout: 15000 },
-      claude: { model: 'claude-3-5-haiku-latest', timeout: 15000 }
+      claude: { model: 'claude-3-5-haiku-latest', timeout: 15000 },
+      xai: { model: 'grok-2-1212', timeout: 15000 }
     };
   }
 
@@ -481,6 +523,8 @@ class ParallelEnsembleProcessor extends EventEmitter {
         return response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
       case 'claude':
         return response.data.content?.[0]?.text || 'No response generated';
+      case 'xai':
+        return response.data.choices?.[0]?.message?.content || 'No response generated';
       default:
         return 'No response generated';
     }
@@ -490,7 +534,8 @@ class ParallelEnsembleProcessor extends EventEmitter {
     const names = {
       'gpt4o': 'gpt-4o-mini',
       'gemini': 'gemini-1.5-flash',
-      'claude': 'claude-3-5-haiku-latest'
+      'claude': 'claude-3-5-haiku-latest',
+      'xai': 'grok-2-1212'
     };
     return names[model] || model;
   }
@@ -499,7 +544,8 @@ class ParallelEnsembleProcessor extends EventEmitter {
     const providers = {
       'gpt4o': 'openai',
       'gemini': 'gemini',
-      'claude': 'claude'
+      'claude': 'claude',
+      'xai': 'xai'
     };
     return providers[model] || 'unknown';
   }

@@ -15,6 +15,14 @@
 
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
+const dynamicConfig = require('../config/dynamicConfig');
+const {
+  NeuraStackError,
+  SynthesisError,
+  VotingError,
+  errorHandler,
+  retryWithBackoff
+} = require('../utils/errorHandler');
 
 class EnsemblePerformanceOptimizer extends EventEmitter {
   constructor(cacheService, monitoringService) {
@@ -23,28 +31,40 @@ class EnsemblePerformanceOptimizer extends EventEmitter {
     this.cacheService = cacheService;
     this.monitoringService = monitoringService;
     
-    // Performance metrics
+    // Performance metrics with error tracking
     this.metrics = {
       optimizationHits: 0,
       synthesisSpeedups: 0,
       votingSpeedups: 0,
       cacheHitRate: 0,
       averageProcessingTime: 0,
-      parallelProcessingGains: 0
+      parallelProcessingGains: 0,
+      // Error handling metrics
+      optimizationFailures: 0,
+      parallelProcessingFailures: 0,
+      fallbacksUsed: 0,
+      retriesPerformed: 0,
+      timeoutFailures: 0
     };
     
-    // Optimization configuration
+    // Optimization configuration - using dynamic config
     this.config = {
-      enableParallelSynthesis: true,
-      enableSimilarityMatching: true,
-      enableVotingCache: true,
-      enablePreWarming: true,
-      similarityThreshold: 0.85,
-      maxParallelOperations: 3,
-      synthesisTimeout: 15000, // Reduced from 39s
-      votingTimeout: 2000,     // Reduced from 4s
-      preWarmInterval: 300000  // 5 minutes
+      enableParallelSynthesis: dynamicConfig.performance.enableParallelSynthesis,
+      enableSimilarityMatching: dynamicConfig.performance.enableSimilarityMatching,
+      enableVotingCache: dynamicConfig.performance.enableVotingCache,
+      enablePreWarming: dynamicConfig.performance.enablePreWarming,
+      similarityThreshold: dynamicConfig.performance.similarityThreshold,
+      maxParallelOperations: dynamicConfig.performance.maxParallelOperations,
+      synthesisTimeout: dynamicConfig.performance.synthesisTimeout,
+      votingTimeout: dynamicConfig.performance.votingTimeout,
+      preWarmInterval: dynamicConfig.performance.preWarmInterval
     };
+
+    console.log('🚀 Ensemble Performance Optimizer initialized with dynamic configuration');
+    console.log(`   Similarity Threshold: ${this.config.similarityThreshold}`);
+    console.log(`   Synthesis Timeout: ${this.config.synthesisTimeout}ms`);
+    console.log(`   Voting Timeout: ${this.config.votingTimeout}ms`);
+    console.log(`   Pre-warm Interval: ${this.config.preWarmInterval}ms`);
     
     // Similarity cache for response matching
     this.similarityCache = new Map();
@@ -102,57 +122,231 @@ class EnsemblePerformanceOptimizer extends EventEmitter {
   }
 
   /**
-   * Process synthesis and voting in parallel for maximum performance
+   * Process synthesis and voting in parallel with robust error handling
    */
   async processInParallel(roleOutputs, userPrompt, correlationId, userId, sessionId) {
-    const operations = [];
+    const startTime = Date.now();
 
-    // Operation 1: Optimized synthesis
-    operations.push(
-      this.optimizedSynthesis(roleOutputs, userPrompt, correlationId, userId, sessionId)
-    );
+    try {
+      this.monitoringService?.log('debug', 'Starting parallel processing', {
+        operationsCount: this.calculateOperationsCount(userId, sessionId),
+        correlationId
+      }, correlationId);
 
-    // Operation 2: Cached or optimized voting
-    operations.push(
-      this.optimizedVoting(roleOutputs, userPrompt, correlationId)
-    );
+      const operations = [];
+      const operationNames = [];
 
-    // Operation 3: Context preparation (if needed)
-    if (userId && sessionId) {
+      // Operation 1: Optimized synthesis (always included)
       operations.push(
-        this.prepareOptimizedContext(userId, sessionId)
+        this.executeWithRetry(
+          'synthesis',
+          () => this.optimizedSynthesis(roleOutputs, userPrompt, correlationId, userId, sessionId),
+          correlationId
+        )
       );
-    }
+      operationNames.push('synthesis');
 
-    // Execute all operations in parallel with timeout
-    const results = await Promise.allSettled(
-      operations.map(op => 
-        Promise.race([
-          op,
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Operation timeout')), this.config.synthesisTimeout)
+      // Operation 2: Cached or optimized voting
+      operations.push(
+        this.executeWithRetry(
+          'voting',
+          () => this.optimizedVoting(roleOutputs, userPrompt, correlationId),
+          correlationId
+        )
+      );
+      operationNames.push('voting');
+
+      // Operation 3: Context preparation (if needed)
+      if (userId && sessionId) {
+        operations.push(
+          this.executeWithRetry(
+            'context',
+            () => this.prepareOptimizedContext(userId, sessionId),
+            correlationId
           )
-        ])
-      )
-    );
+        );
+        operationNames.push('context');
+      }
 
-    // Process results
-    const synthesisResult = results[0].status === 'fulfilled' ? results[0].value : null;
-    const votingResult = results[1].status === 'fulfilled' ? results[1].value : null;
-    const contextResult = results[2]?.status === 'fulfilled' ? results[2].value : null;
+      // Execute all operations in parallel with enhanced timeout handling
+      const results = await Promise.allSettled(
+        operations.map((op, index) =>
+          Promise.race([
+            op,
+            new Promise((_, reject) =>
+              setTimeout(() => {
+                this.metrics.timeoutFailures++;
+                reject(new Error(`${operationNames[index]} operation timeout after ${this.config.synthesisTimeout}ms`));
+              }, this.config.synthesisTimeout)
+            )
+          ])
+        )
+      );
 
-    if (!synthesisResult) {
-      throw new Error('Synthesis optimization failed');
+      // Process results with detailed error tracking
+      const synthesisResult = this.processOperationResult(results[0], 'synthesis', correlationId);
+      const votingResult = this.processOperationResult(results[1], 'voting', correlationId);
+      const contextResult = this.processOperationResult(results[2], 'context', correlationId);
+
+      // Check for critical failures
+      if (!synthesisResult) {
+        this.metrics.parallelProcessingFailures++;
+
+        // Try fallback synthesis
+        const fallbackSynthesis = await this.createFallbackSynthesis(roleOutputs, userPrompt, correlationId);
+
+        this.monitoringService?.log('warn', 'Using fallback synthesis due to parallel processing failure', {
+          correlationId,
+          fallbackUsed: true
+        }, correlationId);
+
+        this.metrics.fallbacksUsed++;
+
+        return {
+          synthesis: fallbackSynthesis,
+          voting: votingResult,
+          context: contextResult,
+          parallelProcessed: true,
+          fallbackUsed: true,
+          processingTime: Date.now() - startTime
+        };
+      }
+
+      // Success metrics
+      this.metrics.parallelProcessingGains++;
+
+      const processingTime = Date.now() - startTime;
+      this.monitoringService?.log('debug', 'Parallel processing completed successfully', {
+        processingTime: `${processingTime}ms`,
+        synthesisStatus: synthesisResult?.status || 'unknown',
+        votingStatus: votingResult?.status || 'skipped',
+        contextStatus: contextResult?.status || 'skipped',
+        correlationId
+      }, correlationId);
+
+      return {
+        synthesis: synthesisResult,
+        voting: votingResult,
+        context: contextResult,
+        parallelProcessed: true,
+        processingTime
+      };
+
+    } catch (error) {
+      this.metrics.parallelProcessingFailures++;
+
+      this.monitoringService?.log('error', 'Parallel processing failed completely', {
+        error: error.message,
+        processingTime: `${Date.now() - startTime}ms`,
+        correlationId
+      }, correlationId);
+
+      // Return fallback result
+      const fallbackSynthesis = await this.createFallbackSynthesis(roleOutputs, userPrompt, correlationId);
+      this.metrics.fallbacksUsed++;
+
+      return {
+        synthesis: fallbackSynthesis,
+        voting: null,
+        context: null,
+        parallelProcessed: false,
+        fallbackUsed: true,
+        error: error.message,
+        processingTime: Date.now() - startTime
+      };
     }
+  }
 
-    this.metrics.parallelProcessingGains++;
-    
-    return {
-      synthesis: synthesisResult,
-      voting: votingResult,
-      context: contextResult,
-      parallelProcessed: true
-    };
+  /**
+   * Execute operation with retry logic
+   */
+  async executeWithRetry(operationName, operation, correlationId) {
+    return await retryWithBackoff(operation, {
+      maxAttempts: 2, // Limited retries for performance optimization
+      baseDelayMs: 200,
+      maxDelayMs: 1000,
+      onRetry: (error, attempt, delay) => {
+        this.metrics.retriesPerformed++;
+        this.monitoringService?.log('warn', `Performance optimization retry: ${operationName}`, {
+          attempt,
+          error: error.message,
+          delay: `${delay}ms`,
+          correlationId
+        }, correlationId);
+      }
+    });
+  }
+
+  /**
+   * Process individual operation result
+   */
+  processOperationResult(result, operationName, correlationId) {
+    if (!result) return null;
+
+    if (result.status === 'fulfilled') {
+      return result.value;
+    } else {
+      this.monitoringService?.log('warn', `Parallel operation failed: ${operationName}`, {
+        error: result.reason?.message || 'Unknown error',
+        correlationId
+      }, correlationId);
+
+      this.metrics.optimizationFailures++;
+      return null;
+    }
+  }
+
+  /**
+   * Calculate number of operations for logging
+   */
+  calculateOperationsCount(userId, sessionId) {
+    let count = 2; // synthesis and voting always included
+    if (userId && sessionId) count++; // context preparation
+    return count;
+  }
+
+  /**
+   * Create fallback synthesis when optimization fails
+   */
+  async createFallbackSynthesis(roleOutputs, userPrompt, correlationId) {
+    try {
+      const successfulOutputs = roleOutputs.filter(r => r.status === 'fulfilled' && r.content);
+
+      if (successfulOutputs.length === 0) {
+        return {
+          content: 'Unable to provide optimized response due to technical difficulties.',
+          model: 'fallback',
+          status: 'fallback',
+          optimized: false
+        };
+      }
+
+      // Simple synthesis fallback
+      const content = successfulOutputs.length === 1
+        ? successfulOutputs[0].content
+        : `Combined analysis: ${successfulOutputs.map(o => o.content).join(' ')}`;
+
+      return {
+        content,
+        model: 'fallback-synthesis',
+        status: 'fallback',
+        optimized: false,
+        sourceCount: successfulOutputs.length
+      };
+
+    } catch (error) {
+      this.monitoringService?.log('error', 'Fallback synthesis creation failed', {
+        error: error.message,
+        correlationId
+      }, correlationId);
+
+      return {
+        content: 'System temporarily unavailable. Please try again.',
+        model: 'emergency-fallback',
+        status: 'error',
+        optimized: false
+      };
+    }
   }
 
   /**
