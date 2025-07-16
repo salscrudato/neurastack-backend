@@ -13,7 +13,7 @@ const { getMemoryManager } = require('./memoryManager');
 const { v4: generateUUID } = require('uuid');
 const cacheService = require('./cacheService');
 const { getHierarchicalContextManager } = require('./hierarchicalContextManager');
-const enhancedSynthesisService = require('./enhancedSynthesisService');
+const simpleSynthesisService = require('./simpleSynthesisService');
 const monitoringService = require('./monitoringService');
 const providerReliabilityService = require('./providerReliabilityService');
 const {
@@ -322,8 +322,8 @@ class EnhancedEnsembleRunner {
               { role: 'system', content: systemPrompts[role] },
               { role: 'user', content: userPrompt }
             ],
-            max_tokens: maxTokens,
-            timeout: this.config.timeoutMs
+            max_tokens: maxTokens
+            // Note: timeout should be handled at the HTTP client level, not in the API call
           });
 
           if (!openaiResp.choices || !openaiResp.choices[0] || !openaiResp.choices[0].message) {
@@ -517,7 +517,7 @@ class EnhancedEnsembleRunner {
           role: r.reason?.role || 'unknown'
         });
 
-        synthesisResult = await enhancedSynthesisService.synthesizeWithEnhancements(
+        synthesisResult = await simpleSynthesisService.synthesizeWithEnhancements(
           roleData,
           userPrompt,
           correlationId,

@@ -39,9 +39,12 @@ class VendorClients {
   initializeClients() {
     const vendorTimeout = dynamicConfig.vendors.timeout;
 
+    // Store timeout for use in requests
+    this.vendorTimeout = vendorTimeout;
+
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: vendorTimeout
+      apiKey: process.env.OPENAI_API_KEY
+      // Note: timeout should be passed in individual requests, not in constructor
     });
 
     this.gemini = axios.create({

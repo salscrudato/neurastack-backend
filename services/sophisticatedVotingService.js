@@ -123,31 +123,45 @@ class SophisticatedVotingService {
         });
       }
 
-      // Step 1: Calculate diversity scores with retry
-      const diversityResult = await this.executeWithRetry(
-        'diversity',
-        () => this.diversityScoreService.calculateDiversityScores(roles),
-        correlationId,
-        () => ({ overallDiversity: 0.5, scores: {}, fallbackUsed: true })
-      );
+      // Optimized voting pipeline with parallel execution where possible
+      const [diversityResult, historicalWeights] = await Promise.allSettled([
+        this.executeWithRetry(
+          'diversity',
+          () => this.diversityScoreService.calculateDiversityScores(roles),
+          correlationId,
+          () => ({ overallDiversity: 0.5, scores: {}, fallbackUsed: true })
+        ),
+        this.executeWithRetry(
+          'historical',
+          () => this.getHistoricalWeights(roles),
+          correlationId,
+          () => ({})
+        )
+      ]);
 
-      // Step 2: Calculate traditional voting weights (synchronous, no retry needed)
+      // Extract results with fallbacks
+      const diversity = diversityResult.status === 'fulfilled' ?
+        diversityResult.value : { overallDiversity: 0.5, scores: {}, fallbackUsed: true };
+      const historical = historicalWeights.status === 'fulfilled' ?
+        historicalWeights.value : {};
+
+      // Calculate traditional voting (fast, synchronous)
       const traditionalVoting = this.calculateTraditionalVoting(roles);
 
-      // Step 3: Get historical performance weights with retry
-      const historicalWeights = await this.executeWithRetry(
-        'historical',
-        () => this.getHistoricalWeights(roles),
-        correlationId,
-        () => ({})
-      );
-
-      // Step 4: Calculate hybrid voting weights
+      // Calculate optimized hybrid voting
       const hybridVoting = this.calculateHybridVoting(
         roles,
         traditionalVoting,
-        diversityResult,
-        historicalWeights
+        diversity,
+        historical
+      );
+
+      // Simplified decision consolidation - reduce conflicts between voting methods
+      const consolidatedVoting = this.consolidateVotingDecision(
+        traditionalVoting,
+        hybridVoting,
+        diversity,
+        roles
       );
 
       // Step 5: Check for tie-breaking needs with error handling
@@ -163,7 +177,7 @@ class SophisticatedVotingService {
         this.metrics.subServiceFailures.tieBreaking++;
       }
 
-      let finalVoting = hybridVoting;
+      let finalVoting = consolidatedVoting;
       let tieBreakerResult = null;
       let metaVotingResult = null;
 
@@ -501,7 +515,7 @@ class SophisticatedVotingService {
   }
 
   /**
-   * Calculate hybrid voting weights combining all factors
+   * Calculate optimized hybrid voting weights with simplified algorithm
    */
   calculateHybridVoting(roles, traditionalVoting, diversityResult, historicalWeights) {
     const successful = roles.filter(r => r.status === 'fulfilled');
@@ -512,24 +526,21 @@ class SophisticatedVotingService {
       const roleName = role.role;
       const modelName = role.metadata?.model || role.model || 'unknown';
 
-      // Get component weights
-      const traditionalWeight = traditionalVoting.weights[roleName] || 0;
-      const diversityWeight = diversityResult.diversityWeights[roleName] || 1.0;
-      const historicalWeight = historicalWeights[modelName] || 1.0;
-      const semanticWeight = role.semanticConfidence?.score || 0.5;
-      const reliabilityWeight = this.getReliabilityWeight(role);
+      // Simplified weight calculation with clear priorities
+      const baseConfidence = role.confidence?.score || 0.5;
+      const responseQuality = this.calculateResponseQuality(role);
+      const diversityBonus = (diversityResult.diversityWeights[roleName] || 1.0) - 1.0; // Convert to bonus
+      const historicalBonus = Math.min(0.2, (historicalWeights[modelName] || 1.0) - 1.0); // Cap historical impact
 
-      // Calculate hybrid weight using configured factors
-      const factors = this.votingConfig.weightFactors;
-      const hybridWeight = (
-        traditionalWeight * factors.traditional +
-        (diversityWeight - 1.0) * factors.diversity + factors.traditional + // Adjust diversity around baseline
-        (historicalWeight - 1.0) * factors.historical + factors.traditional + // Adjust historical around baseline
-        semanticWeight * factors.semantic +
-        reliabilityWeight * factors.reliability
-      );
+      // Primary weight: 70% confidence + 20% quality + 10% bonuses
+      let weight = (baseConfidence * 0.7) + (responseQuality * 0.2) + (diversityBonus * 0.05) + (historicalBonus * 0.05);
 
-      hybridWeights[roleName] = Math.max(0.01, hybridWeight); // Ensure positive weights
+      // Apply reliability multiplier (instead of additive)
+      const reliabilityMultiplier = this.getReliabilityMultiplier(role);
+      weight *= reliabilityMultiplier;
+
+      // Ensure minimum weight and store
+      hybridWeights[roleName] = Math.max(0.01, Math.min(1.0, weight)); // Cap at 1.0
       totalWeight += hybridWeights[roleName];
     });
 
@@ -549,7 +560,63 @@ class SophisticatedVotingService {
   }
 
   /**
-   * Get reliability weight for a role
+   * Calculate response quality score
+   */
+  calculateResponseQuality(role) {
+    let quality = 0.5; // Base quality
+
+    // Content length factor
+    const wordCount = role.wordCount || role.content?.split(/\s+/).length || 0;
+    if (wordCount > 20) quality += 0.1;
+    if (wordCount > 50) quality += 0.1;
+    if (wordCount > 100) quality += 0.1;
+    if (wordCount > 500) quality -= 0.05; // Penalize overly long responses
+
+    // Response time factor
+    const responseTime = role.responseTime || 5000;
+    if (responseTime < 3000) quality += 0.1;
+    if (responseTime < 1500) quality += 0.05;
+    if (responseTime > 10000) quality -= 0.1;
+
+    // Structure factor
+    const content = role.content || '';
+    if (content.includes('.') && content.includes(' ')) quality += 0.05;
+    if (content.includes('\n') || content.includes(':')) quality += 0.05;
+
+    // Quality metrics if available
+    if (role.quality) {
+      if (role.quality.hasStructure) quality += 0.05;
+      if (role.quality.hasReasoning) quality += 0.1;
+      if (role.quality.complexity === 'medium' || role.quality.complexity === 'high') quality += 0.05;
+    }
+
+    return Math.max(0.1, Math.min(1.0, quality));
+  }
+
+  /**
+   * Get reliability multiplier for a role (replaces additive reliability weight)
+   */
+  getReliabilityMultiplier(role) {
+    let multiplier = 1.0; // Base multiplier
+
+    // Model reliability
+    const model = role.metadata?.model || role.model || '';
+    if (model.includes('gpt-4')) multiplier *= 1.1;
+    if (model.includes('claude')) multiplier *= 1.05;
+    if (model.includes('gemini')) multiplier *= 1.05;
+
+    // Response status
+    if (role.status === 'fulfilled') multiplier *= 1.1;
+    if (role.fallbackUsed) multiplier *= 0.9;
+
+    // Error handling
+    if (role.error) multiplier *= 0.8;
+
+    return Math.max(0.5, Math.min(1.5, multiplier)); // Cap multiplier range
+  }
+
+  /**
+   * Get reliability weight for a role (legacy method for compatibility)
    */
   getReliabilityWeight(role) {
     // Simple reliability calculation based on response characteristics
@@ -760,6 +827,83 @@ class SophisticatedVotingService {
       tieBreakerStats: this.tieBreakerService?.getTieBreakerStats(),
       abstentionStats: this.abstentionService?.getAbstentionStats()
     };
+  }
+
+  /**
+   * Consolidate voting decisions to reduce conflicts between methods
+   */
+  consolidateVotingDecision(traditionalVoting, hybridVoting, diversityResult, roles) {
+    // Check if there's strong agreement between methods
+    const traditionalWinner = traditionalVoting.winner;
+    const hybridWinner = hybridVoting.winner;
+
+    // If both methods agree, use hybrid result with high confidence
+    if (traditionalWinner === hybridWinner) {
+      return {
+        ...hybridVoting,
+        confidence: Math.min(0.95, hybridVoting.confidence * 1.1), // Boost confidence for agreement
+        consensus: this.enhanceConsensus(hybridVoting.consensus),
+        agreementLevel: 'high',
+        consolidationUsed: true
+      };
+    }
+
+    // If methods disagree, use quality-based decision
+    const traditionalRole = roles.find(r => r.role === traditionalWinner);
+    const hybridRole = roles.find(r => r.role === hybridWinner);
+
+    if (!traditionalRole || !hybridRole) {
+      return hybridVoting; // Fallback to hybrid if role not found
+    }
+
+    // Compare quality metrics
+    const traditionalQuality = this.calculateResponseQuality(traditionalRole);
+    const hybridQuality = this.calculateResponseQuality(hybridRole);
+
+    // Use the higher quality response as winner
+    if (traditionalQuality > hybridQuality + 0.1) { // Threshold for switching
+      return {
+        ...traditionalVoting,
+        confidence: Math.max(0.6, traditionalVoting.confidence),
+        consensus: 'moderate',
+        agreementLevel: 'low',
+        consolidationUsed: true,
+        reason: 'quality_based_override'
+      };
+    }
+
+    // Default to hybrid with adjusted confidence
+    return {
+      ...hybridVoting,
+      confidence: Math.max(0.5, hybridVoting.confidence * 0.9), // Reduce confidence for disagreement
+      consensus: this.reduceConsensus(hybridVoting.consensus),
+      agreementLevel: 'low',
+      consolidationUsed: true
+    };
+  }
+
+  /**
+   * Enhance consensus level for agreement
+   */
+  enhanceConsensus(consensus) {
+    const levels = ['very-weak', 'weak', 'moderate', 'strong', 'very-strong'];
+    const currentIndex = levels.indexOf(consensus);
+    if (currentIndex >= 0 && currentIndex < levels.length - 1) {
+      return levels[currentIndex + 1];
+    }
+    return consensus;
+  }
+
+  /**
+   * Reduce consensus level for disagreement
+   */
+  reduceConsensus(consensus) {
+    const levels = ['very-weak', 'weak', 'moderate', 'strong', 'very-strong'];
+    const currentIndex = levels.indexOf(consensus);
+    if (currentIndex > 0) {
+      return levels[currentIndex - 1];
+    }
+    return consensus;
   }
 }
 

@@ -59,8 +59,8 @@ class MetaVoterService {
       }
 
       this.openaiClient = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        timeout: this.timeout
+        apiKey: process.env.OPENAI_API_KEY
+        // Note: timeout should be passed in individual requests, not in constructor
       });
 
       logger.success(

@@ -6,9 +6,9 @@ const clients = require('../services/vendorClients');
 const ensembleConfig = require('../config/ensemblePrompts');
 const cacheService = require('../services/cacheService');
 const securityMiddleware = require('../middleware/securityMiddleware');
-const SophisticatedVotingService = require('../services/sophisticatedVotingService');
-const enhancedSynthesisService = require('../services/enhancedSynthesisService');
-const postSynthesisValidator = require('../services/postSynthesisValidator');
+const simpleVotingService = require('../services/simpleVotingService');
+const simpleConfidenceService = require('../services/simpleConfidenceService');
+const simpleSynthesisService = require('../services/simpleSynthesisService');
 
 // Basic health check
 router.get('/health', (req, res) => res.status(200).json({ status: 'ok', message: 'Neurastack backend healthy 🚀' }));
@@ -19,8 +19,7 @@ router.get('/voting-analytics', async (req, res) => {
   let analytics = await cacheService.get(cacheKey);
   if (!analytics) {
     try {
-      const votingService = new SophisticatedVotingService();
-      const serviceAnalytics = votingService.getVotingStats();
+      const serviceAnalytics = simpleVotingService.getMetrics();
       const monitoringAnalytics = monitoringService.getVotingAnalytics();
       analytics = {
         status: 'success',
@@ -130,82 +129,213 @@ router.get('/claude-test', async (req, res) => {
   }
 });
 
-// Core /default-ensemble (simplified: extracted functions)
+/**
+ * Main AI Ensemble Endpoint - Simplified Implementation
+ *
+ * This is the core endpoint that orchestrates the AI ensemble process:
+ * 1. Validates and sanitizes user input
+ * 2. Runs the ensemble (calls multiple AI models in parallel)
+ * 3. Calculates confidence scores for each response
+ * 4. Performs voting to determine the best response
+ * 5. Calculates synthesis confidence
+ * 6. Builds and returns the final response
+ *
+ * The implementation has been simplified to remove complex analytics
+ * while maintaining the exact response structure expected by clients.
+ */
 router.post('/default-ensemble', async (req, res) => {
+  // Generate or extract correlation ID for request tracking
   const correlationId = req.correlationId || 'unknown';
+
   try {
+    // Step 1: Validate and sanitize input (with rate limiting)
     const { prompt, userId, userTier, sessionId, explainMode } = validateAndSanitizeInput(req);
+
+    // Step 2: Run the AI ensemble (calls GPT-4o, Gemini, Claude in parallel)
     const ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
-    const enhancedRoles = await calculateRoleConfidences(ensembleResult.roles);
-    const votingResult = await getVotingResult(enhancedRoles, prompt, { correlationId, userId: req.headers['x-user-id'], type: 'ensemble' });
-    const synthesisConfidence = calculateSynthesisConfidence(ensembleResult.synthesis, enhancedRoles);
-    const response = buildFinalResponse(ensembleResult, enhancedRoles, votingResult, synthesisConfidence, prompt, userId, sessionId, explainMode, correlationId);
+
+    // Step 3: Calculate confidence scores for each AI response
+    // Uses simplified confidence service instead of complex semantic analysis
+    const enhancedRoles = await simpleConfidenceService.calculateRoleConfidences(ensembleResult.roles);
+
+    // Step 4: Perform voting to determine the best response
+    // Uses simplified voting instead of sophisticated multi-factor voting
+    const votingResult = await getVotingResult(enhancedRoles, prompt, {
+      correlationId,
+      userId: req.headers['x-user-id'],
+      type: 'ensemble'
+    });
+
+    // Step 5: Calculate synthesis confidence using simplified metrics
+    const synthesisConfidence = simpleConfidenceService.calculateSynthesisConfidence(
+      ensembleResult.synthesis,
+      enhancedRoles
+    );
+
+    // Step 6: Build final response maintaining exact structure for compatibility
+    const response = buildFinalResponse(
+      ensembleResult,
+      enhancedRoles,
+      votingResult,
+      synthesisConfidence,
+      prompt,
+      userId,
+      sessionId,
+      explainMode,
+      correlationId
+    );
+
+    // Return successful response
     res.status(200).json(response);
+
   } catch (error) {
-    monitoringService.log('error', 'Ensemble failed', { error: error.message, userId: req.headers['x-user-id'] || 'anonymous' }, correlationId);
-    res.status(500).json({ status: 'error', message: 'Ensemble processing failed.', error: process.env.NODE_ENV === 'development' ? error.message : 'Internal error', correlationId });
+    // Log error for monitoring and debugging
+    monitoringService.log('error', 'Ensemble failed', {
+      error: error.message,
+      userId: req.headers['x-user-id'] || 'anonymous'
+    }, correlationId);
+
+    // Return error response (hide details in production)
+    res.status(500).json({
+      status: 'error',
+      message: 'Ensemble processing failed.',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal error',
+      correlationId
+    });
   }
 });
 
-// Extracted: Input validation/sanitization
+/**
+ * Validate and sanitize input from API request
+ *
+ * Performs validation, sanitization, and rate limiting for ensemble requests.
+ * Simplified from complex validation while maintaining security.
+ *
+ * @param {Object} req - Express request object
+ * @returns {Object} Validated input parameters
+ * @throws {Error} If validation or rate limiting fails
+ */
 function validateAndSanitizeInput(req) {
-  const prompt = (req.body?.prompt || 'Explain AI in 1-2 lines.').trim().replace(/[\x00-\x1F\x7F]/g, '');
+  // Extract and sanitize prompt (remove control characters for security)
+  const prompt = (req.body?.prompt || 'Explain AI in 1-2 lines.')
+    .trim()
+    .replace(/[\x00-\x1F\x7F]/g, ''); // Remove control characters
+
+  // Extract user information
   const userId = req.headers['x-user-id'] || 'anonymous';
-  const userTier = req.userTier || 'free';
-  const sessionId = req.body?.sessionId || req.headers['x-session-id'] || `session_${userId}_${Date.now()}`;
+  const userTier = req.userTier || 'free'; // Simplified tier system
+
+  // Generate session ID if not provided
+  const sessionId = req.body?.sessionId ||
+                   req.headers['x-session-id'] ||
+                   `session_${userId}_${Date.now()}`;
+
+  // Check for explain mode (from query or body)
   const explainMode = req.query?.explain === 'true' || req.body?.explain === true;
 
-  if (typeof prompt !== 'string' || prompt.length < 3 || prompt.length > (userTier === 'premium' ? 8000 : 5000)) {
+  // Validate prompt length based on tier
+  const maxLength = userTier === 'premium' ? 8000 : 5000;
+  if (typeof prompt !== 'string' || prompt.length < 3 || prompt.length > maxLength) {
     throw new Error('Invalid prompt length/format.');
   }
 
-  // Rate limit check (simplified inline)
-  const rateLimits = { free: { max: 25, windowMs: 60000 }, premium: { max: 100, windowMs: 60000 } };
+  // Simple rate limiting (inline for simplicity)
+  const rateLimits = {
+    free: { max: 25, windowMs: 60000 },      // 25 requests per minute
+    premium: { max: 100, windowMs: 60000 }   // 100 requests per minute
+  };
   const limit = rateLimits[userTier] || rateLimits.free;
   const rateResult = securityMiddleware.checkRateLimit(userId, 'ensemble', limit.max, limit.windowMs);
-  if (!rateResult.allowed) throw new Error('Rate limit exceeded.');
+
+  if (!rateResult.allowed) {
+    throw new Error('Rate limit exceeded.');
+  }
 
   return { prompt, userId, userTier, sessionId, explainMode };
 }
 
-// Extracted: Calculate role confidences
-async function calculateRoleConfidences(roles) {
-  return Promise.all(roles.map(async role => {
-    const confidence = await calculateConfidenceScore(role);
-    const qualityMetrics = analyzeResponseQuality(role.content);
-    return { ...role, confidence: { score: confidence, level: getConfidenceLevel(confidence), factors: getConfidenceFactors(role, qualityMetrics) }, quality: qualityMetrics };
-  }));
-}
-
-// Extracted: Get voting result (with fallback)
+/**
+ * Get voting result using simplified voting service
+ *
+ * Uses the simplified voting service to determine the best response
+ * from the AI ensemble. Includes fallback handling for reliability.
+ *
+ * @param {Array} roles - Array of role responses with confidence scores
+ * @param {string} prompt - Original user prompt
+ * @param {Object} metadata - Request metadata including correlationId
+ * @returns {Object} Voting result with winner, confidence, and weights
+ */
 async function getVotingResult(roles, prompt, metadata) {
-  const votingService = new SophisticatedVotingService();
   try {
-    return await votingService.executeSophisticatedVoting(roles, prompt, metadata);
+    // Use simplified voting service (replaces complex sophisticated voting)
+    return await simpleVotingService.executeVoting(roles, prompt, metadata);
   } catch (error) {
-    return createFallbackVotingResult(roles); // From original
+    // Fallback to basic voting if service fails
+    monitoringService.log('warn', 'Voting service failed, using fallback', {
+      error: error.message,
+      correlationId: metadata.correlationId
+    });
+    return createFallbackVotingResult(roles);
   }
 }
 
-// Extracted: Build final response (simplified structure)
+/**
+ * Build final response structure for AI ensemble
+ *
+ * This function creates the standardized response format that maintains
+ * compatibility with existing clients while using simplified internal logic.
+ *
+ * @param {Object} ensembleResult - Result from ensemble processing
+ * @param {Array} enhancedRoles - Role responses with confidence scores
+ * @param {Object} votingResult - Voting results from simple voting service
+ * @param {Object} synthesisConfidence - Synthesis confidence from simple service
+ * @param {string} prompt - Original user prompt
+ * @param {string} userId - User identifier
+ * @param {string} sessionId - Session identifier
+ * @param {boolean} explainMode - Whether to include explanations
+ * @param {string} correlationId - Request correlation ID
+ * @returns {Object} Standardized API response
+ */
 function buildFinalResponse(ensembleResult, enhancedRoles, votingResult, synthesisConfidence, prompt, userId, sessionId, explainMode, correlationId) {
-  const baseResponse = {
+  // Create the core response structure that matches expected format
+  const response = {
     status: 'success',
     data: {
-      prompt, userId, sessionId,
-      synthesis: { ...ensembleResult.synthesis, confidence: synthesisConfidence },
+      // User request information
+      prompt,
+      userId,
+      sessionId,
+
+      // Synthesis result with confidence scoring
+      synthesis: {
+        ...ensembleResult.synthesis,
+        confidence: synthesisConfidence
+      },
+
+      // Individual AI model responses with confidence and quality metrics
       roles: enhancedRoles,
+
+      // Voting results (simplified but maintains structure)
       voting: votingResult,
-      metadata: { ...ensembleResult.metadata, correlationId, explainMode }
+
+      // Request metadata
+      metadata: {
+        processingTime: ensembleResult.processingTime || 0,
+        correlationId,
+        explainMode: !!explainMode
+      }
     },
     correlationId
   };
 
+  // Add explanation if requested (simplified - just acknowledge the mode)
   if (explainMode) {
-    baseResponse.explanation = { /* Original explanation logic, simplified if needed */ };
+    response.data.metadata.explainMode = true;
+    // Note: Complex explanation logic removed for simplicity
+    // The response structure itself provides transparency
   }
 
-  return baseResponse;
+  return response;
 }
 
 // Detailed health endpoint
@@ -266,126 +396,21 @@ router.get('/workout/health', async (req, res) => {
 
 // Confidence/quality functions (keep as is; they're referenced)
 
-// Missing function implementations
-async function calculateConfidenceScore(role) {
-  if (!role || !role.content) return 0.1;
+// Complex confidence calculation functions removed - now using simpleConfidenceService
 
-  let score = 0.5; // Base score
+// Helper functions removed - functionality moved to simpleConfidenceService
 
-  // Content length factor
-  if (role.content.length > 100) score += 0.2;
-  if (role.content.length > 500) score += 0.1;
+// Synthesis confidence calculation moved to simpleConfidenceService
 
-  // Response time factor
-  if (role.responseTime && role.responseTime < 10000) score += 0.1;
+// Complex quality analysis functions removed - functionality moved to simpleConfidenceService
 
-  // Structure factor
-  if (role.content.includes('.') && role.content.includes(' ')) score += 0.1;
+// Complex readability and coherence scoring functions removed
 
-  return Math.min(1.0, score);
-}
+// Legacy quality analysis functions removed - functionality moved to simpleConfidenceService
 
-function calculateSynthesisConfidence(synthesis, roles) {
-  if (!synthesis || !synthesis.content) return { score: 0.1, level: 'very-low' };
+// All complex semantic analysis functions removed - functionality moved to simpleConfidenceService
 
-  const successfulRoles = roles.filter(r => r.status === 'fulfilled' || r.content);
-  let score = 0.3 + (successfulRoles.length * 0.2); // Base + role count
-
-  if (synthesis.content.length > 200) score += 0.2;
-  if (synthesis.status === 'success') score += 0.1;
-
-  score = Math.min(1.0, score);
-
-  return {
-    score,
-    level: score > 0.7 ? 'high' : score > 0.5 ? 'medium' : score > 0.3 ? 'low' : 'very-low',
-    factors: [
-      `Based on ${successfulRoles.length} successful responses`,
-      `Average role confidence: ${(successfulRoles.reduce((sum, r) => sum + (r.confidence?.score || 0), 0) / successfulRoles.length * 100).toFixed(1)}%`,
-      synthesis.status === 'success' ? 'Response generated successfully' : 'Response generation issues',
-      synthesis.content.length > 200 ? 'Adequate response length' : 'Short response',
-      synthesis.content.includes('\n') ? 'Well-structured response' : 'Simple response structure'
-    ].filter(Boolean)
-  };
-}
-
-function analyzeResponseQuality(content) {
-  if (!content || typeof content !== 'string') {
-    return { wordCount: 0, sentenceCount: 0, averageWordsPerSentence: 0, hasStructure: false, hasReasoning: false, complexity: 0 };
-  }
-
-  const words = content.split(/\s+/).filter(w => w.length > 0);
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
-
-  return {
-    wordCount: words.length,
-    sentenceCount: sentences.length,
-    averageWordsPerSentence: sentences.length > 0 ? words.length / sentences.length : 0,
-    hasStructure: content.includes('\n') || content.includes('•') || content.includes('-'),
-    hasReasoning: content.includes('because') || content.includes('therefore') || content.includes('however'),
-    complexity: words.length > 200 ? 'high' : words.length > 100 ? 'medium' : words.length > 50 ? 'low' : 'very-low'
-  };
-}
-
-function getConfidenceLevel(score) {
-  if (score > 0.8) return 'very-high';
-  if (score > 0.6) return 'high';
-  if (score > 0.4) return 'medium';
-  if (score > 0.2) return 'low';
-  return 'very-low';
-}
-
-function getConfidenceFactors(role, qualityMetrics) {
-  const factors = [];
-
-  if (role.status === 'fulfilled' || role.content) factors.push('Response generated successfully');
-  if (qualityMetrics.wordCount > 50) factors.push('Adequate response length');
-  if (qualityMetrics.hasStructure) factors.push('Well-structured response');
-  if (qualityMetrics.hasReasoning) factors.push('Contains reasoning elements');
-  if (role.responseTime && role.responseTime < 5000) factors.push('Fast response time');
-
-  return factors.length > 0 ? factors : ['Basic response generated'];
-}
-
-function buildFinalResponse(ensembleResult, enhancedRoles, votingResult, synthesisConfidence, prompt, userId, sessionId, explainMode, correlationId) {
-  return {
-    status: 'success',
-    data: {
-      prompt,
-      userId,
-      sessionId,
-      synthesis: {
-        ...ensembleResult.synthesis,
-        confidence: synthesisConfidence
-      },
-      roles: enhancedRoles,
-      voting: votingResult,
-      metadata: {
-        processingTime: ensembleResult.processingTime || 0,
-        correlationId,
-        explainMode: !!explainMode
-      }
-    },
-    correlationId
-  };
-}
-
-function validateAndSanitizeInput(req) {
-  const { prompt, sessionId, explain } = req.body;
-  const userId = req.headers['x-user-id'] || 'anonymous';
-
-  if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-    throw new Error('Valid prompt is required');
-  }
-
-  return {
-    prompt: prompt.trim(),
-    userId,
-    userTier: 'free', // Default tier
-    sessionId: sessionId || `session_${userId}_${Date.now()}`,
-    explainMode: !!explain
-  };
-}
+// Duplicate function removed - using simplified version above
 
 function createFallbackVotingResult(roles) {
   const successful = roles.filter(r => r.status === 'fulfilled' || r.content);
