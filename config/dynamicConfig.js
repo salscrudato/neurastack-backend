@@ -644,7 +644,7 @@ const config = convict({
     model: {
       doc: 'Synthesis model name',
       format: String,
-      default: 'gpt-4.1-nano', // Updated to use cost-effective nano model
+      default: 'gpt-4o-mini', // Optimal synthesis model - fast, cost-effective, high-quality
       env: 'SYNTHESIS_MODEL'
     },
 

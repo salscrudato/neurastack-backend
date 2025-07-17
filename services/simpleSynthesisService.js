@@ -31,12 +31,12 @@ class SimpleSynthesisService {
       averageProcessingTime: 0
     };
 
-    // Simple synthesis configuration
+    // Simple synthesis configuration - using dynamic config for consistency
     this.config = {
-      model: 'gpt-4o-mini',           // Fast, cost-effective model
-      maxTokens: 800,                // Reasonable response length
-      temperature: 0.3,              // Balanced creativity/consistency
-      timeout: 10000                 // 10 second timeout
+      model: dynamicConfig.synthesis.model,           // GPT-4o-mini - optimal synthesis model
+      maxTokens: dynamicConfig.synthesis.maxTokens,  // 2000 tokens for comprehensive synthesis
+      temperature: 0.3,                              // Balanced creativity/consistency
+      timeout: dynamicConfig.synthesis.timeout       // Dynamic timeout configuration
     };
 
     console.log('🔄 Simple Synthesis Service initialized');

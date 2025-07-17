@@ -549,9 +549,9 @@ class EnhancedSynthesisService {
    */
   async healthCheck() {
     try {
-      // Test basic OpenAI connectivity with cost-effective model
+      // Test basic OpenAI connectivity with synthesis model
       const testResponse = await this.openaiClient.chat.completions.create({
-        model: 'gpt-4.1-nano', // Updated to use cost-effective nano model
+        model: dynamicConfig.synthesis.model, // Use same model as synthesis for consistency
         messages: [{ role: 'user', content: 'Test' }],
         max_tokens: 10
       });
