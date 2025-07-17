@@ -125,32 +125,9 @@ describe('Sophisticated Voting System', () => {
       const result = await diversityService.calculateDiversityScores(singleRole);
 
       expect(result.overallDiversity).toBe(0);
-      expect(result.clusterAnalysis).toBeNull();
     });
 
-    test('should detect response clusters', async () => {
-      const diversityService = new DiversityScoreService();
-      
-      // Create similar responses for clustering
-      const similarRoles = [
-        {
-          ...mockRoles[0],
-          content: 'AI is a technology that enables machines to think like humans.'
-        },
-        {
-          ...mockRoles[1],
-          content: 'Artificial intelligence allows computers to mimic human thinking.'
-        },
-        {
-          ...mockRoles[2],
-          content: 'Machine learning is a completely different topic about data analysis.'
-        }
-      ];
 
-      const result = await diversityService.calculateDiversityScores(similarRoles);
-      expect(result.clusterAnalysis).toBeDefined();
-      expect(result.clusterAnalysis.totalClusters).toBeGreaterThan(0);
-    });
   });
 
   describe('Tie-Breaking Service', () => {

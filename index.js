@@ -15,7 +15,7 @@
  * - Added response compression for better performance.
  * - Consolidated logging to reduce noise.
  * - Ensured low-cost by making Firebase optional (local cache fallback).
- * - Prepared for clustering in production for scalability.
+ * - Prepared for production scalability.
  */
 
 // ============================================================================

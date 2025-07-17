@@ -238,23 +238,6 @@
             "gemini": 0.8,
             "claude": 0.8
           },
-          "clusterAnalysis": {
-            "clusters": [
-              {
-                "id": 0,
-                "responses": [
-                  "gpt4o",
-                  "gemini",
-                  "claude"
-                ],
-                "averageSimilarity": 0.8151813231647114,
-                "size": 3
-              }
-            ],
-            "totalClusters": 1,
-            "largestCluster": 3,
-            "averageClusterSize": 3
-          },
           "_description": "Semantic diversity analysis showing how different responses are from each other"
         },
         "historicalPerformance": {

@@ -277,7 +277,6 @@ class SimpleVotingService {
       diversityAnalysis: {
         overallDiversity: 1, // Simplified - assume responses are diverse
         diversityWeights: this.createDiversityWeights(roles),
-        clusterAnalysis: this.createSimpleClusterAnalysis(roles),
         _description: "Semantic diversity analysis showing how different responses are from each other"
       },
 
@@ -362,22 +361,7 @@ class SimpleVotingService {
     return Math.abs(hash);
   }
 
-  /**
-   * Create simple cluster analysis (maintains structure)
-   */
-  createSimpleClusterAnalysis(roles) {
-    return {
-      clusters: roles.map((role, index) => ({
-        id: index,
-        responses: [role.role],
-        averageSimilarity: 0,
-        size: 1
-      })),
-      totalClusters: roles.length,
-      largestCluster: 1,
-      averageClusterSize: 1
-    };
-  }
+
 
   /**
    * Create simplified historical weights (maintains structure)

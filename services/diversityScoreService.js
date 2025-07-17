@@ -9,8 +9,7 @@
  * 2. Response diversity scoring and analysis
  * 3. Pairwise similarity matrix generation
  * 4. Diversity-based weight adjustments
- * 5. Clustering analysis for response grouping
- * 6. Novelty detection for unique responses
+ * 5. Novelty detection for unique responses
  *
  * 💡 ANALOGY: Like having a linguistics expert analyze how different
  *    each response is from others to reward unique perspectives
@@ -66,7 +65,6 @@ class DiversityScoreService {
           overallDiversity: 0,
           pairwiseSimilarities: {},
           diversityWeights: {},
-          clusterAnalysis: null,
           noveltyScores: {}
         };
       }
@@ -82,10 +80,7 @@ class DiversityScoreService {
       
       // Generate diversity weights
       const diversityWeights = this.calculateDiversityWeights(diversityScores);
-      
-      // Perform cluster analysis
-      const clusterAnalysis = this.performClusterAnalysis(similarityMatrix, successful);
-      
+
       // Calculate novelty scores
       const noveltyScores = await this.calculateNoveltyScores(successful, embeddings);
       
@@ -96,7 +91,6 @@ class DiversityScoreService {
         overallDiversity,
         pairwiseSimilarities: this.formatSimilarityMatrix(similarityMatrix, successful),
         diversityWeights,
-        clusterAnalysis,
         noveltyScores,
         diversityDistribution: this.analyzeDiversityDistribution(diversityScores),
         semanticSpread: this.calculateSemanticSpread(embeddings)
@@ -106,7 +100,6 @@ class DiversityScoreService {
       monitoringService.log('info', 'Diversity analysis completed', {
         responses: successful.length,
         overallDiversity: overallDiversity.toFixed(3),
-        clusters: clusterAnalysis?.clusters?.length || 0,
         highDiversityResponses: Object.values(diversityScores).filter(s => s > 0.7).length
       });
 
@@ -272,59 +265,7 @@ class DiversityScoreService {
     return 'veryLow';
   }
 
-  /**
-   * Perform cluster analysis on responses
-   */
-  performClusterAnalysis(similarityMatrix, responses) {
-    try {
-      // Simple clustering based on similarity threshold
-      const clusters = [];
-      const assigned = new Set();
-      const clusterThreshold = 0.7; // High similarity threshold for clustering
-      
-      for (let i = 0; i < responses.length; i++) {
-        if (assigned.has(i)) continue;
-        
-        const cluster = {
-          id: clusters.length,
-          responses: [responses[i].role],
-          averageSimilarity: 0,
-          size: 1
-        };
-        
-        assigned.add(i);
-        let totalSimilarity = 0;
-        let comparisons = 0;
-        
-        // Find similar responses to add to cluster
-        for (let j = i + 1; j < responses.length; j++) {
-          if (assigned.has(j)) continue;
-          
-          if (similarityMatrix[i][j] >= clusterThreshold) {
-            cluster.responses.push(responses[j].role);
-            cluster.size++;
-            assigned.add(j);
-          }
-          
-          totalSimilarity += similarityMatrix[i][j];
-          comparisons++;
-        }
-        
-        cluster.averageSimilarity = comparisons > 0 ? totalSimilarity / comparisons : 0;
-        clusters.push(cluster);
-      }
-      
-      return {
-        clusters,
-        totalClusters: clusters.length,
-        largestCluster: Math.max(...clusters.map(c => c.size)),
-        averageClusterSize: clusters.reduce((sum, c) => sum + c.size, 0) / clusters.length
-      };
-    } catch (error) {
-      console.warn('⚠️ Cluster analysis failed:', error.message);
-      return null;
-    }
-  }
+
 
   /**
    * Calculate novelty scores based on historical responses
@@ -489,7 +430,6 @@ class DiversityScoreService {
       overallDiversity: 0.5,
       pairwiseSimilarities: {},
       diversityWeights,
-      clusterAnalysis: null,
       noveltyScores: {},
       diversityDistribution: null,
       semanticSpread: 0

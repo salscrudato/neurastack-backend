@@ -311,7 +311,6 @@ class SophisticatedVotingService {
         diversityAnalysis: {
           overallDiversity: diversityResult.overallDiversity,
           diversityWeights: diversityResult.diversityWeights,
-          clusterAnalysis: diversityResult.clusterAnalysis,
           _description: "Semantic diversity analysis showing how different responses are from each other"
         },
 
