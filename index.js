@@ -89,9 +89,11 @@ initializeFirebase();
 const healthRoutes = require('./routes/health');
 const memoryRoutes = require('./routes/memory');
 const adminRoutes = require('./routes/admin');
+const tierRoutes = require('./routes/tiers');
 
 const MemoryLifecycleManager = require('./services/memoryLifecycle');
 const monitoringService = require('./services/monitoringService');
+const { attachUserTier, logTierUsage } = require('./middleware/tierMiddleware');
 const cacheService = require('./services/cacheService');
 const securityMiddleware = require('./middleware/securityMiddleware');
 const HealthMonitor = require('./services/healthMonitor');
@@ -129,6 +131,10 @@ app.use(securityMiddleware.createRateLimit({ // Rate limit (tier-aware downstrea
 app.use(cors(corsOptions));
 app.use(express.json({ limit: process.env.REQUEST_BODY_LIMIT || '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: process.env.REQUEST_BODY_LIMIT || '10mb' }));
+
+// Tier middleware (after body parsing, before routes)
+app.use(attachUserTier); // Automatically determine user tier for all requests
+app.use(logTierUsage);   // Log tier usage for analytics
 app.use(monitoringService.middleware());
 
 // Global error handler (simplified: removed unused _next)
@@ -144,6 +150,7 @@ app.use((err, req, res, next) => {
 app.use('/', healthRoutes);
 app.use('/memory', memoryRoutes);
 app.use('/admin', adminRoutes);
+app.use('/tiers', tierRoutes);
 
 // ============================================================================
 // SERVER STARTUP (If run directly)

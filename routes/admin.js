@@ -14,6 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const { getModelConfigService } = require('../services/modelConfigService');
+const { getUserTierService } = require('../services/userTierService');
 const monitoringService = require('../services/monitoringService');
 
 /**
@@ -323,5 +324,137 @@ function generateModelCard(model) {
         </button>
     </div>`;
 }
+
+/**
+ * 👤 User Tier Management - Get user tier info
+ * GET /admin/user-tier/:userId
+ */
+router.get('/user-tier/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    const tierService = getUserTierService();
+    const tierInfo = await tierService.getUserTierInfo(userId);
+
+    res.json({
+      status: 'success',
+      data: tierInfo
+    });
+
+  } catch (error) {
+    monitoringService.log('error', 'Admin user tier lookup failed', {
+      error: error.message,
+      userId: req.params.userId
+    });
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get user tier information',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🔄 User Tier Management - Upgrade user to premium
+ * POST /admin/upgrade-user
+ */
+router.post('/upgrade-user', async (req, res) => {
+  try {
+    const { userId, durationDays = 30, reason } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    const tierService = getUserTierService();
+    const result = await tierService.upgradeToPremium(userId, {
+      durationDays,
+      reason: reason || 'Admin upgrade'
+    });
+
+    if (result.success) {
+      res.json({
+        status: 'success',
+        data: result,
+        message: result.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Failed to upgrade user',
+        error: result.error
+      });
+    }
+
+  } catch (error) {
+    monitoringService.log('error', 'Admin user upgrade failed', {
+      error: error.message,
+      userId: req.body.userId
+    });
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to upgrade user',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🔄 User Tier Management - Downgrade user to free
+ * POST /admin/downgrade-user
+ */
+router.post('/downgrade-user', async (req, res) => {
+  try {
+    const { userId, reason } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User ID is required'
+      });
+    }
+
+    const tierService = getUserTierService();
+    const result = await tierService.downgradeTier(userId, reason || 'Admin downgrade');
+
+    if (result.success) {
+      res.json({
+        status: 'success',
+        data: result,
+        message: result.message
+      });
+    } else {
+      res.status(500).json({
+        status: 'error',
+        message: 'Failed to downgrade user',
+        error: result.error
+      });
+    }
+
+  } catch (error) {
+    monitoringService.log('error', 'Admin user downgrade failed', {
+      error: error.message,
+      userId: req.body.userId
+    });
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to downgrade user',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

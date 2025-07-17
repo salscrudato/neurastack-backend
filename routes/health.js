@@ -221,9 +221,10 @@ function validateAndSanitizeInput(req) {
     .trim()
     .replace(/[\x00-\x1F\x7F]/g, ''); // Remove control characters
 
-  // Extract user information
-  const userId = req.headers['x-user-id'] || 'anonymous';
-  const userTier = req.userTier || 'free'; // Simplified tier system
+  // Extract user information (now provided by tier middleware)
+  const userId = req.userId || 'anonymous';
+  const userTier = req.userTier || 'free';
+  const tierConfig = req.tierConfig;
 
   // Generate session ID if not provided
   const sessionId = req.body?.sessionId ||
@@ -233,18 +234,17 @@ function validateAndSanitizeInput(req) {
   // Check for explain mode (from query or body)
   const explainMode = req.query?.explain === 'true' || req.body?.explain === true;
 
-  // Validate prompt length based on tier
-  const maxLength = userTier === 'premium' ? 8000 : 5000;
+  // Validate prompt length based on tier (using tier config from middleware)
+  const maxLength = tierConfig?.maxPromptLength || 5000;
   if (typeof prompt !== 'string' || prompt.length < 3 || prompt.length > maxLength) {
-    throw new Error('Invalid prompt length/format.');
+    throw new Error(`Invalid prompt length/format. Maximum length for ${userTier} tier: ${maxLength}`);
   }
 
-  // Simple rate limiting (inline for simplicity)
-  const rateLimits = {
-    free: { max: 25, windowMs: 60000 },      // 25 requests per minute
-    premium: { max: 100, windowMs: 60000 }   // 100 requests per minute
+  // Simple rate limiting using tier config
+  const limit = {
+    max: tierConfig?.maxRequestsPerHour || 25,
+    windowMs: 60 * 60 * 1000 // 1 hour window
   };
-  const limit = rateLimits[userTier] || rateLimits.free;
   const rateResult = securityMiddleware.checkRateLimit(userId, 'ensemble', limit.max, limit.windowMs);
 
   if (!rateResult.allowed) {
