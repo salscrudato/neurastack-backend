@@ -632,61 +632,61 @@ const config = convict({
     }
   },
 
-  // Enhanced Synthesis Service Configuration
+  // Enhanced Synthesis Service Configuration - Optimized for longer responses
   synthesis: {
     timeout: {
       doc: 'Synthesis service timeout in milliseconds',
       format: 'int',
-      default: 30000,
+      default: 45000, // Increased from 30000 for longer synthesis
       env: 'SYNTHESIS_TIMEOUT'
     },
 
     model: {
       doc: 'Synthesis model name',
       format: String,
-      default: 'gpt-4o-mini',
+      default: 'gpt-4.1-nano', // Updated to use cost-effective nano model
       env: 'SYNTHESIS_MODEL'
     },
 
     maxTokens: {
       doc: 'Maximum tokens for synthesis',
       format: 'int',
-      default: 500,
+      default: 2000, // Increased from 500 to prevent truncation
       env: 'SYNTHESIS_MAX_TOKENS'
     }
   },
 
-  // Tier-specific configurations
+  // Tier-specific configurations - Optimized for longer responses
   tiers: {
     free: {
       sharedWordLimit: {
         doc: 'Shared word limit for free tier',
         format: 'int',
-        default: 1000,
+        default: 1500, // Increased from 1000 for longer responses
         env: 'TIER_FREE_SHARED_WORD_LIMIT'
       },
       maxTokensPerRole: {
         doc: 'Maximum tokens per role for free tier',
         format: 'int',
-        default: 1200,
+        default: 2000, // Increased from 1200 to prevent truncation
         env: 'TIER_FREE_MAX_TOKENS_PER_ROLE'
       },
       maxSynthesisTokens: {
         doc: 'Maximum synthesis tokens for free tier',
         format: 'int',
-        default: 1600,
+        default: 2500, // Increased from 1600 for comprehensive synthesis
         env: 'TIER_FREE_MAX_SYNTHESIS_TOKENS'
       },
       maxCharactersPerRole: {
         doc: 'Maximum characters per role for free tier',
         format: 'int',
-        default: 4800,
+        default: 8000, // Increased from 4800 for longer responses
         env: 'TIER_FREE_MAX_CHARACTERS_PER_ROLE'
       },
       timeoutMs: {
         doc: 'Timeout for free tier in milliseconds',
         format: 'int',
-        default: 75000,
+        default: 90000, // Increased from 75000 for longer processing
         env: 'TIER_FREE_TIMEOUT_MS'
       },
       requestsPerHour: {
@@ -725,31 +725,31 @@ const config = convict({
       sharedWordLimit: {
         doc: 'Shared word limit for premium tier',
         format: 'int',
-        default: 800,
+        default: 2000, // Increased from 800 for premium longer responses
         env: 'TIER_PREMIUM_SHARED_WORD_LIMIT'
       },
       maxTokensPerRole: {
         doc: 'Maximum tokens per role for premium tier',
         format: 'int',
-        default: 1600,
+        default: 3000, // Increased from 1600 for premium longer responses
         env: 'TIER_PREMIUM_MAX_TOKENS_PER_ROLE'
       },
       maxSynthesisTokens: {
         doc: 'Maximum synthesis tokens for premium tier',
         format: 'int',
-        default: 2000,
+        default: 4000, // Increased from 2000 for comprehensive premium synthesis
         env: 'TIER_PREMIUM_MAX_SYNTHESIS_TOKENS'
       },
       maxCharactersPerRole: {
         doc: 'Maximum characters per role for premium tier',
         format: 'int',
-        default: 3800,
+        default: 12000, // Increased from 3800 for premium longer responses
         env: 'TIER_PREMIUM_MAX_CHARACTERS_PER_ROLE'
       },
       timeoutMs: {
         doc: 'Timeout for premium tier in milliseconds',
         format: 'int',
-        default: 75000,
+        default: 120000, // Increased from 75000 for premium longer processing
         env: 'TIER_PREMIUM_TIMEOUT_MS'
       },
       requestsPerHour: {

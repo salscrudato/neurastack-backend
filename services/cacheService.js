@@ -57,7 +57,6 @@ class CacheService {
     // Enhanced TTL configurations optimized for 25+ concurrent users (in milliseconds)
     this.defaultTTL = {
       ensemble: 600000,      // 10 minutes for ensemble responses (increased for better hit rate)
-      workout: 3600000,      // 60 minutes for workout plans (increased for better performance)
       memory: 600000,        // 10 minutes for memory queries
       health: 30000,         // 30 seconds for health checks
       hot: 600000,           // 10 minutes for hot cache
@@ -181,8 +180,6 @@ class CacheService {
         // Auto-detect cache type from key prefix
         if (key.startsWith('ensemble:')) {
           ttl = this.defaultTTL.ensemble;
-        } else if (key.startsWith('workout:')) {
-          ttl = this.defaultTTL.workout;
         } else if (key.startsWith('memory:')) {
           ttl = this.defaultTTL.memory;
         } else if (key.startsWith('health:')) {
@@ -233,10 +230,6 @@ class CacheService {
     // Check key type for intelligent placement
     if (key.startsWith('ensemble:') || key.startsWith('health:')) {
       return 'warm'; // Ensemble responses are moderately accessed
-    }
-
-    if (key.startsWith('workout:')) {
-      return 'hot'; // Workout data is frequently accessed
     }
 
     return 'warm'; // Default to warm cache
@@ -600,79 +593,7 @@ class CacheService {
     }
   }
 
-  /**
-   * Cache workout plan with enhanced key generation
-   */
-  async cacheWorkoutPlan(userMetadata, workoutHistory, workoutRequest, response) {
-    // Extract workout type for more specific cache keys
-    const workoutType = this.extractWorkoutType(workoutRequest);
-    const cacheKey = this.generateKey('workout', {
-      userMetadata,
-      workoutHistory,
-      workoutRequest,
-      workoutType // Include workout type in cache key for better differentiation
-    });
-    await this.set(cacheKey, response, this.defaultTTL.workout);
-    return cacheKey;
-  }
-
-  /**
-   * Get cached workout plan with enhanced key generation
-   */
-  async getCachedWorkoutPlan(userMetadata, workoutHistory, workoutRequest) {
-    // Extract workout type for more specific cache keys
-    const workoutType = this.extractWorkoutType(workoutRequest);
-    const cacheKey = this.generateKey('workout', {
-      userMetadata,
-      workoutHistory,
-      workoutRequest,
-      workoutType // Include workout type in cache key for better differentiation
-    });
-    return await this.get(cacheKey);
-  }
-
-  /**
-   * Extract workout type from workout request for cache key differentiation
-   */
-  extractWorkoutType(workoutRequest) {
-    if (typeof workoutRequest === 'object' && workoutRequest !== null) {
-      // Enhanced format with workoutSpecification
-      if (workoutRequest.workoutSpecification && workoutRequest.workoutSpecification.workoutType) {
-        return workoutRequest.workoutSpecification.workoutType;
-      }
-      // Legacy object format
-      if (workoutRequest.workoutType) {
-        return workoutRequest.workoutType;
-      }
-    }
-
-    // String format - extract type from common patterns
-    if (typeof workoutRequest === 'string') {
-      const lowerRequest = workoutRequest.toLowerCase();
-      const workoutTypePatterns = {
-        'pilates': ['pilates'],
-        'yoga': ['yoga'],
-        'crossfit': ['crossfit', 'cross fit'],
-        'pull': ['pull day', 'pull workout'],
-        'push': ['push day', 'push workout'],
-        'legs': ['leg day', 'leg workout'],
-        'upper': ['upper body', 'upper workout'],
-        'lower': ['lower body', 'lower workout'],
-        'full_body': ['full body', 'total body'],
-        'cardio': ['cardio', 'cardiovascular'],
-        'strength': ['strength', 'weight training'],
-        'hiit': ['hiit', 'high intensity']
-      };
-
-      for (const [type, patterns] of Object.entries(workoutTypePatterns)) {
-        if (patterns.some(pattern => lowerRequest.includes(pattern))) {
-          return type;
-        }
-      }
-    }
-
-    return 'general'; // Default fallback
-  }
+  // Removed: Workout caching methods - workout functionality removed from codebase
 
   /**
    * Cache memory query results

@@ -225,15 +225,8 @@ class FirebaseDiagnostics {
       
       const docRef = await memoryCollection.add(testMemory);
       log('green', '   ✅ Memory collection write successful');
-      
-      // Test workout history operations
-      const workoutCollection = firestore.collection('workouts');
-      const testWorkout = {
-        userId: 'diagnostics-test',
-        workoutId: 'test-workout-123',
-        exercises: [],
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
-      };
+
+      // Removed: Workout collection test - workout functionality removed from codebase
       
       await workoutCollection.doc('test-workout').set(testWorkout);
       log('green', '   ✅ Workout collection write successful');

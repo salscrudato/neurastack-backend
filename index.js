@@ -76,7 +76,7 @@ function initializeFirebase() {
     logger.success('Firebase initialized', { Project: process.env.FIREBASE_PROJECT_ID }, 'firebase');
   } catch (error) {
     logger.warning('Firebase init failed - Using local cache only (low-cost fallback)', { Error: error.message }, 'firebase');
-    // No exit; continue with local cache for memory/workouts to keep costs low
+    // No exit; continue with local cache for memory to keep costs low
   }
 }
 

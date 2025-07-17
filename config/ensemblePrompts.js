@@ -5,21 +5,21 @@ const TIER = process.env.NEURASTACK_TIER || 'free'; // 'free', 'premium'
 
 const dynamicConfig = require('./dynamicConfig');
 
-// Cost-optimized models for different tiers
+// Cost-optimized models for different tiers - Updated for maximum cost efficiency
 const MODEL_CONFIGS = {
   free: {
-    gpt4o: { provider: 'openai', model: 'gpt-4o-mini' }, // Keep as is - excellent value at $0.15/$0.60 per 1M tokens
-    gemini: { provider: 'gemini', model: 'gemini-1.5-flash' }, // Switched to 1.5-flash - lower cost, tends to generate longer responses
-    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - good balance at $0.80/$4.00 per 1M tokens
-    synthesizer: { provider: 'openai', model: 'gpt-4.1-mini' }, // Changed to 4.1-mini - 73% cheaper than gpt-4o, better quality
-    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Reliable, cost-effective fallback ($0.15/$0.60 per 1M tokens)
+    gpt4o: { provider: 'openai', model: 'gpt-4.1-nano' }, // Updated to 4.1-nano - most cost-effective OpenAI model
+    gemini: { provider: 'gemini', model: 'gemini-1.5-flash-8b' }, // Updated to 8B variant - 50% cheaper than flash
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-20241022' }, // Updated to latest haiku - most cost-effective Claude
+    synthesizer: { provider: 'openai', model: 'gpt-4.1-nano' }, // Use nano for synthesis - ultra cost-effective
+    fallback: { provider: 'openai', model: 'gpt-4.1-nano' } // Consistent nano fallback for maximum cost savings
   },
   premium: {
-    gpt4o: { provider: 'openai', model: 'gpt-4o' }, // Full performance model for premium users
-    gemini: { provider: 'gemini', model: 'gemini-2.5-flash' }, // Upgraded to 2.5 - better performance with 1M context window
-    claude: { provider: 'claude', model: 'claude-3-5-haiku-latest' }, // Keep as is - fast, high-quality responses
-    synthesizer: { provider: 'openai', model: 'gpt-4o' }, // Premium synthesis quality
-    fallback: { provider: 'openai', model: 'gpt-4o-mini' } // Consistent reliable fallback for premium
+    gpt4o: { provider: 'openai', model: 'gpt-4.1-nano' }, // Even premium uses nano for cost efficiency
+    gemini: { provider: 'gemini', model: 'gemini-1.5-pro' }, // Pro model for premium quality when needed
+    claude: { provider: 'claude', model: 'claude-3-5-haiku-20241022' }, // Latest haiku for premium speed
+    synthesizer: { provider: 'openai', model: 'gpt-4.1-nano' }, // Nano synthesis for cost efficiency
+    fallback: { provider: 'openai', model: 'gpt-4.1-nano' } // Consistent nano fallback
   }
 };
 

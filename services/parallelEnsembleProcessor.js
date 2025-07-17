@@ -263,35 +263,35 @@ class ParallelEnsembleProcessor extends EventEmitter {
       switch (model) {
         case 'gpt4o':
           response = await clients.openai.chat.completions.create({
-            model: 'gpt-4o-mini', // Faster model
+            model: 'gpt-4.1-nano', // Updated to cost-effective nano model
             messages: [
-              { role: 'system', content: 'You are a helpful AI assistant. Provide concise, accurate responses.' },
+              { role: 'system', content: 'You are a helpful AI assistant. Provide comprehensive, accurate responses.' },
               { role: 'user', content: prompt }
             ],
-            max_tokens: 800,      // Reduced for speed
+            max_tokens: 2000,     // Increased from 800 for longer responses
             temperature: 0.3,     // Lower for consistency
             top_p: 0.9
           });
           break;
-          
+
         case 'gemini':
           response = await clients.gemini.post(
-            `/models/gemini-1.5-flash:generateContent`,
+            `/models/gemini-1.5-flash-8b:generateContent`, // Updated to cost-effective 8B model
             {
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
-                maxOutputTokens: 800,
+                maxOutputTokens: 2000, // Increased from 800 for longer responses
                 temperature: 0.3,
                 topP: 0.9
               }
             }
           );
           break;
-          
+
         case 'claude':
           response = await clients.claude.post('/messages', {
-            model: 'claude-3-5-haiku-latest',
-            max_tokens: 800,
+            model: 'claude-3-5-haiku-20241022', // Updated to latest haiku model
+            max_tokens: 2000,     // Increased from 800 for longer responses
             temperature: 0.3,
             messages: [{ role: 'user', content: prompt }]
           });
@@ -301,10 +301,10 @@ class ParallelEnsembleProcessor extends EventEmitter {
           response = await clients.xai.post('/chat/completions', {
             model: 'grok-2-1212',
             messages: [
-              { role: 'system', content: 'You are Grok, a helpful AI assistant. Provide concise, accurate responses.' },
+              { role: 'system', content: 'You are Grok, a helpful AI assistant. Provide comprehensive, accurate responses.' },
               { role: 'user', content: prompt }
             ],
-            max_tokens: 800,
+            max_tokens: 2000,     // Increased from 800 for longer responses
             temperature: 0.3,
             top_p: 0.9
           });

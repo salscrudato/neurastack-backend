@@ -161,32 +161,7 @@ describe('🚀 NeuraStack Optimization Suite', () => {
     }, 30000); // 30 second timeout for AI calls
   });
 
-  describe('💪 Workout API Integration', () => {
-    test('🏋️ should generate optimized workout', async () => {
-      const workoutRequest = {
-        age: 30,
-        fitnessLevel: 'intermediate',
-        gender: 'male',
-        weight: 75,
-        goals: 'muscle building',
-        equipment: 'gym',
-        timeAvailable: 60,
-        daysPerWeek: 4,
-        workoutType: 'strength training'
-      };
-
-      const response = await request(app)
-        .post('/workout/generate-workout')
-        .send(workoutRequest)
-        .set('X-User-Id', 'test-workout-user')
-        .expect(200);
-
-      expect(response.body.status).toBe('success');
-      expect(response.body.data).toBeDefined();
-      expect(response.body.data.workout).toBeDefined();
-      expect(response.body.data.workoutId).toBeDefined();
-    }, 30000); // 30 second timeout for AI calls
-  });
+  // Removed: Workout API Integration tests - workout functionality removed from codebase
 
   describe('🔄 System Integration', () => {
     test('📊 should handle concurrent requests efficiently', async () => {

@@ -88,24 +88,8 @@ class OptimizationTester {
         method: 'POST',
         data: { prompt: 'Test performance optimization with enhanced ensemble system.' },
         expectedMaxTime: 15000 // 15 seconds max
-      },
-      {
-        name: 'Workout API Response Time',
-        endpoint: '/workout/generate-workout',
-        method: 'POST',
-        data: {
-          age: 30,
-          fitnessLevel: 'intermediate',
-          gender: 'male',
-          weight: 75,
-          goals: 'muscle_gain',
-          equipment: 'gym',
-          timeAvailable: 45,
-          daysPerWeek: 4,
-          workoutType: 'strength'
-        },
-        expectedMaxTime: 20000 // 20 seconds max
       }
+      // Removed: Workout API test - workout functionality removed from codebase
     ];
 
     for (const test of tests) {

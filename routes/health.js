@@ -69,8 +69,9 @@ router.get('/synthesis-health', async (req, res) => {
 router.get('/openai-test', async (req, res) => {
   try {
     const response = await clients.openai.chat.completions.create({
-      model: 'gpt-4o-mini', // Low-cost
-      messages: [{ role: 'user', content: 'Hello! Brief overview of Neurastack backend?' }]
+      model: 'gpt-4.1-nano', // Updated to most cost-effective model
+      messages: [{ role: 'user', content: 'Hello! Brief overview of Neurastack backend?' }],
+      max_tokens: 500 // Limit tokens for test endpoint
     });
     res.status(200).json({ status: 'ok', model: response.model, response: response.choices[0].message.content });
   } catch (error) {
@@ -378,15 +379,7 @@ router.get('/tier-info', async (req, res) => {
   }
 });
 
-// Workout health (keep as is)
-router.get('/workout/health', async (req, res) => {
-  try {
-    const healthStatus = await workoutService.getHealthStatus();
-    res.status(healthStatus.status === 'healthy' ? 200 : 503).json({ ...healthStatus, timestamp: new Date().toISOString() });
-  } catch (error) {
-    res.status(503).json({ status: 'unhealthy', error: error.message, timestamp: new Date().toISOString() });
-  }
-});
+// Removed: Workout health endpoint - workout functionality removed from codebase
 
 // Cache stats/clear (keep as is, but add auth if admin)
 

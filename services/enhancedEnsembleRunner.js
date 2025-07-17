@@ -309,7 +309,7 @@ class EnhancedEnsembleRunner {
   }
 
   async executeRoleCall(role, userPrompt, provider, model, correlationId) {
-    const maxTokens = limits.maxTokensPerRole || 250;
+    const maxTokens = limits.maxTokensPerRole || 2000; // Increased default from 250
     const startTime = Date.now();
     let response;
 
@@ -317,12 +317,14 @@ class EnhancedEnsembleRunner {
       switch (provider) {
         case 'openai':
           const openaiResp = await clients.openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: model || 'gpt-4.1-nano', // Use configured model, fallback to nano
             messages: [
               { role: 'system', content: systemPrompts[role] },
               { role: 'user', content: userPrompt }
             ],
-            max_tokens: maxTokens
+            max_tokens: maxTokens,
+            temperature: 0.3, // Consistent temperature for cost efficiency
+            top_p: 0.9
             // Note: timeout should be handled at the HTTP client level, not in the API call
           });
 
@@ -334,11 +336,17 @@ class EnhancedEnsembleRunner {
           break;
 
         case 'gemini':
-          const geminiResp = await clients.gemini.post(`/models/gemini-1.5-flash:generateContent`, {
+          // Use configured model, fallback to cost-effective flash-8b
+          const geminiModel = model || 'gemini-1.5-flash-8b';
+          const geminiResp = await clients.gemini.post(`/models/${geminiModel}:generateContent`, {
             contents: [{
               parts: [{ text: `${systemPrompts[role]}\n\n${userPrompt}` }]
             }],
-            generationConfig: { maxOutputTokens: maxTokens }
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature: 0.3,
+              topP: 0.9
+            }
           });
 
           if (!geminiResp.data.candidates || !geminiResp.data.candidates[0] ||
@@ -351,8 +359,9 @@ class EnhancedEnsembleRunner {
 
         case 'claude':
           const claudeResp = await clients.claude.post('/messages', {
-            model: 'claude-3-5-haiku-latest',
+            model: model || 'claude-3-5-haiku-20241022', // Use configured model, fallback to latest haiku
             max_tokens: maxTokens,
+            temperature: 0.3,
             messages: [{
               role: 'user',
               content: `${systemPrompts[role]}\n\n${userPrompt}`

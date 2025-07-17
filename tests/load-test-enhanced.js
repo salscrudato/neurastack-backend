@@ -115,33 +115,7 @@ describe('🚀 Enhanced Load Testing Suite', () => {
     }, 120000); // 2 minute timeout
   });
 
-  describe('💪 Workout API Load Testing', () => {
-    test('should handle concurrent workout generation requests', async () => {
-      const promises = [];
-      const startTime = Date.now();
-
-      // Create concurrent workout requests
-      for (let userId = 1; userId <= Math.min(CONCURRENT_USERS, 15); userId++) {
-        const userPromise = simulateUser(userId, 'workout');
-        promises.push(userPromise);
-      }
-
-      const results = await Promise.allSettled(promises);
-      const endTime = Date.now();
-      const totalDuration = endTime - startTime;
-
-      console.log(`\n💪 Workout load test completed in ${totalDuration}ms`);
-      
-      const successful = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
-      
-      console.log(`✅ Successful workout requests: ${successful}`);
-      console.log(`❌ Failed workout requests: ${failed}`);
-      
-      // Expect at least 75% success rate for workout generation
-      expect(successful / Math.min(CONCURRENT_USERS, 15)).toBeGreaterThanOrEqual(0.75);
-    }, 180000); // 3 minute timeout
-  });
+  // Removed: Workout API Load Testing - workout functionality removed from codebase
 
   describe('🧠 Memory System Load Testing', () => {
     test('should handle concurrent memory operations', async () => {
@@ -187,9 +161,6 @@ describe('🚀 Enhanced Load Testing Suite', () => {
         switch (endpoint) {
           case 'ensemble':
             response = await makeEnsembleRequest(userId);
-            break;
-          case 'workout':
-            response = await makeWorkoutRequest(userId);
             break;
           case 'memory':
             response = await makeMemoryRequest(userId);
@@ -249,31 +220,7 @@ describe('🚀 Enhanced Load Testing Suite', () => {
       });
   }
 
-  /**
-   * Make a workout API request
-   */
-  async function makeWorkoutRequest(userId) {
-    const workoutData = {
-      age: 25 + (userId % 40),
-      fitnessLevel: ['beginner', 'intermediate', 'advanced'][userId % 3],
-      gender: ['male', 'female'][userId % 2],
-      weight: 60 + (userId % 40),
-      goals: ['weight_loss', 'muscle_gain', 'endurance'][userId % 3],
-      equipment: ['bodyweight', 'dumbbells', 'gym'][userId % 3],
-      timeAvailable: 30 + (userId % 60),
-      daysPerWeek: 3 + (userId % 4),
-      workoutType: 'full_body'
-    };
-
-    return request(app)
-      .post('/workout/generate-workout')
-      .set('X-User-Id', `load-test-user-${userId}`)
-      .set('X-Correlation-ID', `load-test-workout-${userId}-${Date.now()}`)
-      .send(workoutData)
-      .expect(res => {
-        expect([200, 400, 429, 500]).toContain(res.status);
-      });
-  }
+  // Removed: makeWorkoutRequest function - workout functionality removed from codebase
 
   /**
    * Make a memory API request
