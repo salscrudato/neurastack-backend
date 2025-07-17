@@ -466,16 +466,32 @@ class EnhancedEnsembleRunner {
 
       sessionId = sessionId || `session_${userId}_${Date.now()}`;
 
-      // Get context with error handling
+      // Get simplified context (disabled by default to prevent voting interference)
       let context = '';
+      let contextMetadata = { contextEnabled: false, totalTokens: 0 };
+
       try {
         const contextResult = await getHierarchicalContextManager().getHierarchicalContext(
           userId,
           sessionId,
-          limits.maxTokensPerRole * 0.7,
+          500, // Reduced token limit to minimize voting impact
           userPrompt
         );
         context = contextResult.context || '';
+        contextMetadata = {
+          contextEnabled: contextResult.contextEnabled,
+          totalTokens: contextResult.totalTokens,
+          entriesUsed: contextResult.entriesUsed || 0,
+          reason: contextResult.reason
+        };
+
+        if (contextResult.contextEnabled && context) {
+          monitoringService.log('info', 'Using memory context for ensemble', {
+            tokenCount: contextResult.totalTokens,
+            entriesUsed: contextResult.entriesUsed,
+            correlationId
+          }, correlationId);
+        }
       } catch (contextError) {
         monitoringService.log('warn', 'Context retrieval failed, continuing without context', {
           error: contextError.message,
@@ -483,7 +499,10 @@ class EnhancedEnsembleRunner {
         }, correlationId);
       }
 
-      const enhancedPrompt = context ? `${context}\n\n${userPrompt}` : userPrompt;
+      // Only add context if it's enabled and available (prevents voting interference)
+      const enhancedPrompt = (contextMetadata.contextEnabled && context)
+        ? `Previous conversation:\n${context}\n\nCurrent question: ${userPrompt}`
+        : userPrompt;
 
       // Execute role calls with enhanced error handling
       const rolePromises = ['gpt4o', 'gemini', 'claude'].map(role =>
@@ -570,7 +589,12 @@ class EnhancedEnsembleRunner {
           processingTime,
           correlationId,
           successfulRoles: successfulRoles.length,
-          totalRoles: roleOutputs.length
+          totalRoles: roleOutputs.length,
+          // Simplified memory metadata
+          memoryContextUsed: contextMetadata.contextEnabled,
+          memoryTokensUsed: contextMetadata.totalTokens,
+          memoryEntriesUsed: contextMetadata.entriesUsed || 0,
+          memoryContextReason: contextMetadata.reason
         }
       };
 

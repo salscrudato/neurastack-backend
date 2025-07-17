@@ -91,7 +91,7 @@ const memoryRoutes = require('./routes/memory');
 const adminRoutes = require('./routes/admin');
 const tierRoutes = require('./routes/tiers');
 
-const MemoryLifecycleManager = require('./services/memoryLifecycle');
+// Removed: MemoryLifecycleManager (simplified memory system doesn't need complex lifecycle management)
 const monitoringService = require('./services/monitoringService');
 const { attachUserTier, logTierUsage } = require('./middleware/tierMiddleware');
 const cacheService = require('./services/cacheService');
@@ -105,7 +105,7 @@ const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 8080;
 
 // Background services (essential only; health monitor optional in dev)
-const memoryLifecycleManager = new MemoryLifecycleManager();
+// Removed: memoryLifecycleManager (simplified memory system doesn't need lifecycle management)
 
 // CORS config (unchanged, but simplified array)
 const corsOptions = {
@@ -168,8 +168,8 @@ if (require.main === module) {
     logger.success(`Server running on port ${PORT}`, { Env: process.env.NODE_ENV || 'development', PID: process.pid }, 'startup');
 
     // Init background services (simplified)
-    memoryLifecycleManager.start();
-    logger.success('Memory manager active', {}, 'memory');
+    // Removed: memoryLifecycleManager.start() - simplified memory system doesn't need lifecycle management
+    logger.success('Simplified memory system active', {}, 'memory');
 
     const healthMonitor = new HealthMonitor();
     if (process.env.NODE_ENV !== 'development') { // Optional in dev to reduce overhead
@@ -231,7 +231,7 @@ async function gracefulShutdown(server, emergency = false) {
     server?.close(() => logger.success('Server closed', {}, 'shutdown'));
 
     // Stop services
-    memoryLifecycleManager.stop();
+    // Removed: memoryLifecycleManager.stop() - simplified memory system doesn't need lifecycle management
     await cacheService.shutdown();
     logger.success('Services stopped', {}, 'shutdown');
 
