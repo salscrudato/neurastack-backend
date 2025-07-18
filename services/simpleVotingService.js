@@ -275,7 +275,7 @@ class SimpleVotingService {
 
       // Simplified diversity analysis (maintains structure)
       diversityAnalysis: {
-        overallDiversity: 1, // Simplified - assume responses are diverse
+        overallDiversity: this.calculateOverallDiversity(roles),
         diversityWeights: this.createDiversityWeights(roles),
         _description: "Semantic diversity analysis showing how different responses are from each other"
       },
@@ -317,35 +317,108 @@ class SimpleVotingService {
   }
 
   /**
-   * Create simplified diversity weights with realistic variation (maintains structure)
+   * Create diversity weights based on actual response characteristics
    */
   createDiversityWeights(roles) {
     const weights = {};
 
-    // Different base weights for variety - simulates different levels of diversity
-    const diversityLevels = [
-      { weight: 1.0, description: 'moderate' },    // Moderate diversity
-      { weight: 1.1, description: 'high' },        // High diversity
-      { weight: 1.2, description: 'very_high' },   // Very high diversity
-      { weight: 0.9, description: 'low' },         // Low diversity (similar responses)
-      { weight: 0.95, description: 'low_moderate' } // Low-moderate diversity
-    ];
+    if (roles.length === 0) return weights;
 
-    roles.forEach((role, index) => {
-      // Assign different diversity levels to create realistic variation
-      // Use a deterministic but varied approach based on role name
-      const roleHash = this.simpleHash(role.role);
-      const diversityIndex = roleHash % diversityLevels.length;
-      const diversityLevel = diversityLevels[diversityIndex];
+    // Calculate average response characteristics for comparison
+    const avgWordCount = roles.reduce((sum, r) => sum + (r.wordCount || 0), 0) / roles.length;
+    const avgResponseTime = roles.reduce((sum, r) => sum + (r.responseTime || 0), 0) / roles.length;
 
-      // Add small random variation (±0.05) to make it more realistic
-      const variation = (Math.random() * 0.1) - 0.05; // -0.05 to +0.05
-      const finalWeight = Math.max(0.8, Math.min(1.2, diversityLevel.weight + variation));
+    roles.forEach(role => {
+      let diversityWeight = 1.0; // Base diversity weight
 
-      weights[role.role] = parseFloat(finalWeight.toFixed(3)); // Round to 3 decimal places
+      // Factor in word count diversity (responses significantly different from average get higher diversity)
+      const wordCountDiff = Math.abs((role.wordCount || 0) - avgWordCount);
+      const wordCountDiversityBonus = Math.min(0.15, wordCountDiff / avgWordCount);
+      diversityWeight += wordCountDiversityBonus;
+
+      // Factor in response time diversity
+      const responseTimeDiff = Math.abs((role.responseTime || 0) - avgResponseTime);
+      const responseTimeDiversityBonus = Math.min(0.1, responseTimeDiff / (avgResponseTime || 5000));
+      diversityWeight += responseTimeDiversityBonus;
+
+      // Factor in structural diversity (well-structured responses get slight bonus)
+      if (role.quality?.hasStructure) {
+        diversityWeight += 0.05;
+      }
+
+      // Factor in model diversity (different models naturally have different approaches)
+      const modelDiversityBonus = this.getModelDiversityBonus(role.model);
+      diversityWeight += modelDiversityBonus;
+
+      // Clamp the final weight to reasonable bounds
+      diversityWeight = Math.max(0.85, Math.min(1.25, diversityWeight));
+
+      weights[role.role] = parseFloat(diversityWeight.toFixed(3));
     });
 
     return weights;
+  }
+
+  /**
+   * Get model-specific diversity bonus based on known model characteristics
+   */
+  getModelDiversityBonus(model) {
+    const modelBonuses = {
+      'gpt-4o-mini': 0.05,           // Balanced approach
+      'gpt-4.1-nano': 0.08,         // More creative/diverse
+      'claude-3-5-haiku': 0.06,     // Structured but diverse
+      'gemini-1.5-flash': 0.04,     // Fast but sometimes less diverse
+      'gemini-1.5-flash-8b': 0.03   // Smaller model, less diversity
+    };
+
+    return modelBonuses[model] || 0.05; // Default bonus for unknown models
+  }
+
+  /**
+   * Calculate overall diversity score based on response characteristics
+   */
+  calculateOverallDiversity(roles) {
+    if (roles.length < 2) return 0;
+
+    // Calculate diversity based on multiple factors
+    let diversityScore = 0;
+
+    // Word count diversity
+    const wordCounts = roles.map(r => r.wordCount || 0);
+    const wordCountVariance = this.calculateVariance(wordCounts);
+    const wordCountDiversity = Math.min(1, wordCountVariance / 10000);
+    diversityScore += wordCountDiversity * 0.4;
+
+    // Response time diversity
+    const responseTimes = roles.map(r => r.responseTime || 5000);
+    const responseTimeVariance = this.calculateVariance(responseTimes);
+    const responseTimeDiversity = Math.min(1, responseTimeVariance / 1000000);
+    diversityScore += responseTimeDiversity * 0.2;
+
+    // Model diversity (different models = higher diversity)
+    const uniqueModels = new Set(roles.map(r => r.model)).size;
+    const modelDiversity = uniqueModels / roles.length;
+    diversityScore += modelDiversity * 0.3;
+
+    // Confidence diversity
+    const confidenceScores = roles.map(r => r.confidence?.score || 0.5);
+    const confidenceVariance = this.calculateVariance(confidenceScores);
+    const confidenceDiversity = Math.min(1, confidenceVariance * 10);
+    diversityScore += confidenceDiversity * 0.1;
+
+    return Math.round(diversityScore * 1000) / 1000;
+  }
+
+  /**
+   * Calculate variance for an array of numbers
+   */
+  calculateVariance(numbers) {
+    if (numbers.length < 2) return 0;
+
+    const mean = numbers.reduce((sum, num) => sum + num, 0) / numbers.length;
+    const variance = numbers.reduce((sum, num) => sum + Math.pow(num - mean, 2), 0) / numbers.length;
+
+    return variance;
   }
 
   /**
@@ -379,13 +452,32 @@ class SimpleVotingService {
    * Create simplified tie-breaker result (maintains structure)
    */
   createTieBreakerResult(winner, confidence, roles) {
+    // Calculate actual diversity scores based on response characteristics
+    const diversityScores = roles.map(role => {
+      const wordCount = role.wordCount || 0;
+      const responseTime = role.responseTime || 5000;
+      const hasStructure = role.quality?.hasStructure || false;
+
+      // Simple diversity calculation based on response characteristics
+      let diversityScore = 1.0;
+      if (wordCount > 300) diversityScore += 0.1;
+      if (responseTime < 3000) diversityScore += 0.05;
+      if (hasStructure) diversityScore += 0.05;
+
+      return { role: role.role, score: Math.round(diversityScore * 1000) / 1000 };
+    });
+
+    const diversityReasoningText = diversityScores
+      .map(d => `${d.role}: ${d.score}`)
+      .join(', ');
+
     return {
       used: true,
       strategy: 'diversity_weighted',
       originalWinner: winner,
       finalWinner: winner,
       confidence: confidence * 0.8, // Slightly lower confidence for tie-breaking
-      reasoning: `Selected based on response diversity: ${roles.map(r => `${r.role}: 1.200`).join(', ')}`,
+      reasoning: `Selected based on response diversity: ${diversityReasoningText}`,
       _description: "Tie-breaking mechanism used when traditional voting was inconclusive"
     };
   }
@@ -394,11 +486,41 @@ class SimpleVotingService {
    * Create simplified meta-voting result (maintains structure)
    */
   createMetaVotingResult(winner, confidence, roles) {
+    // Generate contextual reasoning based on the winner's characteristics
+    const winnerRole = roles.find(r => r.role === winner);
+    const winnerModel = winnerRole?.model || 'unknown';
+    const winnerWordCount = winnerRole?.wordCount || 0;
+    const winnerResponseTime = winnerRole?.responseTime || 0;
+
+    // Create dynamic reasoning based on actual response characteristics
+    let reasoning = `${winner.toUpperCase()} (${winnerModel}) selected as winner based on optimal balance of factors: `;
+    const reasoningFactors = [];
+
+    if (confidence > 0.7) {
+      reasoningFactors.push('high confidence score');
+    }
+    if (winnerWordCount > 200 && winnerWordCount < 500) {
+      reasoningFactors.push('appropriate response length');
+    }
+    if (winnerResponseTime < 5000) {
+      reasoningFactors.push('fast response time');
+    }
+    if (winnerRole?.quality?.hasStructure) {
+      reasoningFactors.push('well-structured content');
+    }
+
+    // Fallback reasoning if no specific factors identified
+    if (reasoningFactors.length === 0) {
+      reasoningFactors.push('overall response quality and relevance');
+    }
+
+    reasoning += reasoningFactors.join(', ') + '.';
+
     return {
       used: true,
       winner,
       confidence: confidence * 0.85,
-      reasoning: `Response_A is chosen as the winner due to its simplicity, relevance, and humor that directly addresses the user's request for a joke. While Response_B and Response_C also provide jokes, Response_A stands out for its straightforward delivery and punchline that is easy to understand and appreciate.`,
+      reasoning,
       ranking: roles.map(r => r.role),
       _description: "AI-powered meta-voting analysis for quality assessment and ranking"
     };
@@ -408,26 +530,55 @@ class SimpleVotingService {
    * Create simplified abstention result (maintains structure)
    */
   createAbstentionResult(roles, confidence) {
+    // Determine if abstention should actually be triggered based on real conditions
+    const avgConfidence = roles.reduce((sum, r) => sum + (r.confidence?.score || 0.5), 0) / roles.length;
+    const failedCount = roles.filter(r => r.status !== 'fulfilled').length;
+    const successRate = (roles.length - failedCount) / roles.length;
+
+    // Only trigger abstention if there are real quality issues
+    const shouldTrigger = confidence < 0.4 || avgConfidence < 0.3 || successRate < 0.5;
+    const reasons = [];
+    let severity = 'low';
+
+    if (confidence < 0.4) {
+      reasons.push('low_voting_confidence');
+      severity = 'medium';
+    }
+    if (avgConfidence < 0.3) {
+      reasons.push('low_semantic_confidence');
+      severity = 'medium';
+    }
+    if (successRate < 0.5) {
+      reasons.push('high_failure_rate');
+      severity = 'high';
+    }
+
+    // If no real issues, don't trigger abstention
+    if (!shouldTrigger) {
+      reasons.push('quality_acceptable');
+      severity = 'none';
+    }
+
     return {
-      triggered: true,
-      reasons: ['low_semantic_confidence'],
-      severity: 'low',
-      recommendedStrategy: 'high_quality_focused',
+      triggered: shouldTrigger,
+      reasons: reasons.length > 0 ? reasons : ['quality_acceptable'],
+      severity,
+      recommendedStrategy: shouldTrigger ? 'high_quality_focused' : 'continue',
       qualityMetrics: {
-        overallQuality: null,
-        successRate: 1,
-        failureRate: 0,
-        avgConfidence: null,
+        overallQuality: avgConfidence,
+        successRate,
+        failureRate: failedCount / roles.length,
+        avgConfidence,
         avgResponseLength: roles.reduce((sum, r) => sum + (r.content?.length || 0), 0) / roles.length,
         avgResponseTime: roles.reduce((sum, r) => sum + (r.responseTime || 0), 0) / roles.length,
-        avgSemanticConfidence: 0,
-        consensusStrength: confidence * 0.8,
-        votingConfidence: confidence * 0.85,
-        weightDistribution: 0,
-        diversityScore: 1,
+        avgSemanticConfidence: avgConfidence,
+        consensusStrength: confidence,
+        votingConfidence: confidence,
+        weightDistribution: this.calculateWeightDistribution(roles),
+        diversityScore: this.calculateSimpleDiversityScore(roles),
         clusterCount: roles.length,
         responseCount: roles.length,
-        failedCount: 0
+        failedCount
       },
       _description: "Abstention analysis determining if response quality requires re-querying"
     };
@@ -482,6 +633,36 @@ class SimpleVotingService {
       this.metrics.successRate =
         (this.metrics.successRate * (this.metrics.totalVotes - 1)) / this.metrics.totalVotes;
     }
+  }
+
+  /**
+   * Calculate weight distribution variance (how spread out the weights are)
+   */
+  calculateWeightDistribution(roles) {
+    if (roles.length < 2) return 0;
+
+    const confidenceScores = roles.map(r => r.confidence?.score || 0.5);
+    const mean = confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length;
+    const variance = confidenceScores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / confidenceScores.length;
+
+    return Math.round(variance * 1000) / 1000; // Round to 3 decimal places
+  }
+
+  /**
+   * Calculate simple diversity score based on response characteristics
+   */
+  calculateSimpleDiversityScore(roles) {
+    if (roles.length < 2) return 0;
+
+    // Calculate diversity based on word count variance
+    const wordCounts = roles.map(r => r.wordCount || 0);
+    const avgWordCount = wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length;
+    const wordCountVariance = wordCounts.reduce((sum, count) => sum + Math.pow(count - avgWordCount, 2), 0) / wordCounts.length;
+
+    // Normalize to 0-1 scale (higher variance = more diversity)
+    const diversityScore = Math.min(1, wordCountVariance / 10000);
+
+    return Math.round(diversityScore * 1000) / 1000;
   }
 
   /**

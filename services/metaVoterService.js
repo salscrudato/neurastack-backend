@@ -47,6 +47,9 @@ class MetaVoterService {
     console.log(`   Timeout: ${this.timeout}ms`);
 
     this.initializeOpenAI();
+
+    // Clear any existing cross-session contamination on startup
+    this.clearCrossSessionContamination();
   }
 
   /**
@@ -120,7 +123,7 @@ class MetaVoterService {
   }
 
   /**
-   * Perform meta-voting analysis
+   * Perform meta-voting analysis (session-scoped only)
    */
   async performMetaVoting(roles, originalPrompt, votingResult, requestMetadata = {}) {
     if (!this.openaiClient) {
@@ -129,37 +132,45 @@ class MetaVoterService {
 
     try {
       const startTime = Date.now();
-      
-      // Prepare responses for meta-voting
+
+      // Prepare responses for meta-voting (session-scoped only)
       const responses = this.prepareResponsesForMetaVoting(roles);
-      
-      // Generate meta-voting prompt
+
+      // Generate meta-voting prompt (no cross-session context)
       const metaPrompt = this.generateMetaVotingPrompt(originalPrompt, responses, votingResult);
-      
-      // Call meta-voter AI
+
+      // Call meta-voter AI with session-scoped context only
       const metaVotingResult = await this.callMetaVoter(metaPrompt);
-      
+
       // Process and validate meta-voting result
       const processedResult = this.processMetaVotingResult(metaVotingResult, roles, votingResult);
-      
-      // Record meta-voting decision
+
+      // Record meta-voting decision (session-scoped only)
       await this.recordMetaVotingDecision({
         ...processedResult,
         originalVoting: votingResult,
         processingTime: Date.now() - startTime,
-        requestMetadata
+        requestMetadata: {
+          // Only pass essential session data, no cross-session memory context
+          userId: requestMetadata.userId,
+          sessionId: requestMetadata.sessionId,
+          correlationId: requestMetadata.correlationId,
+          type: requestMetadata.type
+        }
       });
 
-      // Detect potential bias
+      // Detect potential bias (session-scoped)
       await this.detectMetaVotingBias(processedResult, roles);
 
       return processedResult;
     } catch (error) {
       monitoringService.log('error', 'Meta-voting failed', {
         error: error.message,
-        fallbackUsed: true
+        fallbackUsed: true,
+        sessionId: requestMetadata.sessionId,
+        userId: requestMetadata.userId
       });
-      
+
       return this.getFallbackMetaVoting(votingResult);
     }
   }
@@ -181,13 +192,15 @@ class MetaVoterService {
   }
 
   /**
-   * Generate meta-voting prompt
+   * Generate meta-voting prompt (session-scoped, no cross-session context)
    */
   generateMetaVotingPrompt(originalPrompt, responses, votingResult) {
-    const responseTexts = responses.map(r => 
+    const responseTexts = responses.map(r =>
       `**${r.id} (${r.model}):**\n${r.content}\n`
     ).join('\n');
 
+    // Note: This prompt is intentionally session-scoped and does not include
+    // any cross-session memory context to prevent voting contamination
     return `You are an expert AI response evaluator. Your task is to analyze and rank multiple AI responses to determine which provides the best answer to the user's question.
 
 **Original User Question:**
@@ -381,14 +394,27 @@ Be objective, thorough, and provide clear reasoning for your decision. Focus on 
   }
 
   /**
-   * Record meta-voting decision for analysis
+   * Record meta-voting decision for analysis (session-scoped only)
    */
   async recordMetaVotingDecision(metaVotingResult) {
     try {
+      // Extract only session-specific data, exclude cross-session metadata
+      const { requestMetadata, ...sessionScopedResult } = metaVotingResult;
+
+      // Only include essential session data, not cross-session context
+      const sessionData = requestMetadata ? {
+        userId: requestMetadata.userId,
+        sessionId: requestMetadata.sessionId,
+        correlationId: requestMetadata.correlationId,
+        type: requestMetadata.type
+      } : {};
+
       const record = {
         metaVotingId: `meta_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: new Date().toISOString(),
-        ...metaVotingResult
+        ...sessionScopedResult,
+        // Only store essential session metadata, not cross-session memory context
+        sessionMetadata: sessionData
       };
 
       this.metaVotingHistory.set(record.metaVotingId, record);
@@ -399,11 +425,13 @@ Be objective, thorough, and provide clear reasoning for your decision. Focus on 
         oldestKeys.forEach(key => this.metaVotingHistory.delete(key));
       }
 
-      monitoringService.log('info', 'Meta-voting decision recorded', {
+      monitoringService.log('info', 'Meta-voting decision recorded (session-scoped)', {
         metaVotingId: record.metaVotingId,
         winner: record.metaWinner,
         confidence: record.metaConfidence,
-        overridden: record.votingOverridden
+        overridden: record.votingOverridden,
+        sessionId: sessionData.sessionId,
+        userId: sessionData.userId
       });
     } catch (error) {
       monitoringService.log('error', 'Failed to record meta-voting decision', {
@@ -413,7 +441,7 @@ Be objective, thorough, and provide clear reasoning for your decision. Focus on 
   }
 
   /**
-   * Detect potential bias in meta-voting decisions
+   * Detect potential bias in meta-voting decisions (session-aware)
    */
   async detectMetaVotingBias(metaResult, roles) {
     try {
@@ -461,7 +489,7 @@ Be objective, thorough, and provide clear reasoning for your decision. Focus on 
    */
   getMetaVotingStats() {
     const recentDecisions = Array.from(this.metaVotingHistory.values()).slice(-100);
-    
+
     if (recentDecisions.length === 0) {
       return { hasData: false };
     }
@@ -477,6 +505,29 @@ Be objective, thorough, and provide clear reasoning for your decision. Focus on 
       averageConfidence: avgConfidence.toFixed(3),
       averageProcessingTime: Math.round(avgProcessingTime),
       biasMetrics: Object.fromEntries(this.biasDetectionMetrics)
+    };
+  }
+
+  /**
+   * Clear cross-session contamination from meta voting history
+   */
+  clearCrossSessionContamination() {
+    const beforeSize = this.metaVotingHistory.size;
+
+    // Clear all existing history to remove any cross-session contamination
+    this.metaVotingHistory.clear();
+
+    // Reset bias detection metrics to start fresh
+    this.biasDetectionMetrics.clear();
+
+    monitoringService.log('info', 'Meta-voting cross-session contamination cleared', {
+      recordsCleared: beforeSize,
+      message: 'Meta-voting now operates with session-scoped context only'
+    });
+
+    return {
+      recordsCleared: beforeSize,
+      status: 'success'
     };
   }
 }
