@@ -591,6 +591,47 @@ class EnhancedEnsembleRunner {
         correlationId
       }, correlationId);
 
+      // Store conversation in memory for session continuity
+      try {
+        // Store user prompt
+        await this.memoryManager.storeMemory(
+          userId,
+          sessionId,
+          userPrompt,
+          true, // isUserPrompt
+          0.8, // responseQuality for user input
+          'user',
+          false // ensembleMode
+        );
+
+        // Store AI response (synthesis)
+        if (synthesisResult && synthesisResult.content) {
+          await this.memoryManager.storeMemory(
+            userId,
+            sessionId,
+            synthesisResult.content,
+            false, // isUserPrompt
+            synthesisResult.confidence || 0.7, // responseQuality
+            'ensemble-synthesis',
+            true // ensembleMode
+          );
+        }
+
+        monitoringService.log('info', 'Conversation stored in memory', {
+          userId,
+          sessionId,
+          correlationId
+        }, correlationId);
+      } catch (memoryError) {
+        // Don't fail the entire request if memory storage fails
+        monitoringService.log('warn', 'Failed to store conversation in memory', {
+          error: memoryError.message,
+          userId,
+          sessionId,
+          correlationId
+        }, correlationId);
+      }
+
       return {
         synthesis: synthesisResult,
         roles: roleOutputs.map(r => r.value || { status: 'rejected', error: r.reason?.message }),
