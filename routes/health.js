@@ -152,26 +152,33 @@ router.post('/default-ensemble', async (req, res) => {
     // Step 1: Validate and sanitize input (with rate limiting)
     const { prompt, userId, userTier, sessionId, explainMode } = validateAndSanitizeInput(req);
 
-    // Step 2: Run the enhanced AI ensemble with intelligent orchestration
+    // Step 2: Run the AI ensemble (enhanced system disabled for initial deployment)
+    // Enhanced system will be enabled in a future deployment once dependencies are resolved
+    const ENHANCED_SYSTEM_ENABLED = process.env.ENHANCED_SYSTEM_ENABLED === 'true' || false;
+
     let ensembleResult;
-    try {
-      const enhancedOrchestrator = require('../services/enhancedEnsembleOrchestrator');
-      ensembleResult = await enhancedOrchestrator.runEnhancedEnsemble(prompt, userId, sessionId, {
-        correlationId,
-        userTier,
-        explainMode,
-        qualityTarget: userTier === 'premium' ? 0.8 : 0.7
-      });
-    } catch (enhancedError) {
-      // Fallback to original ensemble if enhanced system fails
-      console.log('Enhanced system unavailable, using fallback:', enhancedError.message);
+    if (ENHANCED_SYSTEM_ENABLED) {
+      try {
+        const enhancedOrchestrator = require('../services/enhancedEnsembleOrchestrator');
+        ensembleResult = await enhancedOrchestrator.runEnhancedEnsemble(prompt, userId, sessionId, {
+          correlationId,
+          userTier,
+          explainMode,
+          qualityTarget: userTier === 'premium' ? 0.8 : 0.7
+        });
+      } catch (enhancedError) {
+        console.log('Enhanced system failed, using fallback:', enhancedError.message);
+        ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
+      }
+    } else {
+      // Use original ensemble system
       ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
     }
 
     // Step 3: Build response maintaining exact structure for backward compatibility
     let response;
 
-    if (ensembleResult.synthesis && ensembleResult.metadata && ensembleResult.metadata.enhanced) {
+    if (ENHANCED_SYSTEM_ENABLED && ensembleResult.synthesis && ensembleResult.metadata && ensembleResult.metadata.enhanced) {
       // Enhanced orchestrator response
       response = {
         synthesis: ensembleResult.synthesis,
@@ -202,7 +209,7 @@ router.post('/default-ensemble', async (req, res) => {
         }
       };
     } else {
-      // Fallback to original ensemble processing
+      // Use original ensemble processing
       const enhancedRoles = await simpleConfidenceService.calculateRoleConfidences(ensembleResult.roles);
       const votingResult = await getVotingResult(enhancedRoles, prompt, {
         correlationId,
@@ -226,9 +233,10 @@ router.post('/default-ensemble', async (req, res) => {
         correlationId
       );
 
-      // Mark as fallback
-      response.metadata.enhanced = false;
-      response.metadata.fallback = true;
+      // Add enhanced system status
+      response.metadata.enhanced = ENHANCED_SYSTEM_ENABLED;
+      response.metadata.enhancedSystemAvailable = false;
+      response.metadata.note = 'Enhanced system will be enabled in future deployment';
     }
 
     // Add explain mode details if requested
