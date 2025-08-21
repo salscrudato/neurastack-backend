@@ -147,6 +147,11 @@ app.use((err, req, res, next) => {
 // ============================================================================
 // 🛣️ STEP 7: ROUTES
 // ============================================================================
+// Add immediate health check for Cloud Run startup
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Neurastack backend healthy 🚀' });
+});
+
 app.use('/', healthRoutes);
 app.use('/memory', memoryRoutes);
 app.use('/admin', adminRoutes);
@@ -164,27 +169,33 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  const server = app.listen(PORT, async () => {
+  const server = app.listen(PORT, () => {
     logger.success(`Server running on port ${PORT}`, { Env: process.env.NODE_ENV || 'development', PID: process.pid }, 'startup');
 
-    // Init background services (simplified)
-    // Removed: memoryLifecycleManager.start() - simplified memory system doesn't need lifecycle management
-    logger.success('Simplified memory system active', {}, 'memory');
+    // Defer background service initialization to avoid startup timeout
+    setImmediate(async () => {
+      try {
+        // Init background services (simplified)
+        logger.success('Simplified memory system active', {}, 'memory');
 
-    const healthMonitor = new HealthMonitor();
-    if (process.env.NODE_ENV !== 'development') { // Optional in dev to reduce overhead
-      healthMonitor.startMonitoring(30000);
-      app.locals.healthMonitor = healthMonitor;
-      logger.success('Health monitoring active (every 30s)', {}, 'health');
-    }
+        const healthMonitor = new HealthMonitor();
+        if (process.env.NODE_ENV !== 'development') { // Optional in dev to reduce overhead
+          healthMonitor.startMonitoring(30000);
+          app.locals.healthMonitor = healthMonitor;
+          logger.success('Health monitoring active (every 30s)', {}, 'health');
+        }
 
-    // Intelligent forgetting (from original)
-    const { getMemoryManager } = require('./services/memoryManager');
-    getMemoryManager().scheduleIntelligentForgetting(24);
-    logger.success('Intelligent forgetting active (24h)', {}, 'memory');
+        // Intelligent forgetting (from original)
+        const { getMemoryManager } = require('./services/memoryManager');
+        getMemoryManager().scheduleIntelligentForgetting(24);
+        logger.success('Intelligent forgetting active (24h)', {}, 'memory');
 
-    // System capabilities log (simplified)
-    logger.info('System ready: AI Ensemble (low-cost models), Memory, Monitoring, Caching, Security', {}, 'system');
+        // System capabilities log (simplified)
+        logger.info('System ready: AI Ensemble (low-cost models), Memory, Monitoring, Caching, Security', {}, 'system');
+      } catch (error) {
+        logger.warning('Background service initialization failed', { error: error.message }, 'startup');
+      }
+    });
 
     // Graceful shutdown (unchanged but simplified function calls)
     setupGracefulShutdown(server);
