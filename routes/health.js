@@ -131,60 +131,85 @@ router.get('/claude-test', async (req, res) => {
 });
 
 /**
- * Main AI Ensemble Endpoint - Simplified Implementation
+ * Main AI Ensemble Endpoint - Enhanced Implementation
  *
- * This is the core endpoint that orchestrates the AI ensemble process:
+ * This is the core endpoint that orchestrates the enhanced AI ensemble process:
  * 1. Validates and sanitizes user input
- * 2. Runs the ensemble (calls multiple AI models in parallel)
- * 3. Calculates confidence scores for each response
- * 4. Performs voting to determine the best response
- * 5. Calculates synthesis confidence
- * 6. Builds and returns the final response
+ * 2. Uses intelligent model selection based on request characteristics
+ * 3. Executes models in parallel with optimized resource management
+ * 4. Performs advanced synthesis with multi-stage processing
+ * 5. Uses sophisticated voting with multi-factor analysis
+ * 6. Validates quality and provides comprehensive response
  *
- * The implementation has been simplified to remove complex analytics
- * while maintaining the exact response structure expected by clients.
+ * The implementation now uses the Enhanced Ensemble Orchestrator for
+ * superior results while maintaining backward compatibility.
  */
 router.post('/default-ensemble', async (req, res) => {
   // Generate or extract correlation ID for request tracking
-  const correlationId = req.correlationId || 'unknown';
+  const correlationId = req.correlationId || `ensemble_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   try {
     // Step 1: Validate and sanitize input (with rate limiting)
     const { prompt, userId, userTier, sessionId, explainMode } = validateAndSanitizeInput(req);
 
-    // Step 2: Run the AI ensemble (calls GPT-4o, Gemini, Claude in parallel)
-    const ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
-
-    // Step 3: Calculate confidence scores for each AI response
-    // Uses simplified confidence service instead of complex semantic analysis
-    const enhancedRoles = await simpleConfidenceService.calculateRoleConfidences(ensembleResult.roles);
-
-    // Step 4: Perform voting to determine the best response
-    // Uses simplified voting instead of sophisticated multi-factor voting
-    const votingResult = await getVotingResult(enhancedRoles, prompt, {
+    // Step 2: Run the enhanced AI ensemble with intelligent orchestration
+    const enhancedOrchestrator = require('../services/enhancedEnsembleOrchestrator');
+    const ensembleResult = await enhancedOrchestrator.runEnhancedEnsemble(prompt, userId, sessionId, {
       correlationId,
-      userId: req.headers['x-user-id'],
-      type: 'ensemble'
+      userTier,
+      explainMode,
+      qualityTarget: userTier === 'premium' ? 0.8 : 0.7
     });
 
-    // Step 5: Calculate synthesis confidence using simplified metrics
-    const synthesisConfidence = simpleConfidenceService.calculateSynthesisConfidence(
-      ensembleResult.synthesis,
-      enhancedRoles
-    );
+    // Step 3: Build response maintaining exact structure for backward compatibility
+    // The enhanced orchestrator already provides the complete response structure
+    const response = {
+      synthesis: ensembleResult.synthesis,
+      roles: ensembleResult.roles,
+      voting: ensembleResult.voting,
+      metadata: {
+        ...ensembleResult.metadata,
+        // Add legacy fields for compatibility
+        memoryContextUsed: ensembleResult.metadata.memoryContextUsed || false,
+        memoryTokensUsed: ensembleResult.metadata.memoryTokensUsed || 0,
+        confidenceAnalysis: {
+          averageConfidence: ensembleResult.roles.length > 0 ?
+            ensembleResult.roles.reduce((sum, role) => sum + (role.confidence?.score || 0), 0) / ensembleResult.roles.length : 0,
+          confidenceRange: ensembleResult.voting.analysis?.scoreGap || 0,
+          highConfidenceResponses: ensembleResult.roles.filter(role => (role.confidence?.score || 0) > 0.7).length
+        },
+        costEstimate: {
+          totalCost: 0.008, // Estimated cost for enhanced processing
+          breakdown: ensembleResult.metadata.selectedModels?.reduce((acc, model) => {
+            acc[model] = 0.002; // Estimated per model
+            return acc;
+          }, {}) || {},
+          synthesis: 0.002
+        },
+        tier: userTier,
+        enhanced: true,
+        orchestrationVersion: ensembleResult.metadata.orchestrationVersion
+      }
+    };
 
-    // Step 6: Build final response maintaining exact structure for compatibility
-    const response = buildFinalResponse(
-      ensembleResult,
-      enhancedRoles,
-      votingResult,
-      synthesisConfidence,
-      prompt,
-      userId,
-      sessionId,
-      explainMode,
-      correlationId
-    );
+    // Add explain mode details if requested
+    if (explainMode) {
+      response.explanation = {
+        modelSelection: ensembleResult.metadata.modelSelectionReasoning || [],
+        synthesisStrategy: ensembleResult.metadata.synthesisStrategy,
+        votingAnalysis: ensembleResult.voting.analysis,
+        qualityValidation: ensembleResult.metadata.qualityValidation,
+        processingStages: [
+          'Request Analysis',
+          'Intelligent Model Selection',
+          'Parallel Execution',
+          'Quality Assessment',
+          'Advanced Synthesis',
+          'Intelligent Voting',
+          'Quality Validation'
+        ]
+      };
+    }
 
     // Return successful response
     res.status(200).json(response);
