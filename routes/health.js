@@ -153,44 +153,83 @@ router.post('/default-ensemble', async (req, res) => {
     const { prompt, userId, userTier, sessionId, explainMode } = validateAndSanitizeInput(req);
 
     // Step 2: Run the enhanced AI ensemble with intelligent orchestration
-    const enhancedOrchestrator = require('../services/enhancedEnsembleOrchestrator');
-    const ensembleResult = await enhancedOrchestrator.runEnhancedEnsemble(prompt, userId, sessionId, {
-      correlationId,
-      userTier,
-      explainMode,
-      qualityTarget: userTier === 'premium' ? 0.8 : 0.7
-    });
+    let ensembleResult;
+    try {
+      const enhancedOrchestrator = require('../services/enhancedEnsembleOrchestrator');
+      ensembleResult = await enhancedOrchestrator.runEnhancedEnsemble(prompt, userId, sessionId, {
+        correlationId,
+        userTier,
+        explainMode,
+        qualityTarget: userTier === 'premium' ? 0.8 : 0.7
+      });
+    } catch (enhancedError) {
+      // Fallback to original ensemble if enhanced system fails
+      console.log('Enhanced system unavailable, using fallback:', enhancedError.message);
+      ensembleResult = await enhancedEnsemble.runEnsemble(prompt, userId, sessionId);
+    }
 
     // Step 3: Build response maintaining exact structure for backward compatibility
-    // The enhanced orchestrator already provides the complete response structure
-    const response = {
-      synthesis: ensembleResult.synthesis,
-      roles: ensembleResult.roles,
-      voting: ensembleResult.voting,
-      metadata: {
-        ...ensembleResult.metadata,
-        // Add legacy fields for compatibility
-        memoryContextUsed: ensembleResult.metadata.memoryContextUsed || false,
-        memoryTokensUsed: ensembleResult.metadata.memoryTokensUsed || 0,
-        confidenceAnalysis: {
-          averageConfidence: ensembleResult.roles.length > 0 ?
-            ensembleResult.roles.reduce((sum, role) => sum + (role.confidence?.score || 0), 0) / ensembleResult.roles.length : 0,
-          confidenceRange: ensembleResult.voting.analysis?.scoreGap || 0,
-          highConfidenceResponses: ensembleResult.roles.filter(role => (role.confidence?.score || 0) > 0.7).length
-        },
-        costEstimate: {
-          totalCost: 0.008, // Estimated cost for enhanced processing
-          breakdown: ensembleResult.metadata.selectedModels?.reduce((acc, model) => {
-            acc[model] = 0.002; // Estimated per model
-            return acc;
-          }, {}) || {},
-          synthesis: 0.002
-        },
-        tier: userTier,
-        enhanced: true,
-        orchestrationVersion: ensembleResult.metadata.orchestrationVersion
-      }
-    };
+    let response;
+
+    if (ensembleResult.synthesis && ensembleResult.metadata && ensembleResult.metadata.enhanced) {
+      // Enhanced orchestrator response
+      response = {
+        synthesis: ensembleResult.synthesis,
+        roles: ensembleResult.roles,
+        voting: ensembleResult.voting,
+        metadata: {
+          ...ensembleResult.metadata,
+          // Add legacy fields for compatibility
+          memoryContextUsed: ensembleResult.metadata.memoryContextUsed || false,
+          memoryTokensUsed: ensembleResult.metadata.memoryTokensUsed || 0,
+          confidenceAnalysis: {
+            averageConfidence: ensembleResult.roles.length > 0 ?
+              ensembleResult.roles.reduce((sum, role) => sum + (role.confidence?.score || 0), 0) / ensembleResult.roles.length : 0,
+            confidenceRange: ensembleResult.voting.analysis?.scoreGap || 0,
+            highConfidenceResponses: ensembleResult.roles.filter(role => (role.confidence?.score || 0) > 0.7).length
+          },
+          costEstimate: {
+            totalCost: 0.008, // Estimated cost for enhanced processing
+            breakdown: ensembleResult.metadata.selectedModels?.reduce((acc, model) => {
+              acc[model] = 0.002; // Estimated per model
+              return acc;
+            }, {}) || {},
+            synthesis: 0.002
+          },
+          tier: userTier,
+          enhanced: true,
+          orchestrationVersion: ensembleResult.metadata.orchestrationVersion
+        }
+      };
+    } else {
+      // Fallback to original ensemble processing
+      const enhancedRoles = await simpleConfidenceService.calculateRoleConfidences(ensembleResult.roles);
+      const votingResult = await getVotingResult(enhancedRoles, prompt, {
+        correlationId,
+        userId: req.headers['x-user-id'],
+        type: 'ensemble'
+      });
+      const synthesisConfidence = simpleConfidenceService.calculateSynthesisConfidence(
+        ensembleResult.synthesis,
+        enhancedRoles
+      );
+
+      response = buildFinalResponse(
+        ensembleResult,
+        enhancedRoles,
+        votingResult,
+        synthesisConfidence,
+        prompt,
+        userId,
+        sessionId,
+        explainMode,
+        correlationId
+      );
+
+      // Mark as fallback
+      response.metadata.enhanced = false;
+      response.metadata.fallback = true;
+    }
 
     // Add explain mode details if requested
     if (explainMode) {
